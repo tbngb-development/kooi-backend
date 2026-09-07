@@ -1,7 +1,7 @@
 import { NotFoundError } from "../../../../shared/errors/not-found.error";
 import { AppError } from "../../../../shared/errors/app.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
-import type { CampaignStatus } from "../../../../generated/prisma";
+import type { CampaignStatus } from "@prisma/client";
 
 export class CampaignNotFoundError extends NotFoundError {
   constructor() {

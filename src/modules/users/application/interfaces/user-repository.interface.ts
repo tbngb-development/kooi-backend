@@ -1,4 +1,4 @@
-import { type TenantRole } from "../../../../generated/prisma";
+import { type TenantRole } from "@prisma/client";
 import { type TenantMemberData } from "../../domain/entities/tenant-member.entity";
 
 export interface CreateUserData {

@@ -1,4 +1,4 @@
-import type { BatchStatus } from "../../../../generated/prisma";
+import type { BatchStatus } from "@prisma/client";
 
 /**
  * Valid status transitions for LeadBatch.

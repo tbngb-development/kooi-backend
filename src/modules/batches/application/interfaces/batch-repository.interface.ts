@@ -1,4 +1,4 @@
-import type { BatchStatus } from "../../../../generated/prisma";
+import type { BatchStatus } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 
 // ── Input DTOs ───────────────────────────────────────────────────────────────

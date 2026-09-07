@@ -1,4 +1,4 @@
-import type { RechargeStatus } from "../../../../generated/prisma";
+import type { RechargeStatus } from "@prisma/client";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
 
 export interface ListAdminPaymentsInput {

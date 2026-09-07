@@ -1,4 +1,4 @@
-import type { Plan } from "../../../../generated/prisma";
+import type { Plan } from "@prisma/client";
 import type { PlanRepository } from "../interfaces/plan-repository.interface";
 import type { PlanResponse } from "../dto/plan.dto";
 import { toPlanResponse } from "../mappers/plan.mapper";

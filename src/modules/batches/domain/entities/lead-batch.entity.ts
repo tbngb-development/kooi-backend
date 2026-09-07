@@ -1,4 +1,4 @@
-import type { BatchStatus } from "../../../../generated/prisma";
+import type { BatchStatus } from "@prisma/client";
 import { InvalidBatchStatusTransitionError } from "../errors/batch.errors";
 import {
   canTransitionBatchStatus,

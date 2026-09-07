@@ -1,7 +1,7 @@
 import {
   type CallStatus,
   type Disposition,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import { type LeadEntityData } from "../../domain/entities/lead.entity";
 
 export interface ListLeadsFilters {

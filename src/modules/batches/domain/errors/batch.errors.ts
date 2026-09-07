@@ -1,7 +1,7 @@
 import { NotFoundError } from "../../../../shared/errors/not-found.error";
 import { AppError } from "../../../../shared/errors/app.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
-import type { BatchStatus } from "../../../../generated/prisma";
+import type { BatchStatus } from "@prisma/client";
 
 export class BatchNotFoundError extends NotFoundError {
   constructor() {

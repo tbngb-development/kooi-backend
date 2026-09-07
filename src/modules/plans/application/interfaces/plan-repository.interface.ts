@@ -2,7 +2,7 @@ import type {
   Plan,
   PlanStatus,
   TenantPlan,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import type { CreatePlanInput, UpdatePlanInput } from "../dto/plan.dto";
 
 export type TenantActivePlan = Plan & {

@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { TenantRole } from "../../generated/prisma";
+import type { TenantRole } from "@prisma/client";
 
 // ── Auth Context (attached to req.user by middleware) ──────────────────────
 

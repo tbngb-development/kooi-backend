@@ -3,7 +3,7 @@ import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
 import type { AuthRequest } from "../../../shared/types";
-import type { InviteStatus } from "../../../generated/prisma";
+import type { InviteStatus } from "@prisma/client";
 import type { CreateOwnerInviteUseCase } from "../application/use-cases/create-owner-invite.use-case";
 import type { ResendOwnerInviteUseCase } from "../application/use-cases/resend-owner-invite.use-case";
 import type { RevokeOwnerInviteUseCase } from "../application/use-cases/revoke-owner-invite.use-case";

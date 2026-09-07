@@ -2,7 +2,7 @@ import type {
   InviteStatus,
   TenantInvite,
   Plan,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 
 export type InviteWithPlan = TenantInvite & { plan: Plan };
 

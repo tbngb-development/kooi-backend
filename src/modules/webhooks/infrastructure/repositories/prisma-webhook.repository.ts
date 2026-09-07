@@ -13,7 +13,7 @@ import {
   type ContactChannel,
   type ExtractionFlag,
   type Prisma,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import type {
   WebhookRepository,
   ResolvedCallContext,

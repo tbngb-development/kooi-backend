@@ -12,7 +12,7 @@ import {
   type BatchStatus,
   LeadStatus,
   type Prisma,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 
 export class PrismaBatchRepository implements BatchRepository {
   async list(tenantId: string, campaignId: string): Promise<BatchListItem[]> {

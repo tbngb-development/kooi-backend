@@ -7,7 +7,7 @@ import {
   type PreferredNextAction,
   type PurchasePurpose,
   type PurchaseTimeline,
-} from "../../generated/prisma";
+} from "@prisma/client";
 
 export interface BolnaCallPayload {
   agent_id: string;

@@ -1,4 +1,4 @@
-import type { InviteStatus } from "../../../../generated/prisma";
+import type { InviteStatus } from "@prisma/client";
 import type { InviteRepository } from "../interfaces/invite-repository.interface";
 import type { OwnerInviteResponse } from "../dto/invite.dto";
 import { toOwnerInviteResponse } from "../mappers/invite.mapper"; // Adjust import path if needed

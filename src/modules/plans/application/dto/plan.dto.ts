@@ -1,4 +1,4 @@
-import type { PlanStatus } from "../../../../generated/prisma";
+import type { PlanStatus } from "@prisma/client";
 import type { PlanFeatures } from "../../domain/entities/plan.entity";
 
 export interface PlanResponse {

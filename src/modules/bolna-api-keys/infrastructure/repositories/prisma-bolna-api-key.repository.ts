@@ -1,4 +1,4 @@
-import type { BolnaApiKey } from "../../../../generated/prisma";
+import type { BolnaApiKey } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   BolnaApiKeyRepository,

@@ -3,7 +3,7 @@ import {
   type LeadStatus,
   type BatchStatus,
   type CampaignStatus,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import type {
   CallHistoryItem,
   ParsedCallAnalysis,

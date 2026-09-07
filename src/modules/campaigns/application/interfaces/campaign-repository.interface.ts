@@ -1,4 +1,4 @@
-import type { CampaignStatus } from "../../../../generated/prisma";
+import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 
 // ── Input DTOs ───────────────────────────────────────────────────────────────

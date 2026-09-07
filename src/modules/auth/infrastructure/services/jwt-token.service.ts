@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { type TenantTokenContext, type TokenService } from "../../application/interfaces/token-service.interface";
 import { type AccessTokenPayload, type InviteTokenPayload, type RefreshTokenPayload } from "../../../../shared/types";
 import { env } from "../../../../shared/config/env";
-import { type TenantRole } from "../../../../generated/prisma";
+import { type TenantRole } from "@prisma/client";
 import { UnauthorizedError } from "../../../../shared/errors";
 import { AuthMessages } from "../../../../shared/constants";
 

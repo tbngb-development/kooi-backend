@@ -1,6 +1,10 @@
-import { type Prisma } from "../../../../generated/prisma";
+import type {
+  CallStatus,
+  Disposition,
+  LeadStatus,
+  Prisma,
+} from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
-import { type LeadStatus, type CallStatus, type Disposition } from "../../../../generated/prisma";
 import type {
   LeadRepository,
   ListLeadsFilters,
@@ -17,7 +21,10 @@ const QUALIFYING_DISPOSITIONS: Disposition[] = [
 ];
 
 export class PrismaLeadRepository implements LeadRepository {
-  async list(tenantId: string, filters: ListLeadsFilters): Promise<PaginatedLeadsResult> {
+  async list(
+    tenantId: string,
+    filters: ListLeadsFilters,
+  ): Promise<PaginatedLeadsResult> {
     const {
       campaignId,
       status,
@@ -108,7 +115,10 @@ export class PrismaLeadRepository implements LeadRepository {
     };
   }
 
-  async findById(tenantId: string, id: string): Promise<DetailedLeadResult | null> {
+  async findById(
+    tenantId: string,
+    id: string,
+  ): Promise<DetailedLeadResult | null> {
     const lead = await prisma.lead.findFirst({
       where: { id, tenantId },
       include: {
@@ -181,7 +191,10 @@ export class PrismaLeadRepository implements LeadRepository {
     };
   }
 
-  async getStats(tenantId: string, campaignId?: string): Promise<LeadStatsResult> {
+  async getStats(
+    tenantId: string,
+    campaignId?: string,
+  ): Promise<LeadStatsResult> {
     const where: Prisma.LeadWhereInput = {
       tenantId,
       ...(campaignId && { campaignId }),

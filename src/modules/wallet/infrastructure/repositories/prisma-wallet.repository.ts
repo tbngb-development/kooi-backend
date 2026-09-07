@@ -13,7 +13,7 @@ import {
   InsufficientBalanceError,
   WalletNotFoundError,
 } from "../../domain/errors/wallet.errors";
-import type { Wallet, WalletTransaction } from "../../../../generated/prisma";
+import type { Wallet, WalletTransaction } from "@prisma/client";
 
 export class PrismaWalletRepository implements WalletRepository {
   async findByTenantId(tenantId: string): Promise<Wallet | null> {
