@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { InviteStatus } from "../../../../generated/prisma";
+import type { InviteStatus } from "@prisma/client";
 import type {
   InviteRepository,
   CreateInviteData,

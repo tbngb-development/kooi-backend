@@ -1,4 +1,4 @@
-import type { CampaignStatus } from "../../../../generated/prisma";
+import type { CampaignStatus } from "@prisma/client";
 import { InvalidCampaignStatusTransitionError } from "../errors/campaign.errors";
 import { canTransitionCampaignStatus } from "./campaign-status.rules";
 

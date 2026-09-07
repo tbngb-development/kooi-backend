@@ -7,7 +7,7 @@ import type {
   CampaignListItem,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
-import type { CampaignStatus } from "../../../../generated/prisma";
+import type { CampaignStatus } from "@prisma/client";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(tenantId: string): Promise<CampaignListItem[]> {

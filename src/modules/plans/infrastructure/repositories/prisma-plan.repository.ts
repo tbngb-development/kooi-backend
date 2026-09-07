@@ -3,7 +3,7 @@ import type {
   PlanStatus,
   TenantPlan,
   Prisma,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   PlanRepository,

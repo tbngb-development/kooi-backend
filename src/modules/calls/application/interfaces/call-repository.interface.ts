@@ -2,7 +2,7 @@ import {
   type Disposition,
   type LeadTemperature,
   type LocationMatch,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
 
 export interface ListCallsFilters {

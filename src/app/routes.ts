@@ -138,7 +138,6 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/admin/auth",
     buildAdminAuthRoutes(c.auth.adminController, c.authenticate),
   );
-  
   router.use(
     "/v1/admin/invites",
     buildAdminInviteRoutes(

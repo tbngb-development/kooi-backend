@@ -1,4 +1,4 @@
-import { type LeadStatus } from "../../../../generated/prisma";
+import { type LeadStatus } from "@prisma/client";
 
 export interface LeadEntityData {
   id: string;

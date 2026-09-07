@@ -3,7 +3,7 @@ import {
   PlanNotFoundError,
   TenantPlanAlreadyActiveError,
 } from "../../domain/errors/plan.errors";
-import type { TenantPlan } from "../../../../generated/prisma";
+import type { TenantPlan } from "@prisma/client";
 
 export class SelectPlanUseCase {
   constructor(private readonly planRepo: PlanRepository) {}

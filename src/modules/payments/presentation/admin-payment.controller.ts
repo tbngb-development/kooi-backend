@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { sendSuccess } from "../../../shared/utils/response";
 import type { GetPaymentSummaryUseCase } from "../application/use-cases/get-payment-summary.use-case";
 import type { ListAdminPaymentsUseCase } from "../application/use-cases/list-admin-payments.use-case";
-import type { RechargeStatus } from "../../../generated/prisma";
+import type { RechargeStatus } from "@prisma/client";
 
 export class AdminPaymentController {
   constructor(

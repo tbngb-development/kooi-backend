@@ -7,7 +7,7 @@ import {
   type PreferredNextAction,
   type ContactChannel,
   type ExtractionFlag,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 
 // ── Allowed enum values matching generated Prisma definitions ────────────────
 

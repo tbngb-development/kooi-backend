@@ -1,4 +1,4 @@
-import type { CampaignStatus } from "../../../../generated/prisma";
+import type { CampaignStatus } from "@prisma/client";
 
 /**
  * Valid status transitions for Campaign.

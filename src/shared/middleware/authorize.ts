@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import type { TenantRole } from "../../generated/prisma";
+import type { TenantRole } from "@prisma/client";
 import { ForbiddenError } from "../errors/forbidden.error";
 import { UnauthorizedError } from "../errors/unauthorized.error";
 import type { AuthRequest, TenantAuthContext } from "../types";

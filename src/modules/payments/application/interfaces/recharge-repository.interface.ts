@@ -2,7 +2,7 @@ import type {
   Recharge,
   RechargeStatus,
   RechargePurpose,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 
 // ── Entity types ──────────────────────────────────────────────
 export type RechargeEntity = Recharge;

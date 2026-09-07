@@ -1,4 +1,4 @@
-import type { Wallet, WalletTransaction } from "../../../../generated/prisma";
+import type { Wallet, WalletTransaction } from "@prisma/client";
 import type {
   WalletResponse,
   WalletTransactionResponse,

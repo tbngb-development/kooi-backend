@@ -1,7 +1,7 @@
 import type {
   BolnaApiKey,
   BolnaApiKeyType,
-} from "../../../../generated/prisma";
+} from "@prisma/client";
 
 export interface CreateBolnaApiKeyData {
   keyIdentifier: string;

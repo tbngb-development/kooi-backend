@@ -1,4 +1,4 @@
-import { type TenantRole } from "../../../../generated/prisma";
+import { type TenantRole } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import {
   type CreateUserData,

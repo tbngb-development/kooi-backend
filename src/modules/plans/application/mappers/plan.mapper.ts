@@ -1,4 +1,4 @@
-import type { Plan } from "../../../../generated/prisma";
+import type { Plan } from "@prisma/client";
 import type { PlanResponse } from "../dto/plan.dto";
 import type { PlanFeatures } from "../../domain/entities/plan.entity";
 
