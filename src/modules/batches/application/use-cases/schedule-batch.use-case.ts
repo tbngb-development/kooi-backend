@@ -44,11 +44,8 @@ export class ScheduleBatchUseCase {
       throw new BatchOperationError("Invalid date format.");
     }
 
-    const minimumFutureTime = Date.now() + 60 * 1000;
-    if (targetDate.getTime() < minimumFutureTime) {
-      throw new BatchOperationError(
-        "Scheduled time must be at least 1 minute in the future.",
-      );
+    if (targetDate.getTime() < Date.now()) {
+      throw new BatchOperationError("Scheduled time must be in the future.");
     }
 
     let balanceWarning: { balance: number; estimatedCost: number } | null =

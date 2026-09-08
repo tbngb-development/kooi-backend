@@ -51,20 +51,21 @@ export class RunBatchUseCase {
       }
     }
 
-    const scheduledAt = new Date(Date.now() + 2 * 60 * 1000);
-    const isoString = toBolnaISO(scheduledAt);
+    // const scheduledAt = new Date(Date.now() + 2 * 60 * 1000);
+    const now = new Date(Date.now());
+    const scheduledAt = toBolnaISO(now);
 
     const bolnaResult = await this.bolnaProvider.scheduleBatch(
       tenantId,
       batchData.bolnaBatchId,
-      isoString,
+      scheduledAt,
     );
 
     const bolnaScheduledAt = parseBolnaScheduledTime(bolnaResult.state);
 
     const updatedBatch = await this.batchRepo.update(batchId, {
-      status: "SCHEDULED",
-      scheduledAt,
+      status: "RUNNING",
+      scheduledAt: now,
       bolnaScheduledAt,
     });
 
@@ -77,7 +78,7 @@ export class RunBatchUseCase {
 
     return {
       batch: updatedBatch,
-      message: `Batch scheduled. Bolna will start at ${bolnaScheduledAt ?? isoString}`,
+      message: `Batch scheduled. Bolna will start at ${bolnaScheduledAt ?? now}`,
       ...(balanceWarning && { balanceWarning }),
     };
   }
