@@ -8,6 +8,7 @@ import {
   verifyForgotPasswordOtpSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  logoutSchema,
 } from "./auth.schema";
 
 export function buildAdminAuthRoutes(
@@ -40,6 +41,13 @@ export function buildAdminAuthRoutes(
     authenticate.admin(),
     validate(changePasswordSchema),
     controller.changePassword,
+  );
+
+  router.post(
+    "/logout",
+    validate(logoutSchema),
+    authenticate.admin(),
+    controller.logout,
   );
 
   return router;

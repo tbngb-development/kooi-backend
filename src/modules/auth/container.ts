@@ -72,6 +72,8 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     passwordService,
   );
 
+  const logoutUsecase = new LogoutUseCase(authRepository, tokenService);
+
   return {
     tenantController: new TenantAuthController(
       new RegisterTenantOwnerUseCase(
@@ -85,14 +87,16 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       new GetProfileUseCase(authRepository),
       new CreateInviteUseCase(tokenService),
       new AcceptInviteUseCase(authRepository, passwordService, tokenService),
-      new LogoutUseCase(authRepository, tokenService),
+      logoutUsecase,
       forgotPasswordUseCase,
       verifyForgotPasswordOtpUseCase,
       resetPasswordUseCase,
       changePasswordUseCase,
     ),
+
     adminController: new AdminAuthController(
       loginUseCase,
+      logoutUsecase,
       forgotPasswordUseCase,
       verifyForgotPasswordOtpUseCase,
       resetPasswordUseCase,

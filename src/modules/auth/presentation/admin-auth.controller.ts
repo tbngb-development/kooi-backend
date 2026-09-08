@@ -5,6 +5,7 @@ import type {
   VerifyForgotPasswordOtpBody,
   ResetPasswordBody,
   ChangePasswordBody,
+  LogoutBody,
 } from "./auth.schema";
 import type { AuthRequest } from "../../../shared/types";
 import { AuthMapper } from "./auth.mapper";
@@ -23,6 +24,7 @@ import { type ForgotPasswordUseCase } from "../application/use-cases/forgot-pass
 import { type VerifyForgotPasswordOtpUseCase } from "../application/use-cases/verify-forgot-password-otp.use-case";
 import { type ResetPasswordUseCase } from "../application/use-cases/reset-password.use-case";
 import { type ChangePasswordUseCase } from "../application/use-cases/change-password.use-case";
+import { type LogoutUseCase } from "../application/use-cases/logout.use-case";
 
 const DEFAULT_ACCESS_EXPIRY = 900;
 const DEFAULT_REFRESH_EXPIRY = 604800;
@@ -30,6 +32,7 @@ const DEFAULT_REFRESH_EXPIRY = 604800;
 export class AdminAuthController {
   constructor(
     private readonly loginUseCase: LoginUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
     private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
     private readonly verifyForgotPasswordOtpUseCase: VerifyForgotPasswordOtpUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
@@ -71,6 +74,26 @@ export class AdminAuthController {
       }
 
       sendSuccess(res, AuthMapper.toLoginResponse(output), HttpStatus.OK);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  logout = async (
+    req: Request<unknown, unknown, Partial<LogoutBody>>,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      let refreshToken = req.body.refreshToken;
+      if (!refreshToken && req.cookies?.[COOKIE_REFRESH_TOKEN]) {
+        refreshToken = req.cookies[COOKIE_REFRESH_TOKEN] as string;
+      }
+      if (refreshToken) {
+        await this.logoutUseCase.execute({ refreshToken });
+      }
+      this.clearTokenCookies(res);
+      sendSuccess(res, { message: AuthMessages.LOGOUT_SUCCESS }, HttpStatus.OK);
     } catch (err) {
       next(err);
     }
