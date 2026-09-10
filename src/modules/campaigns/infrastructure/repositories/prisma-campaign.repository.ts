@@ -8,6 +8,7 @@ import type {
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { CampaignStatus } from "@prisma/client";
+import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(tenantId: string): Promise<CampaignListItem[]> {
@@ -200,11 +201,23 @@ export class PrismaCampaignRepository implements CampaignRepository {
   async getPerformance(
     tenantId: string,
     campaignId: string,
+    batchId?: string,
   ): Promise<CampaignPerformanceResult> {
+    // 1. Verify campaign existence
     const campaign = await prisma.campaign.findFirst({
       where: { id: campaignId, tenantId },
     });
     if (!campaign) throw new Error("Campaign not found");
+
+    // 2. Resolve completed leads base count (campaign vs batch level)
+    let completedLeads = campaign.completedLeads;
+    if (batchId) {
+      const batch = await prisma.leadBatch.findFirst({
+        where: { id: batchId, campaignId, tenantId },
+      });
+      if (!batch) throw new Error("Batch not found");
+      completedLeads = batch.completedLeads;
+    }
 
     const QUALIFYING_DISPOSITIONS = [
       "QUALIFIED_CONSULTANT_FOLLOWUP",
@@ -213,8 +226,15 @@ export class PrismaCampaignRepository implements CampaignRepository {
       "INTERESTED_GENERAL",
     ];
 
+    // 3. Query Call Analyses (with optional batch filter)
     const analyses = await prisma.callAnalysis.findMany({
-      where: { tenantId, call: { campaignId } },
+      where: {
+        tenantId,
+        call: {
+          campaignId,
+          ...(batchId && { batchId }),
+        },
+      },
       select: {
         disposition: true,
         leadTemperature: true,
@@ -223,8 +243,14 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
     });
 
+    // 4. Query Calls for pickup rates & conversion hour (with optional batch filter)
     const calls = await prisma.call.findMany({
-      where: { campaignId, tenantId, startedAt: { not: null } },
+      where: {
+        campaignId,
+        tenantId,
+        ...(batchId && { batchId }),
+        startedAt: { not: null },
+      },
       select: {
         startedAt: true,
         status: true,
@@ -234,15 +260,20 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
     });
 
+    // 5. Query Costs (with optional batch filter)
     const costAgg = await prisma.call.aggregate({
-      where: { campaignId, tenantId, platformCost: { not: null } },
+      where: {
+        campaignId,
+        tenantId,
+        ...(batchId && { batchId }),
+        platformCost: { not: null },
+      },
       _sum: { platformCost: true },
     });
 
     const totalCostInRupees = (costAgg._sum.platformCost ?? 0) / 100;
-    // ─────────────────────────────────────────────────────────────
 
-    // Hourly breakdown
+    // 6. Hourly breakdown mapping
     const hourlyStats: Record<
       number,
       { total: number; connected: number; qualified: number }
@@ -293,6 +324,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }
     }
 
+    // Fixed formatting logic bug (using ampmStart & ampmEnd variables)
     const formatHourWindow = (hour: number | null): string => {
       if (hour === null) return "Insufficient Data";
       const ampmStart = hour >= 12 ? "PM" : "AM";
@@ -300,9 +332,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
       const nextHour = (hour + 1) % 24;
       const ampmEnd = nextHour >= 12 ? "PM" : "AM";
       const endHour12 = nextHour % 12 === 0 ? 12 : nextHour % 12;
-      return `${startHour12}:00 AM - ${endHour12}:00 PM`; // formatted cleanly
+      return `${startHour12}:00 ${ampmStart} - ${endHour12}:00 ${ampmEnd}`;
     };
 
+    // 7. Metric aggregations
     const hotLeads = analyses.filter((a) => a.leadTemperature === "HOT").length;
     const callbacks = analyses.filter(
       (a) =>
@@ -327,8 +360,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
         : "0.0";
 
     const costPerLead =
-      campaign.completedLeads > 0
-        ? parseFloat((totalCostInRupees / campaign.completedLeads).toFixed(2))
+      completedLeads > 0
+        ? parseFloat((totalCostInRupees / completedLeads).toFixed(2))
         : 0;
 
     return {
@@ -336,7 +369,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       callbacks,
       siteVisits,
       dnc,
-      totalCost: totalCostInRupees, // Exposing our actual cost in INR Rupees to the tenant
+      totalCost: totalCostInRupees,
       costPerLead,
       qualificationRate,
       bestPickupTime: formatHourWindow(bestPickupHour),

@@ -125,9 +125,11 @@ export class TenantCampaignController {
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
+      const batchId = req.query.batchId as string | undefined;
       const data = await this.getCampaignPerformanceUseCase.execute(
         tenantId,
         param(req, "id"),
+        batchId,
       );
       sendSuccess(res, data);
     } catch (err) {
