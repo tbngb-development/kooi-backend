@@ -1,10 +1,14 @@
 import prisma from "../../../../shared/config/database/prisma";
 import type { WalletRepository } from "../interfaces/wallet-repository.interface";
+import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
+
+const DEFAULT_THRESHOLD = 10000;
 
 export class StopBatchesOnInsufficientBalanceUseCase {
   constructor(
     private readonly walletRepo: WalletRepository,
+    private readonly planRepo: PlanRepository,
     private readonly bolnaFactory: IBolnaClientFactory,
   ) {}
 
@@ -12,7 +16,15 @@ export class StopBatchesOnInsufficientBalanceUseCase {
     const wallet = await this.walletRepo.findByTenantId(input.tenantId);
     if (!wallet) return;
 
-    const threshold = wallet.lowBalanceThreshold ?? 10000;
+    // Read threshold from tenant's active plan
+    const activePlan = await this.planRepo.getActivePlanForTenant(
+      input.tenantId,
+    );
+    const threshold =
+      activePlan?.status === "ACTIVE"
+        ? activePlan.lowBalanceThreshold
+        : DEFAULT_THRESHOLD;
+
     if (wallet.balance >= threshold) return;
 
     const running = await prisma.leadBatch.findMany({

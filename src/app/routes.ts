@@ -124,7 +124,6 @@ export function buildRoutes(c: AppContainer): Router {
     buildTenantWalletRoutes(
       c.wallet.tenantController,
       c.authenticate,
-      c.authorize,
     ),
   );
 

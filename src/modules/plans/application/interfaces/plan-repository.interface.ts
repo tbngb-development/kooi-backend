@@ -1,8 +1,4 @@
-import type {
-  Plan,
-  PlanStatus,
-  TenantPlan,
-} from "@prisma/client";
+import type { Plan, PlanStatus, TenantPlan } from "@prisma/client";
 import type { CreatePlanInput, UpdatePlanInput } from "../dto/plan.dto";
 
 export type TenantActivePlan = Plan & {
@@ -22,11 +18,7 @@ export interface PlanRepository {
 
   // ── Tenant Plans ──────────────────────────────────────────────
   getActivePlanForTenant(tenantId: string): Promise<TenantActivePlan | null>;
-
-  /** Upsert a TenantPlan row with PENDING_PAYMENT status. */
   selectPlan(tenantId: string, planId: string): Promise<TenantPlan>;
-  // ───────────────────────────────────────────────────────────────
-
   activatePlan(
     tenantId: string,
     planId: string,
@@ -36,4 +28,6 @@ export interface PlanRepository {
 
   // ── Enforcement Queries ───────────────────────────────────────
   countActiveCampaigns(tenantId: string): Promise<number>;
+  countAgents(tenantId: string): Promise<number>;
+  countTeamMembers(tenantId: string): Promise<number>;
 }

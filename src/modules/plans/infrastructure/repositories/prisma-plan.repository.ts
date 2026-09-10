@@ -1,9 +1,4 @@
-import type {
-  Plan,
-  PlanStatus,
-  TenantPlan,
-  Prisma,
-} from "@prisma/client";
+import type { Plan, PlanStatus, TenantPlan } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   PlanRepository,
@@ -23,15 +18,30 @@ export class PrismaPlanRepository implements PlanRepository {
         name: input.name,
         slug: input.slug,
         displayOrder: input.displayOrder ?? 0,
+
+        pricingModel: input.pricingModel ?? "STANDARD",
         onboardingFee: input.onboardingFee,
+        onboardingFeeOriginal: input.onboardingFeeOriginal ?? null,
         perMinuteRate: input.perMinuteRate,
         billingMinimumSec: input.billingMinimumSec ?? 30,
         billingIncrementSec: input.billingIncrementSec ?? 15,
+
         maxActiveCampaigns: input.maxActiveCampaigns ?? null,
         maxLeadsPerBatch: input.maxLeadsPerBatch ?? null,
+        maxAgents: input.maxAgents ?? null,
+        maxTeamMembers: input.maxTeamMembers ?? null,
         retryAutomation: input.retryAutomation ?? false,
         industryPackLimit: input.industryPackLimit ?? null,
-        features: input.features as unknown as Prisma.InputJsonValue,
+
+        callingChannel: input.callingChannel ?? "SHARED",
+        brochureUpload: input.brochureUpload ?? false,
+
+        dashboardTier: input.dashboardTier ?? "BASIC",
+        agentCapability: input.agentCapability ?? "BASIC",
+        integrations: input.integrations ?? "NONE",
+        supportTier: input.supportTier ?? "STANDARD",
+
+        lowBalanceThreshold: input.lowBalanceThreshold ?? 10000,
         includedBalance: input.includedBalance ?? 0,
         bonusValidityDays: input.bonusValidityDays ?? null,
       },
@@ -47,8 +57,15 @@ export class PrismaPlanRepository implements PlanRepository {
           displayOrder: input.displayOrder,
         }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
+
+        ...(input.pricingModel !== undefined && {
+          pricingModel: input.pricingModel,
+        }),
         ...(input.onboardingFee !== undefined && {
           onboardingFee: input.onboardingFee,
+        }),
+        ...(input.onboardingFeeOriginal !== undefined && {
+          onboardingFeeOriginal: input.onboardingFeeOriginal,
         }),
         ...(input.perMinuteRate !== undefined && {
           perMinuteRate: input.perMinuteRate,
@@ -59,11 +76,18 @@ export class PrismaPlanRepository implements PlanRepository {
         ...(input.billingIncrementSec !== undefined && {
           billingIncrementSec: input.billingIncrementSec,
         }),
+
         ...(input.maxActiveCampaigns !== undefined && {
           maxActiveCampaigns: input.maxActiveCampaigns,
         }),
         ...(input.maxLeadsPerBatch !== undefined && {
           maxLeadsPerBatch: input.maxLeadsPerBatch,
+        }),
+        ...(input.maxAgents !== undefined && {
+          maxAgents: input.maxAgents,
+        }),
+        ...(input.maxTeamMembers !== undefined && {
+          maxTeamMembers: input.maxTeamMembers,
         }),
         ...(input.retryAutomation !== undefined && {
           retryAutomation: input.retryAutomation,
@@ -71,8 +95,29 @@ export class PrismaPlanRepository implements PlanRepository {
         ...(input.industryPackLimit !== undefined && {
           industryPackLimit: input.industryPackLimit,
         }),
-        ...(input.features !== undefined && {
-          features: input.features as unknown as Prisma.InputJsonValue,
+
+        ...(input.callingChannel !== undefined && {
+          callingChannel: input.callingChannel,
+        }),
+        ...(input.brochureUpload !== undefined && {
+          brochureUpload: input.brochureUpload,
+        }),
+
+        ...(input.dashboardTier !== undefined && {
+          dashboardTier: input.dashboardTier,
+        }),
+        ...(input.agentCapability !== undefined && {
+          agentCapability: input.agentCapability,
+        }),
+        ...(input.integrations !== undefined && {
+          integrations: input.integrations,
+        }),
+        ...(input.supportTier !== undefined && {
+          supportTier: input.supportTier,
+        }),
+
+        ...(input.lowBalanceThreshold !== undefined && {
+          lowBalanceThreshold: input.lowBalanceThreshold,
         }),
         ...(input.includedBalance !== undefined && {
           includedBalance: input.includedBalance,
@@ -136,7 +181,6 @@ export class PrismaPlanRepository implements PlanRepository {
       update: {
         planId,
         status: "PENDING_PAYMENT",
-        // Reset activation fields in case user switches plans mid-onboarding
         activatedAt: null,
         bonusExpiresAt: null,
       },
@@ -181,6 +225,18 @@ export class PrismaPlanRepository implements PlanRepository {
         tenantId,
         status: { in: ["DRAFT", "RUNNING"] },
       },
+    });
+  }
+
+  async countAgents(tenantId: string): Promise<number> {
+    return prisma.assistant.count({
+      where: { tenantId },
+    });
+  }
+
+  async countTeamMembers(tenantId: string): Promise<number> {
+    return prisma.tenantUser.count({
+      where: { tenantId },
     });
   }
 }

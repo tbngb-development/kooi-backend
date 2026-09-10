@@ -1,94 +1,128 @@
 import prisma from "../shared/config/database/prisma";
-import type { PlanFeatures } from "../modules/plans/domain/entities/plan.entity";
 
 async function seedPlans() {
-  const plans: Array<{
-    slug: string;
-    name: string;
-    displayOrder: number;
-    onboardingFee: number;
-    perMinuteRate: number;
-    maxActiveCampaigns: number | null;
-    maxLeadsPerBatch: number | null;
-    retryAutomation: boolean;
-    industryPackLimit: number | null;
-    features: PlanFeatures;
-    includedBalance: number;
-    bonusValidityDays: number | null;
-  }> = [
+  const plans = [
     {
       slug: "launch",
       name: "Launch",
       displayOrder: 1,
-      onboardingFee: 999900, // ₹9,999
-      perMinuteRate: 1000, // ₹10/min
+
+      pricingModel: "STANDARD" as const,
+      onboardingFee: 999900,
+      onboardingFeeOriginal: 4999900,
+      perMinuteRate: 1200,
+      billingMinimumSec: 30,
+      billingIncrementSec: 15,
+
       maxActiveCampaigns: 1,
       maxLeadsPerBatch: 10000,
+      maxAgents: 1,
+      maxTeamMembers: 2,
       retryAutomation: false,
       industryPackLimit: 1,
-      features: {
-        dashboardTier: "standard",
-        agentCapability: "basic",
-        integrations: "none",
-        supportTier: "standard",
-      },
-      includedBalance: 50000, // ₹500
+
+      callingChannel: "SHARED" as const,
+      brochureUpload: false,
+
+      dashboardTier: "BASIC" as const,
+      agentCapability: "BASIC" as const,
+      integrations: "NONE" as const,
+      supportTier: "STANDARD" as const,
+
+      lowBalanceThreshold: 10000,
+      includedBalance: 50000,
       bonusValidityDays: 5,
     },
     {
       slug: "growth",
       name: "Growth",
       displayOrder: 2,
-      onboardingFee: 1999900, // ₹19,999
-      perMinuteRate: 900, // ₹9/min
+
+      pricingModel: "STANDARD" as const,
+      onboardingFee: 1999900,
+      onboardingFeeOriginal: 9999900,
+      perMinuteRate: 1000,
+      billingMinimumSec: 30,
+      billingIncrementSec: 15,
+
       maxActiveCampaigns: 2,
       maxLeadsPerBatch: 10000,
+      maxAgents: 2,
+      maxTeamMembers: 5,
       retryAutomation: true,
       industryPackLimit: 1,
-      features: {
-        dashboardTier: "advanced",
-        agentCapability: "basic_knowledge",
-        integrations: "basic",
-        supportTier: "standard",
-      },
-      includedBalance: 200000, // ₹2,000
+
+      callingChannel: "SHARED" as const,
+      brochureUpload: false,
+
+      dashboardTier: "STANDARD" as const,
+      agentCapability: "BASIC_KNOWLEDGE" as const,
+      integrations: "BASIC" as const,
+      supportTier: "STANDARD" as const,
+
+      lowBalanceThreshold: 20000,
+      includedBalance: 200000,
       bonusValidityDays: 10,
     },
     {
       slug: "scale",
       name: "Scale",
       displayOrder: 3,
-      onboardingFee: 4999900, // ₹49,999
-      perMinuteRate: 800, // ₹8/min
+
+      pricingModel: "STANDARD" as const,
+      onboardingFee: 4999900,
+      onboardingFeeOriginal: 19999900,
+      perMinuteRate: 800,
+      billingMinimumSec: 30,
+      billingIncrementSec: 15,
+
       maxActiveCampaigns: 5,
       maxLeadsPerBatch: 10000,
+      maxAgents: 5,
+      maxTeamMembers: 10,
       retryAutomation: true,
       industryPackLimit: 2,
-      features: {
-        dashboardTier: "advanced",
-        agentCapability: "advanced_knowledge",
-        integrations: "api_selected",
-        supportTier: "priority",
-      },
-      includedBalance: 500000, // ₹5,000
+
+      callingChannel: "DEDICATED_WITH_NUMBER" as const,
+      brochureUpload: true,
+
+      dashboardTier: "ADVANCED" as const,
+      agentCapability: "ADVANCED_KNOWLEDGE" as const,
+      integrations: "API_SELECTED" as const,
+      supportTier: "PRIORITY" as const,
+
+      lowBalanceThreshold: 50000,
+      includedBalance: 500000,
       bonusValidityDays: 15,
     },
     {
       slug: "enterprise",
       name: "Enterprise",
       displayOrder: 4,
-      onboardingFee: 0, // Custom
-      perMinuteRate: 600, // ₹6/min
+
+      pricingModel: "CUSTOM" as const,
+      onboardingFee: 0,
+      onboardingFeeOriginal: null,
+      perMinuteRate: 600,
+      billingMinimumSec: 30,
+      billingIncrementSec: 15,
+
       maxActiveCampaigns: null,
       maxLeadsPerBatch: null,
+      maxAgents: null,
+      maxTeamMembers: null,
       retryAutomation: true,
       industryPackLimit: null,
-      features: {
-        dashboardTier: "custom",
-        agentCapability: "custom",
-        integrations: "custom",
-        supportTier: "sla",
-      },
+
+      callingChannel: "DEDICATED" as const,
+      brochureUpload: true,
+
+      dashboardTier: "CUSTOM" as const,
+      agentCapability: "CUSTOM" as const,
+      integrations: "CUSTOM" as const,
+      supportTier: "SLA" as const,
+
+      lowBalanceThreshold: 500000,
       includedBalance: 0,
       bonusValidityDays: null,
     },
@@ -97,8 +131,8 @@ async function seedPlans() {
   for (const plan of plans) {
     await prisma.plan.upsert({
       where: { slug: plan.slug },
-      create: plan as any,
-      update: plan as any,
+      create: plan,
+      update: plan,
     });
     console.log(`✓ Seeded plan: ${plan.name}`);
   }

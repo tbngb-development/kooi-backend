@@ -9,7 +9,12 @@ import {
 } from "../../modules/plans/domain/errors/plan.errors";
 
 export type PlanFeature =
-  "CREATE_CAMPAIGN" | "RETRY_AUTOMATION" | "MAX_LEADS_PER_BATCH";
+  | "CREATE_CAMPAIGN"
+  | "RETRY_AUTOMATION"
+  | "MAX_LEADS_PER_BATCH"
+  | "MAX_AGENTS"
+  | "MAX_TEAM_MEMBERS"
+  | "BROCHURE_UPLOAD";
 
 export class EnforcePlanMiddleware {
   constructor(private readonly planRepo: PlanRepository) {}
@@ -45,7 +50,34 @@ export class EnforcePlanMiddleware {
             break;
 
           case "MAX_LEADS_PER_BATCH":
-            // Usually enforced inside use-case with payload count, leaving empty for route-level pass
+            // Enforced inside use-case with payload count
+            break;
+
+          case "MAX_AGENTS":
+            if (plan.maxAgents !== null) {
+              const count = await this.planRepo.countAgents(ctx.tenantId);
+              if (count >= plan.maxAgents) {
+                throw new PlanLimitExceededError("agents", plan.maxAgents);
+              }
+            }
+            break;
+
+          case "MAX_TEAM_MEMBERS":
+            if (plan.maxTeamMembers !== null) {
+              const count = await this.planRepo.countTeamMembers(ctx.tenantId);
+              if (count >= plan.maxTeamMembers) {
+                throw new PlanLimitExceededError(
+                  "team members",
+                  plan.maxTeamMembers,
+                );
+              }
+            }
+            break;
+
+          case "BROCHURE_UPLOAD":
+            if (!plan.brochureUpload) {
+              throw new PlanFeatureNotAvailableError("brochure upload");
+            }
             break;
         }
 

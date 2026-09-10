@@ -12,8 +12,6 @@ export function toWalletResponse(wallet: Wallet): WalletResponse {
     bonusBalance: wallet.bonusBalance,
     bonusExpiresAt: wallet.bonusExpiresAt?.toISOString() ?? null,
     isActive: wallet.isActive,
-    lowBalanceThreshold: wallet.lowBalanceThreshold,
-    lowBalanceAlertSent: wallet.lowBalanceAlertSent,
     createdAt: wallet.createdAt.toISOString(),
     updatedAt: wallet.updatedAt.toISOString(),
   };

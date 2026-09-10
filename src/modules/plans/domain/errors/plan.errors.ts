@@ -45,3 +45,11 @@ export class PlanSlugConflictError extends ConflictError {
     super(`Plan with slug already exists: ${slug}`);
   }
 }
+
+export class CustomPlanSelectionNotAllowedError extends ForbiddenError {
+  constructor() {
+    super(
+      "Custom/Enterprise plans cannot be self-selected. Please contact sales.",
+    );
+  }
+}

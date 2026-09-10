@@ -3,6 +3,7 @@ import type { PlanRepository } from "../../../plans/application/interfaces/plan-
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
+import { CustomPlanSelectionNotAllowedError } from "../../../plans/domain/errors/plan.errors";
 import { AppError } from "../../../../shared/errors";
 import { HttpStatus } from "../../../../shared/constants";
 
@@ -23,6 +24,11 @@ export class CreateOnboardingOrderUseCase {
         "Plan already active",
         "PLAN_ALREADY_ACTIVE",
       );
+    }
+
+    // Defense-in-depth: block Razorpay order for custom/enterprise plans
+    if (active.pricingModel === "CUSTOM") {
+      throw new CustomPlanSelectionNotAllowedError();
     }
 
     const order = await this.payments.createOrder({
