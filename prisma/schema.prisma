@@ -458,6 +458,45 @@ enum ExtractionFlag {
 // PLANS & SUBSCRIPTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum PricingModel {
+  STANDARD
+  VOLUME
+  CUSTOM
+}
+
+enum CallingChannel {
+  SHARED
+  DEDICATED
+  DEDICATED_WITH_NUMBER
+}
+
+enum DashboardTier {
+  BASIC
+  STANDARD
+  ADVANCED
+  CUSTOM
+}
+
+enum AgentCapability {
+  BASIC
+  BASIC_KNOWLEDGE
+  ADVANCED_KNOWLEDGE
+  CUSTOM
+}
+
+enum IntegrationTier {
+  NONE
+  BASIC
+  API_SELECTED
+  CUSTOM
+}
+
+enum SupportTier {
+  STANDARD
+  PRIORITY
+  SLA
+}
+
 model Plan {
   id           String  @id @default(uuid())
   name         String
@@ -465,24 +504,36 @@ model Plan {
   isActive     Boolean @default(true)
   displayOrder Int     @default(0)
 
-  // Pricing (in paisa)
-  onboardingFee       Int
-  perMinuteRate       Int
-  billingMinimumSec   Int @default(30)
-  billingIncrementSec Int @default(15)
+  // ── Pricing (in paisa) ──
+  pricingModel          PricingModel @default(STANDARD)
+  onboardingFee         Int
+  onboardingFeeOriginal Int?
+  perMinuteRate         Int
+  billingMinimumSec     Int          @default(30)
+  billingIncrementSec   Int          @default(15)
 
-  // Limits
+  // ── Limits ──
   maxActiveCampaigns Int?
   maxLeadsPerBatch   Int?
+  maxAgents          Int?
+  maxTeamMembers     Int?
   retryAutomation    Boolean @default(false)
   industryPackLimit  Int?
 
-  // Features JSON
-  features Json
+  // ── Capabilities ──
+  callingChannel CallingChannel @default(SHARED)
+  brochureUpload Boolean        @default(false)
 
-  // Bonus
-  includedBalance   Int  @default(0)
-  bonusValidityDays Int?
+  // ── Feature Tiers (flattened from old JSON) ──
+  dashboardTier   DashboardTier   @default(BASIC)
+  agentCapability AgentCapability @default(BASIC)
+  integrations    IntegrationTier @default(NONE)
+  supportTier     SupportTier     @default(STANDARD)
+
+  // ── Wallet / Threshold ──
+  lowBalanceThreshold Int  @default(10000)
+  includedBalance     Int  @default(0)
+  bonusValidityDays   Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -566,17 +617,19 @@ enum InviteStatus {
   REVOKED
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WALLET 
+// ─────────────────────────────────────────────────────────────────────────────
+
 model Wallet {
-  id                  String    @id @default(uuid())
-  tenantId            String    @unique
-  balance             Int       @default(0)
-  bonusBalance        Int       @default(0)
-  bonusExpiresAt      DateTime?
-  isActive            Boolean   @default(true)
-  lowBalanceThreshold Int?      @default(10000)
-  lowBalanceAlertSent Boolean   @default(false)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  tenantId       String    @unique
+  balance        Int       @default(0)
+  bonusBalance   Int       @default(0)
+  bonusExpiresAt DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]

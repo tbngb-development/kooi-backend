@@ -12,7 +12,6 @@ import { CheckLowBalanceUseCase } from "./application/use-cases/check-low-balanc
 import { StopBatchesOnInsufficientBalanceUseCase } from "./application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import { GetWalletUseCase } from "./application/use-cases/get-wallet.use-case";
 import { ListTransactionsUseCase } from "./application/use-cases/list-transactions.use-case";
-import { SetThresholdUseCase } from "./application/use-cases/set-threshold.use-case";
 import { AdjustWalletUseCase } from "./application/use-cases/adjust-wallet.use-case";
 import { DebitWalletForCallUseCase } from "./application/use-cases/debit-wallet.use-case";
 
@@ -39,12 +38,17 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
 
   const getWallet = new GetWalletUseCase(repository);
   const listTransactions = new ListTransactionsUseCase(repository);
-  const setThreshold = new SetThresholdUseCase(repository);
   const adjustWallet = new AdjustWalletUseCase(repository);
 
-  const checkLowBalance = new CheckLowBalanceUseCase(repository, deps.email);
+  // PlanRepository injected for plan-based threshold
+  const checkLowBalance = new CheckLowBalanceUseCase(
+    repository,
+    deps.planRepository,
+    deps.email,
+  );
   const stopBatches = new StopBatchesOnInsufficientBalanceUseCase(
     repository,
+    deps.planRepository,
     deps.bolnaClientFactory,
   );
   const checkBalanceForBatch = new CheckBalanceForBatchUseCase(
@@ -60,11 +64,7 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
 
   return {
     repository,
-    tenantController: new TenantWalletController(
-      getWallet,
-      listTransactions,
-      setThreshold,
-    ),
+    tenantController: new TenantWalletController(getWallet, listTransactions),
     adminController: new AdminWalletController(
       getWallet,
       listTransactions,

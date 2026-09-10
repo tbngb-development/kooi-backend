@@ -5,7 +5,6 @@ export interface CreateWalletData {
   balance?: number;
   bonusBalance?: number;
   bonusExpiresAt?: Date | null;
-  lowBalanceThreshold?: number | null;
 }
 
 export interface CreditWalletData {
@@ -40,7 +39,4 @@ export interface WalletRepository {
     tenantId: string,
     opts: { page: number; limit: number },
   ): Promise<{ items: WalletTransaction[]; total: number }>;
-
-  markLowBalanceAlertSent(tenantId: string, sent: boolean): Promise<void>;
-  setLowBalanceThreshold(tenantId: string, threshold: number): Promise<Wallet>;
 }

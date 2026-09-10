@@ -27,7 +27,6 @@ export class PrismaWalletRepository implements WalletRepository {
         balance: data.balance ?? 0,
         bonusBalance: data.bonusBalance ?? 0,
         bonusExpiresAt: data.bonusExpiresAt ?? null,
-        lowBalanceThreshold: data.lowBalanceThreshold ?? 10000,
       },
     });
   }
@@ -71,7 +70,6 @@ export class PrismaWalletRepository implements WalletRepository {
           ...(isBonus && data.bonusExpiresAt !== undefined
             ? { bonusExpiresAt: data.bonusExpiresAt }
             : {}),
-          lowBalanceAlertSent: false,
         },
       });
 
@@ -155,25 +153,5 @@ export class PrismaWalletRepository implements WalletRepository {
       prisma.walletTransaction.count({ where: { tenantId } }),
     ]);
     return { items, total };
-  }
-
-  async markLowBalanceAlertSent(
-    tenantId: string,
-    sent: boolean,
-  ): Promise<void> {
-    await prisma.wallet.update({
-      where: { tenantId },
-      data: { lowBalanceAlertSent: sent },
-    });
-  }
-
-  async setLowBalanceThreshold(
-    tenantId: string,
-    threshold: number,
-  ): Promise<Wallet> {
-    return prisma.wallet.update({
-      where: { tenantId },
-      data: { lowBalanceThreshold: threshold },
-    });
   }
 }

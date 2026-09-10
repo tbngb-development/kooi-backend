@@ -5,8 +5,6 @@ export interface WalletResponse {
   bonusBalance: number;
   bonusExpiresAt: string | null;
   isActive: boolean;
-  lowBalanceThreshold: number | null;
-  lowBalanceAlertSent: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,8 +26,4 @@ export interface ListTransactionsResult {
   total: number;
   page: number;
   limit: number;
-}
-
-export interface SetThresholdInput {
-  threshold: number;
 }
