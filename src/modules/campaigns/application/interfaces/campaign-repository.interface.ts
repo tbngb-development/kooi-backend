@@ -120,6 +120,7 @@ export interface CampaignRepository {
   getPerformance(
     tenantId: string,
     campaignId: string,
+    batchId?: string,
   ): Promise<CampaignPerformanceResult>;
 
   checkAssistantExists(tenantId: string, assistantId: string): Promise<boolean>;
