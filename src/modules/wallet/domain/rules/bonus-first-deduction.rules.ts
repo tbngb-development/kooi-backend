@@ -1,46 +1,97 @@
 export interface WalletBalances {
-  balance: number;
+  cashBalance: number;
   bonusBalance: number;
   bonusExpiresAt: Date | null;
 }
 
-export interface DebitSplit {
+export interface DeductionSplitResult {
+  hasExpiredBonus: boolean;
+  expiredBonusAmount: number;
   fromBonus: number;
-  fromMain: number;
-  newBalance: number;
+  fromCash: number;
+  newCashBalance: number;
   newBonusBalance: number;
+  cashDelta: number;
+  bonusDelta: number;
 }
 
-export function computeBonusFirstDebit(
+/**
+ * Computes how a debit should be split between bonusBalance and cashBalance.
+ * Rules:
+ *  1. If bonus is expired, it is zeroed out and cannot be used.
+ *  2. Unexpired bonus balance is consumed first.
+ *  3. Remaining amount is deducted from cash balance.
+ */
+export function computeBonusFirstDeduction(
   wallet: WalletBalances,
-  amount: number,
+  amountPaisa: number,
   now = new Date(),
-): DebitSplit {
-  if (amount <= 0) {
+): DeductionSplitResult {
+  if (amountPaisa <= 0) {
     return {
+      hasExpiredBonus: false,
+      expiredBonusAmount: 0,
       fromBonus: 0,
-      fromMain: 0,
-      newBalance: wallet.balance,
+      fromCash: 0,
+      newCashBalance: wallet.cashBalance,
       newBonusBalance: wallet.bonusBalance,
+      cashDelta: 0,
+      bonusDelta: 0,
     };
   }
 
-  const bonusAvailable =
-    wallet.bonusExpiresAt && wallet.bonusExpiresAt > now
-      ? wallet.bonusBalance
-      : 0;
+  const isBonusExpired = Boolean(
+    wallet.bonusExpiresAt &&
+    wallet.bonusExpiresAt <= now &&
+    wallet.bonusBalance > 0,
+  );
+  const expiredBonusAmount = isBonusExpired ? wallet.bonusBalance : 0;
+  const usableBonus = isBonusExpired ? 0 : wallet.bonusBalance;
 
-  const fromBonus = Math.min(bonusAvailable, amount);
-  const fromMain = amount - fromBonus;
+  const fromBonus = Math.min(usableBonus, amountPaisa);
+  const fromCash = amountPaisa - fromBonus;
+
+  const newCashBalance = wallet.cashBalance - fromCash;
+  const newBonusBalance = usableBonus - fromBonus;
 
   return {
+    hasExpiredBonus: isBonusExpired,
+    expiredBonusAmount,
     fromBonus,
-    fromMain,
-    newBalance: wallet.balance - amount,
-    newBonusBalance: wallet.bonusBalance - fromBonus,
+    fromCash,
+    newCashBalance,
+    newBonusBalance,
+    cashDelta: -fromCash,
+    bonusDelta: -fromBonus,
   };
 }
 
-export function hasSufficientBalance(balance: number, amount: number): boolean {
-  return balance >= amount;
+/**
+ * Checks if a wallet has enough combined usable funds for an operation.
+ */
+export function hasAvailableBalance(
+  wallet: WalletBalances,
+  amountPaisa: number,
+  now = new Date(),
+): boolean {
+  if (amountPaisa <= 0) return true;
+  const isBonusExpired = Boolean(
+    wallet.bonusExpiresAt && wallet.bonusExpiresAt <= now,
+  );
+  const usableBonus = isBonusExpired ? 0 : wallet.bonusBalance;
+  return wallet.cashBalance + usableBonus >= amountPaisa;
+}
+
+/**
+ * Computes total effective balance (cash + valid bonus).
+ */
+export function getEffectiveAvailableBalance(
+  wallet: WalletBalances,
+  now = new Date(),
+): number {
+  const isBonusExpired = Boolean(
+    wallet.bonusExpiresAt && wallet.bonusExpiresAt <= now,
+  );
+  const usableBonus = isBonusExpired ? 0 : wallet.bonusBalance;
+  return wallet.cashBalance + usableBonus;
 }

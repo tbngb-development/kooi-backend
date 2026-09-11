@@ -76,26 +76,21 @@ export interface AppContainer {
   users: UserModule;
   webhooks: WebhookModule;
 
-  // Sprint 1
   plans: PlanModule;
   bolnaApiKeys: BolnaApiKeyModule;
-
-  // Sprint 2
   wallet: WalletModule;
   payments: PaymentModule;
   invites: InviteModule;
 
-  // Middleware
   authenticate: AuthenticateMiddleware;
   authorize: AuthorizeMiddleware;
   enforcePlan: EnforcePlanMiddleware;
 
-  // Shared factories
   bolnaClientFactory: IBolnaClientFactory;
 }
 
 export function buildContainer(): AppContainer {
-  // ── Shared infrastructure ─────────────────────────────────────────────
+  // ── Infrastructure ──────────────────────────────────────────────────
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
@@ -112,20 +107,20 @@ export function buildContainer(): AppContainer {
     emailService: email,
   });
 
-  // ── Sprint 1 ──────────────────────────────────────────────────────────
+  // ── Core Commercial Foundation ──────────────────────────────────────
   const plans = buildPlanModule();
   const bolnaApiKeys = buildBolnaApiKeyModule();
   const bolnaClientFactory = new BolnaClientFactory(bolnaApiKeys.repository);
   const enforcePlan = new EnforcePlanMiddleware(plans.repository);
 
-  // ── Sprint 2: Wallet (needs plans + bolna + email) ────────────────────
+  // ── Wallet (depends on plans + bolna + email) ───────────────────────
   const wallet = buildWalletModule({
     planRepository: plans.repository,
     bolnaClientFactory,
     email,
   });
 
-  // ── Sprint 2: Payments (needs wallet + plans + auto-assign key) ───────
+  // ── Payments (depends on wallet + plans + bolna key auto-assign) ─────
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
     planRepository: plans.repository,
@@ -133,7 +128,7 @@ export function buildContainer(): AppContainer {
     email,
   });
 
-  // ── Sprint 2: Invites (needs auth + plans + wallet + email) ───────────
+  // ── Invites ─────────────────────────────────────────────────────────
   const invites = buildInviteModule({
     planRepository: plans.repository,
     authRepository,
@@ -143,9 +138,9 @@ export function buildContainer(): AppContainer {
     emailService: email,
   });
 
-  // ── Domain modules (Bolna factory + wallet hooks) ─────────────────────
+  // ── Assembled Domain Modules ────────────────────────────────────────
   return {
-    auth: auth,
+    auth,
     assistants: buildAssistantModule({ bolnaClientFactory }),
     tenants: buildTenantModule(),
     campaigns: buildCampaignModule(),

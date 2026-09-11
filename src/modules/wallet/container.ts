@@ -30,6 +30,8 @@ export interface WalletModule {
     checkBalanceForBatch: CheckBalanceForBatchUseCase;
     checkLowBalance: CheckLowBalanceUseCase;
     stopBatchesOnInsufficientBalance: StopBatchesOnInsufficientBalanceUseCase;
+    adjustWallet: AdjustWalletUseCase;
+    getWallet: GetWalletUseCase;
   };
 }
 
@@ -40,7 +42,6 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
   const listTransactions = new ListTransactionsUseCase(repository);
   const adjustWallet = new AdjustWalletUseCase(repository);
 
-  // PlanRepository injected for plan-based threshold
   const checkLowBalance = new CheckLowBalanceUseCase(
     repository,
     deps.planRepository,
@@ -75,6 +76,8 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
       checkBalanceForBatch,
       checkLowBalance,
       stopBatchesOnInsufficientBalance: stopBatches,
+      adjustWallet,
+      getWallet,
     },
   };
 }

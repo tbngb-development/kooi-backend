@@ -1,42 +1,57 @@
-import type { Wallet, WalletTransaction } from "@prisma/client";
+import type {
+  Wallet,
+  WalletTransaction,
+  WalletTxType,
+  WalletTxSourceType,
+} from "@prisma/client";
 
 export interface CreateWalletData {
   tenantId: string;
-  balance?: number;
+  cashBalance?: number;
   bonusBalance?: number;
   bonusExpiresAt?: Date | null;
+  currency?: string;
 }
 
 export interface CreditWalletData {
   tenantId: string;
-  amount: number;
+  amount: number; // positive integer in paisa
   type: "CREDIT" | "BONUS" | "REFUND" | "ADJUSTMENT";
+  targetBalance?: "CASH" | "BONUS";
   description: string;
-  referenceType?: string;
-  referenceId?: string;
+  sourceType?: WalletTxSourceType;
+  sourceId?: string;
+  idempotencyKey?: string;
   createdBy?: string | null;
   bonusExpiresAt?: Date | null;
 }
 
 export interface DebitWalletData {
   tenantId: string;
-  amount: number;
+  amount: number; // positive integer in paisa
   description: string;
-  referenceType: string;
-  referenceId: string;
+  sourceType: WalletTxSourceType;
+  sourceId: string;
+  idempotencyKey: string;
   createdBy?: string | null;
+}
+
+export interface ListTransactionsOptions {
+  page: number;
+  limit: number;
+  type?: WalletTxType;
 }
 
 export interface WalletRepository {
   findByTenantId(tenantId: string): Promise<Wallet | null>;
-  create(data: CreateWalletData): Promise<Wallet>;
   ensureWallet(tenantId: string): Promise<Wallet>;
+  create(data: CreateWalletData): Promise<Wallet>;
 
   credit(data: CreditWalletData): Promise<WalletTransaction>;
   debit(data: DebitWalletData): Promise<WalletTransaction>;
 
   listTransactions(
     tenantId: string,
-    opts: { page: number; limit: number },
+    opts: ListTransactionsOptions,
   ): Promise<{ items: WalletTransaction[]; total: number }>;
 }

@@ -40,7 +40,12 @@ export function buildInviteModule(deps: InviteModuleDeps): InviteModule {
     deps.planRepository,
     deps.emailService,
   );
-  const getInvite = new GetOwnerInviteUseCase(repository);
+
+  const getOwnerInvite = new GetOwnerInviteUseCase(
+    repository,
+    deps.planRepository,
+  );
+
   const acceptInvite = new AcceptOwnerInviteUseCase(
     repository,
     deps.authRepository,
@@ -66,6 +71,6 @@ export function buildInviteModule(deps: InviteModuleDeps): InviteModule {
       revokeInvite,
       listInvites,
     ),
-    publicController: new PublicInviteController(getInvite, acceptInvite),
+    publicController: new PublicInviteController(getOwnerInvite, acceptInvite),
   };
 }

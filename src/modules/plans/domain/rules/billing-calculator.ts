@@ -11,17 +11,13 @@ export interface CallCostBreakdown {
 }
 
 /**
- * Calculates the cost of a call in paisa based on plan pricing.
+ * Calculates the cost of a call in paisa based on plan pricing rules.
  *
  * Rules:
- *  - Calls under the minimum are charged the minimum
+ *  - Calls under the minimum duration are charged the minimum
  *  - Calls over the minimum are rounded up to the next increment
- *  - Cost = billableSeconds / 60 × perMinuteRate (ceiled to paisa)
- *
- * Returns both the rounded billable seconds and the final cost
- * so callers can persist the full breakdown on the Call record.
+ *  - Cost = ceil((billableSeconds / 60) * perMinuteRate)
  */
-
 export function calculateCallCost(input: BillableCallInput): CallCostBreakdown {
   const { durationSec, perMinuteRate, billingMinimumSec, billingIncrementSec } =
     input;
@@ -35,7 +31,9 @@ export function calculateCallCost(input: BillableCallInput): CallCostBreakdown {
     billedSec = billingMinimumSec;
   } else {
     const overflow = durationSec - billingMinimumSec;
-    const incrementsNeeded = Math.ceil(overflow / billingIncrementSec);
+    const incrementsNeeded = Math.ceil(
+      overflow / Math.max(billingIncrementSec, 1),
+    );
     billedSec = billingMinimumSec + incrementsNeeded * billingIncrementSec;
   }
 

@@ -24,6 +24,7 @@ export class EnforcePlanMiddleware {
       try {
         const ctx = getTenantContext(req);
 
+        // Authoritative resolution of active plan + overrides
         const plan = await this.planRepo.getActivePlanForTenant(ctx.tenantId);
         if (!plan) throw new TenantPlanNotFoundError(ctx.tenantId);
         if (plan.status !== "ACTIVE") throw new PlanNotActiveError();
@@ -50,7 +51,7 @@ export class EnforcePlanMiddleware {
             break;
 
           case "MAX_LEADS_PER_BATCH":
-            // Enforced inside use-case with payload count
+            // Enforced inside batch creation use-case with payload count
             break;
 
           case "MAX_AGENTS":

@@ -1,58 +1,45 @@
-import type {
-  Recharge,
-  RechargeStatus,
-  RechargePurpose,
-} from "@prisma/client";
+import type { Recharge, RechargePurpose, RechargeStatus } from "@prisma/client";
 
-// ── Entity types ──────────────────────────────────────────────
-export type RechargeEntity = Recharge;
-
-export interface RechargeWithTenant extends RechargeEntity {
-  tenantName: string;
-}
-
-// ── Input types ───────────────────────────────────────────────
 export interface CreateRechargeData {
   walletId: string;
   tenantId: string;
   amount: number;
+  currency?: string;
   purpose: RechargePurpose;
   status: RechargeStatus;
-  razorpayOrderId: string;
-  planId: string | null;
+  provider?: string;
+  razorpayOrderId?: string | null;
+  tenantPlanId?: string | null;
+  targetPlanVersionId?: string | null;
 }
 
-export interface ListRechargeFilters {
-  tenantId?: string;
-  status?: RechargeStatus;
+export interface RechargeWithTenant extends Recharge {
+  tenantName: string;
 }
 
-export interface Pagination {
-  page: number;
-  limit: number;
-}
-
-export interface PaymentSummary {
-  totalRevenuePaisa: number;
-  mrrApproxPaisa: number;
-  failedCount: number;
-  successCount: number;
-}
-
-// ── Repository contract ───────────────────────────────────────
 export interface RechargeRepository {
-  create(data: CreateRechargeData): Promise<RechargeEntity>;
+  create(data: CreateRechargeData): Promise<Recharge>;
+  findById(id: string): Promise<Recharge | null>;
+  findByRazorpayOrderId(orderId: string): Promise<Recharge | null>;
+  findByRazorpayPaymentId(paymentId: string): Promise<Recharge | null>;
 
-  findByRazorpayOrderId(orderId: string): Promise<RechargeEntity | null>;
+  markSuccess(
+    rechargeId: string,
+    razorpayPaymentId: string,
+    razorpaySignature: string,
+  ): Promise<Recharge>;
 
-  markSuccess(id: string, paymentId: string, signature: string): Promise<void>;
+  markFailed(rechargeId: string, reason: string): Promise<Recharge>;
 
-  /** Admin: aggregated revenue / counts */
-  getSummary(): Promise<PaymentSummary>;
-
-  /** Admin: paginated list with tenant name */
   listWithTenant(
-    filters: ListRechargeFilters,
-    pagination: Pagination,
+    filter: { tenantId?: string; status?: RechargeStatus },
+    pagination: { page: number; limit: number },
   ): Promise<{ items: RechargeWithTenant[]; total: number }>;
+
+  getSummary(tenantId?: string): Promise<{
+    totalRecharges: number;
+    totalAmountPaisa: number;
+    successfulRecharges: number;
+    failedRecharges: number;
+  }>;
 }

@@ -28,13 +28,22 @@ export class PrismaInviteRepository implements InviteRepository {
     });
   }
 
-  async findByToken(token: string): Promise<InviteWithPlan | null> {
+  async findByToken(token: string) {
     return prisma.tenantInvite.findUnique({
       where: { token },
-      include: { plan: true },
+      include: {
+        plan: {
+          include: {
+            versions: {
+              where: { status: "PUBLISHED" },
+              orderBy: { version: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
     });
   }
-
   async list(status?: InviteStatus): Promise<InviteWithPlan[]> {
     return prisma.tenantInvite.findMany({
       where: status ? { status } : undefined,
@@ -67,7 +76,7 @@ export class PrismaInviteRepository implements InviteRepository {
       data: {
         token: newToken,
         expiresAt: newExpiresAt,
-      resendCount: { increment: 1 },
+        resendCount: { increment: 1 },
         lastResentAt: new Date(),
         status: "PENDING",
       },

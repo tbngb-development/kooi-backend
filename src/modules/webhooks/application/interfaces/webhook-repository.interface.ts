@@ -26,8 +26,17 @@ export interface ResolvedCallContext {
   updatedAt: Date;
 }
 
+export interface CallCostSnapshotData {
+  platformCost: number;
+  billableSeconds: number;
+  planVersionId: string;
+  appliedRate: number;
+  appliedMinSec: number;
+  appliedIncrementSec: number;
+  chargedAmount: number;
+}
+
 export interface WebhookRepository {
-  // Call Resolution
   findCallByBolnaCallId(
     bolnaCallId: string,
   ): Promise<ResolvedCallContext | null>;
@@ -50,7 +59,6 @@ export interface WebhookRepository {
     campaignId: string,
   ): Promise<{ id: string } | null>;
 
-  // Call Mutations
   createCall(data: {
     bolnaCallId: string;
     tenantId: string;
@@ -82,21 +90,18 @@ export interface WebhookRepository {
     },
   ): Promise<void>;
 
-  // Lead Mutations
   updateLeadStatus(
     leadId: string,
     status: LeadStatus,
     doNotCall?: boolean,
   ): Promise<void>;
 
-  // Analysis Mutations
   upsertCallAnalysis(
     callId: string,
     tenantId: string,
     analysis: ParsedCallAnalysis,
   ): Promise<void>;
 
-  // Lifecycle & Stats
   incrementTerminalStats(
     campaignId: string,
     batchId: string | null,
@@ -118,9 +123,11 @@ export interface WebhookRepository {
     completedAt?: Date,
   ): Promise<void>;
 
-  /** Persist the calculated cost breakdown after a successful wallet debit. */
+  /**
+   * Persists the authoritative historical billing snapshot for auditability.
+   */
   updateCallCostBreakdown(
     callId: string,
-    data: { platformCost: number; billableSeconds: number },
+    data: CallCostSnapshotData,
   ): Promise<void>;
 }

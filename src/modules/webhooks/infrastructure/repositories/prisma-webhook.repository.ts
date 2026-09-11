@@ -288,13 +288,26 @@ export class PrismaWebhookRepository implements WebhookRepository {
 
   async updateCallCostBreakdown(
     callId: string,
-    data: { platformCost: number; billableSeconds: number },
+    data: {
+      platformCost: number;
+      billableSeconds: number;
+      planVersionId: string;
+      appliedRate: number;
+      appliedMinSec: number;
+      appliedIncrementSec: number;
+      chargedAmount: number;
+    },
   ): Promise<void> {
     await prisma.call.update({
       where: { id: callId },
       data: {
         platformCost: data.platformCost,
         billableSeconds: data.billableSeconds,
+        planVersionId: data.planVersionId,
+        appliedRate: data.appliedRate,
+        appliedMinSec: data.appliedMinSec,
+        appliedIncrementSec: data.appliedIncrementSec,
+        chargedAmount: data.chargedAmount,
       },
     });
   }

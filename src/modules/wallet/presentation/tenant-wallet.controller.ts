@@ -3,6 +3,7 @@ import { sendSuccess } from "../../../shared/utils/response";
 import { getTenantContext } from "../../../shared/utils/tenant-context";
 import type { GetWalletUseCase } from "../application/use-cases/get-wallet.use-case";
 import type { ListTransactionsUseCase } from "../application/use-cases/list-transactions.use-case";
+import type { ListTransactionsQuery } from "../application/dto/wallet.dto";
 
 export class TenantWalletController {
   constructor(
@@ -31,13 +32,11 @@ export class TenantWalletController {
   ): Promise<void> => {
     try {
       const { tenantId } = getTenantContext(req);
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 20;
-      const result = await this.listTransactionsUseCase.execute({
+      const query = req.query as unknown as ListTransactionsQuery;
+      const result = await this.listTransactionsUseCase.execute(
         tenantId,
-        page,
-        limit,
-      });
+        query,
+      );
       sendSuccess(res, result);
     } catch (err) {
       next(err);

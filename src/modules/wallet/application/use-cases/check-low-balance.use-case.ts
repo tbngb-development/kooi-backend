@@ -1,10 +1,10 @@
-import prisma from "../../../../shared/config/database/prisma";
+// src/modules/wallet/application/use-cases/check-low-balance.use-case.ts
 import type { WalletRepository } from "../interfaces/wallet-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { IEmailService } from "../../../../shared/config/external/email/email.interface";
 import { lowBalanceEmailHtml } from "../../../../shared/config/external/email/templates/low-balance.template";
-
-const DEFAULT_THRESHOLD = 10000; // ₹100 fallback if no active plan
+import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
+import prisma from "../../../../shared/config/database/prisma";
 
 export class CheckLowBalanceUseCase {
   constructor(
@@ -14,38 +14,31 @@ export class CheckLowBalanceUseCase {
   ) {}
 
   async execute(input: { tenantId: string }): Promise<void> {
+    const plan = await this.planRepo.getActivePlanForTenant(input.tenantId);
+    if (!plan || plan.status !== "ACTIVE") return;
+
     const wallet = await this.walletRepo.findByTenantId(input.tenantId);
     if (!wallet) return;
 
-    // Read threshold from tenant's active plan (plan-based, not wallet-based)
-    const activePlan = await this.planRepo.getActivePlanForTenant(
-      input.tenantId,
-    );
-    const threshold =
-      activePlan?.status === "ACTIVE"
-        ? activePlan.lowBalanceThreshold
-        : DEFAULT_THRESHOLD;
+    const availableBalance = getEffectiveAvailableBalance(wallet);
 
-    if (wallet.balance >= threshold) return;
+    if (availableBalance <= plan.lowBalanceThreshold) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: input.tenantId },
+        select: { email: true, name: true },
+      });
 
-    // TODO: Add Redis-based rate limiting (e.g., 24h TTL key per tenant)
-    // to prevent duplicate alert emails on every debit.
-    // Key pattern: `wallet:low_balance_alert:{tenantId}` EX 86400
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: input.tenantId },
-      select: { email: true, name: true },
-    });
-    if (!tenant) return;
-
-    await this.email.send({
-      to: tenant.email,
-      subject: `Low wallet balance — ${tenant.name}`,
-      html: lowBalanceEmailHtml({
-        tenantName: tenant.name,
-        balancePaisa: wallet.balance,
-        thresholdPaisa: threshold,
-      }),
-    });
+      if (tenant?.email) {
+        await this.email.send({
+          to: tenant.email,
+          subject: "KOOI — Low Wallet Balance Alert",
+          html: lowBalanceEmailHtml({
+            tenantName: tenant.name,
+            balancePaisa: availableBalance, // Corrected parameter name
+            thresholdPaisa: plan.lowBalanceThreshold,
+          }),
+        });
+      }
+    }
   }
 }
