@@ -6,8 +6,8 @@ export function toOwnerInviteResponse(
   invite: InviteWithPlan,
   inviteUrl?: string,
 ): OwnerInviteResponse {
-  const url =
-    inviteUrl ?? `${env.frontendUrl}/register?ownerInvite=${invite.token}`;
+  const url = inviteUrl ?? `${env.frontendUrl}/accept-invite/${invite.token}`;
+
   return {
     id: invite.id,
     email: invite.email,

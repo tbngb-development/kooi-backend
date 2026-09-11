@@ -1,21 +1,22 @@
 import type {
-  PlanStatus,
-  PricingModel,
   CallingChannel,
   DashboardTier,
   AgentCapability,
   IntegrationTier,
   SupportTier,
+  PricingModel,
+  PlanVersionStatus,
+  TenantPlanStatus,
 } from "@prisma/client";
+import type { EffectivePlanTerms } from "../../domain/entities/plan.entity";
 
-export interface PlanResponse {
+export interface PlanVersionResponse {
   id: string;
-  name: string;
-  slug: string;
-  isActive: boolean;
-  displayOrder: number;
+  planId: string;
+  version: number;
+  status: PlanVersionStatus;
+  currency: string;
 
-  // Pricing
   pricingModel: PricingModel;
   onboardingFee: number;
   onboardingFeeOriginal: number | null;
@@ -23,7 +24,6 @@ export interface PlanResponse {
   billingMinimumSec: number;
   billingIncrementSec: number;
 
-  // Limits
   maxActiveCampaigns: number | null;
   maxLeadsPerBatch: number | null;
   maxAgents: number | null;
@@ -31,38 +31,100 @@ export interface PlanResponse {
   retryAutomation: boolean;
   industryPackLimit: number | null;
 
-  // Capabilities
   callingChannel: CallingChannel;
   brochureUpload: boolean;
 
-  // Feature Tiers
   dashboardTier: DashboardTier;
   agentCapability: AgentCapability;
   integrations: IntegrationTier;
   supportTier: SupportTier;
 
-  // Wallet / Threshold
   lowBalanceThreshold: number;
   includedBalance: number;
   bonusValidityDays: number | null;
 
+  publishedAt: string | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface PlanResponse {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  displayOrder: number;
+  description: string | null;
+  currentVersion: PlanVersionResponse | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanDetailResponse extends PlanResponse {
+  versions: PlanVersionResponse[];
+}
+
 export interface TenantPlanResponse {
+  tenantId: string;
+  status: TenantPlanStatus;
   planId: string;
-  plan: PlanResponse;
-  status: PlanStatus;
+  planVersionId: string;
+  effectiveTerms: EffectivePlanTerms;
+  overrides: {
+    onboardingFeeOverride: number | null;
+    perMinuteRateOverride: number | null;
+  };
   activatedAt: string | null;
   bonusExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreatePlanInput {
   name: string;
   slug: string;
   displayOrder?: number;
+  description?: string | null;
 
+  // Initial Version Configuration
+  pricingModel?: PricingModel;
+  onboardingFee: number;
+  onboardingFeeOriginal?: number | null;
+  perMinuteRate: number;
+  billingMinimumSec?: number;
+  billingIncrementSec?: number;
+
+  maxActiveCampaigns?: number | null;
+  maxLeadsPerBatch?: number | null;
+  maxAgents?: number | null;
+  maxTeamMembers?: number | null;
+  retryAutomation?: boolean;
+  industryPackLimit?: number | null;
+
+  callingChannel?: CallingChannel;
+  brochureUpload?: boolean;
+
+  dashboardTier?: DashboardTier;
+  agentCapability?: AgentCapability;
+  integrations?: IntegrationTier;
+  supportTier?: SupportTier;
+
+  lowBalanceThreshold?: number;
+  includedBalance?: number;
+  bonusValidityDays?: number | null;
+
+  publishImmediately?: boolean;
+}
+
+export interface UpdatePlanInput {
+  name?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+  description?: string | null;
+}
+
+export interface CreatePlanVersionInput {
   pricingModel?: PricingModel;
   onboardingFee: number;
   onboardingFeeOriginal?: number | null;
@@ -90,34 +152,21 @@ export interface CreatePlanInput {
   bonusValidityDays?: number | null;
 }
 
-export interface UpdatePlanInput {
-  name?: string;
-  displayOrder?: number;
-  isActive?: boolean;
+export interface UpdatePlanOverridesInput {
+  onboardingFeeOverride?: number | null;
+  perMinuteRateOverride?: number | null;
+}
 
-  pricingModel?: PricingModel;
-  onboardingFee?: number;
-  onboardingFeeOriginal?: number | null;
-  perMinuteRate?: number;
-  billingMinimumSec?: number;
-  billingIncrementSec?: number;
+export interface ChangePlanInput {
+  newPlanId: string;
+}
 
-  maxActiveCampaigns?: number | null;
-  maxLeadsPerBatch?: number | null;
-  maxAgents?: number | null;
-  maxTeamMembers?: number | null;
-  retryAutomation?: boolean;
-  industryPackLimit?: number | null;
-
-  callingChannel?: CallingChannel;
-  brochureUpload?: boolean;
-
-  dashboardTier?: DashboardTier;
-  agentCapability?: AgentCapability;
-  integrations?: IntegrationTier;
-  supportTier?: SupportTier;
-
-  lowBalanceThreshold?: number;
-  includedBalance?: number;
-  bonusValidityDays?: number | null;
+export interface ChangePlanResponse {
+  tenantId: string;
+  previousPlanVersionId: string;
+  newPlanVersionId: string;
+  direction: "UPGRADE" | "DOWNGRADE" | "LATERAL";
+  onboardingFeeDifference: number;
+  requiresPayment: boolean;
+  effectiveImmediately: boolean;
 }

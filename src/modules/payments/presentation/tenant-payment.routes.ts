@@ -1,3 +1,4 @@
+// src/modules/payments/presentation/tenant-payment.routes.ts
 import { Router } from "express";
 import type { TenantPaymentController } from "./tenant-payment.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";

@@ -309,31 +309,37 @@ enum LeadStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Call {
-  id                 String     @id @default(uuid())
-  bolnaCallId        String?    @unique
-  tenantId           String
-  campaignId         String
-  leadId             String
-  batchId            String?
-  status             CallStatus @default(PENDING)
-  duration           Int?
-  cost               Float?
-  platformCost       Int?
-  billableSeconds    Int? // NEW: Rounded seconds used for billing
-  recording          String?
-  transcript         String?
-  transcriptMessages Json?
-  summary            String?
-  callHistory        Json?
-  startedAt          DateTime?
-  endedAt            DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                  String     @id @default(uuid())
+  bolnaCallId         String?    @unique
+  tenantId            String
+  campaignId          String
+  leadId              String
+  batchId             String?
+  status              CallStatus @default(PENDING)
+  duration            Int?
+  cost                Float?
+  platformCost        Int?
+  billableSeconds     Int?
+  planVersionId       String?
+  appliedRate         Int? // paisa per minute actually charged
+  appliedMinSec       Int? // billing minimum used
+  appliedIncrementSec Int? // billing increment used
+  chargedAmount       Int? // total paisa charged (mirrors platformCost as int)
+  recording           String?
+  transcript          String?
+  transcriptMessages  Json?
+  summary             String?
+  callHistory         Json?
+  startedAt           DateTime?
+  endedAt             DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   campaign     Campaign      @relation(fields: [campaignId], references: [id])
   lead         Lead          @relation(fields: [leadId], references: [id])
   batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
   callAnalysis CallAnalysis?
 
   @@index([tenantId])
@@ -455,7 +461,7 @@ enum ExtractionFlag {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLANS & SUBSCRIPTIONS
+// PLANS & BILLING
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum PricingModel {
@@ -497,14 +503,40 @@ enum SupportTier {
   SLA
 }
 
+// ── Plan (product family — stable, metadata only) ──────────────────────────
+
 model Plan {
   id           String  @id @default(uuid())
   name         String
   slug         String  @unique
   isActive     Boolean @default(true)
   displayOrder Int     @default(0)
+  description  String?
 
-  // ── Pricing (in paisa) ──
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions    PlanVersion[]
+  tenantPlans TenantPlan[]
+  invites     TenantInvite[]
+}
+
+// ── Plan Version (immutable commercial snapshot) ───────────────────────────
+
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model PlanVersion {
+  id       String            @id @default(uuid())
+  planId   String
+  version  Int // monotonic per plan: 1, 2, 3…
+  status   PlanVersionStatus @default(DRAFT)
+  currency String            @default("INR")
+
+  // ── Pricing (all values in paisa) ──
   pricingModel          PricingModel @default(STANDARD)
   onboardingFee         Int
   onboardingFeeOriginal Int?
@@ -512,7 +544,7 @@ model Plan {
   billingMinimumSec     Int          @default(30)
   billingIncrementSec   Int          @default(15)
 
-  // ── Limits ──
+  // ── Limits (NULL = unlimited) ──
   maxActiveCampaigns Int?
   maxLeadsPerBatch   Int?
   maxAgents          Int?
@@ -524,43 +556,219 @@ model Plan {
   callingChannel CallingChannel @default(SHARED)
   brochureUpload Boolean        @default(false)
 
-  // ── Feature Tiers (flattened from old JSON) ──
+  // ── Feature Tiers ──
   dashboardTier   DashboardTier   @default(BASIC)
   agentCapability AgentCapability @default(BASIC)
   integrations    IntegrationTier @default(NONE)
   supportTier     SupportTier     @default(STANDARD)
 
-  // ── Wallet / Threshold ──
+  // ── Wallet / Bonus ──
   lowBalanceThreshold Int  @default(10000)
   includedBalance     Int  @default(0)
   bonusValidityDays   Int?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // ── Lifecycle ──
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
+  // ── Relations ──
+  plan        Plan              @relation(fields: [planId], references: [id])
   tenantPlans TenantPlan[]
-  invites     TenantInvite[]
+  calls       Call[]
+  eventsFrom  TenantPlanEvent[] @relation("EventFromVersion")
+  eventsTo    TenantPlanEvent[] @relation("EventToVersion")
+
+  @@unique([planId, version])
+  @@index([status])
 }
 
-model TenantPlan {
-  id             String     @id @default(uuid())
-  tenantId       String     @unique
-  planId         String
-  status         PlanStatus @default(PENDING_PAYMENT)
-  activatedAt    DateTime?
-  bonusExpiresAt DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+// ── Tenant Plan (current assignment + overrides) ───────────────────────────
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  plan   Plan   @relation(fields: [planId], references: [id])
-}
-
-enum PlanStatus {
+enum TenantPlanStatus {
   PENDING_PAYMENT
   ACTIVE
   EXPIRED
   CANCELLED
+}
+
+model TenantPlan {
+  id            String           @id @default(uuid())
+  tenantId      String           @unique
+  planId        String // family reference
+  planVersionId String // exact commercial version
+  status        TenantPlanStatus @default(PENDING_PAYMENT)
+
+  // ── Enterprise overrides (NULL = inherit from PlanVersion) ──
+  onboardingFeeOverride Int?
+  perMinuteRateOverride Int?
+
+  activatedAt    DateTime?
+  bonusExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan        Plan              @relation(fields: [planId], references: [id])
+  planVersion PlanVersion       @relation(fields: [planVersionId], references: [id])
+  events      TenantPlanEvent[]
+  recharges   Recharge[]
+
+  @@index([planId])
+  @@index([planVersionId])
+  @@index([status])
+}
+
+// ── Tenant Plan Event (immutable audit log) ────────────────────────────────
+
+enum TenantPlanEventType {
+  CREATED
+  ACTIVATED
+  PLAN_CHANGED
+  OVERRIDES_UPDATED
+  BONUS_GRANTED
+  BONUS_EXPIRED
+  CANCELLED
+  EXPIRED
+  REACTIVATED
+}
+
+model TenantPlanEvent {
+  id           String              @id @default(uuid())
+  tenantPlanId String
+  tenantId     String
+  type         TenantPlanEventType
+
+  fromPlanVersionId String?
+  toPlanVersionId   String?
+
+  metadata  Json?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  tenantPlan  TenantPlan   @relation(fields: [tenantPlanId], references: [id], onDelete: Cascade)
+  fromVersion PlanVersion? @relation("EventFromVersion", fields: [fromPlanVersionId], references: [id])
+  toVersion   PlanVersion? @relation("EventToVersion", fields: [toPlanVersionId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantPlanId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WALLET 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id             String    @id @default(uuid())
+  tenantId       String    @unique
+  cashBalance    Int       @default(0) // cash from recharges only
+  bonusBalance   Int       @default(0) // promotional balance only
+  bonusExpiresAt DateTime?
+  currency       String    @default("INR")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  recharges    Recharge[]
+}
+
+// ── Wallet Transaction (append-only ledger) ────────────────────────────────
+
+enum WalletTxType {
+  CREDIT // cash added via recharge
+  DEBIT // spent on calls
+  BONUS // promotional bonus granted
+  BONUS_EXPIRY // bonus clawed back on expiry
+  REFUND // reversal of a previous debit
+  ADJUSTMENT // manual admin correction
+}
+
+enum WalletTxSourceType {
+  RECHARGE
+  CALL
+  PLAN_BONUS
+  BONUS_EXPIRY
+  ADMIN_ADJUSTMENT
+  REFUND
+}
+
+model WalletTransaction {
+  id       String @id @default(uuid())
+  walletId String
+  tenantId String // denormalized for query speed; app enforces consistency
+
+  type       WalletTxType
+  amount     Int // always positive; type determines direction
+  cashDelta  Int // signed: how cash changed (+/-)
+  bonusDelta Int // signed: how bonus changed (+/-)
+
+  cashBalanceAfter  Int
+  bonusBalanceAfter Int
+  currency          String @default("INR")
+  description       String
+
+  sourceType     WalletTxSourceType?
+  sourceId       String?
+  idempotencyKey String? // explicit idempotency guard
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  // Idempotency: one transaction per (wallet, key) when key is provided.
+  // Postgres treats NULLs as distinct, so rows without a key are unconstrained.
+  @@unique([walletId, idempotencyKey], name: "uniq_wallet_tx_idem")
+  @@index([tenantId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+// ── Recharge (payment operation) ───────────────────────────────────────────
+
+enum RechargeStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum RechargePurpose {
+  ONBOARDING
+  WALLET_TOPUP
+}
+
+model Recharge {
+  id       String          @id @default(uuid())
+  walletId String
+  tenantId String
+  amount   Int
+  currency String          @default("INR")
+  purpose  RechargePurpose @default(WALLET_TOPUP)
+  status   RechargeStatus
+
+  // ── Provider fields ──
+  provider          String  @default("razorpay")
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String? @unique
+  razorpaySignature String?
+  failureReason     String?
+
+  // ── Association ──
+  tenantPlanId String? // links onboarding payment to the TenantPlan it activates
+  targetPlanVersionId String? 
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  wallet     Wallet      @relation(fields: [walletId], references: [id])
+  tenantPlan TenantPlan? @relation(fields: [tenantPlanId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantPlanId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -615,84 +823,4 @@ enum InviteStatus {
   ACCEPTED
   EXPIRED
   REVOKED
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WALLET 
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Wallet {
-  id             String    @id @default(uuid())
-  tenantId       String    @unique
-  balance        Int       @default(0)
-  bonusBalance   Int       @default(0)
-  bonusExpiresAt DateTime?
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  transactions WalletTransaction[]
-  recharges    Recharge[]
-}
-
-model WalletTransaction {
-  id                String       @id @default(uuid())
-  walletId          String
-  tenantId          String
-  type              WalletTxType
-  amount            Int
-  balanceAfter      Int
-  bonusBalanceAfter Int
-  description       String
-  referenceType     String?
-  referenceId       String?
-  createdAt         DateTime     @default(now())
-  createdBy         String?
-
-  wallet Wallet @relation(fields: [walletId], references: [id])
-
-  @@unique([referenceType, referenceId])
-  @@index([tenantId, createdAt])
-  @@index([walletId, createdAt])
-}
-
-model Recharge {
-  id                String          @id @default(uuid())
-  walletId          String
-  tenantId          String
-  amount            Int
-  purpose           RechargePurpose @default(WALLET_TOPUP)
-  status            RechargeStatus
-  razorpayOrderId   String?         @unique
-  razorpayPaymentId String?         @unique
-  razorpaySignature String?
-  failureReason     String?
-  planId            String?
-  createdAt         DateTime        @default(now())
-  completedAt       DateTime?
-
-  wallet Wallet @relation(fields: [walletId], references: [id])
-
-  @@index([tenantId, status])
-}
-
-enum WalletTxType {
-  CREDIT
-  DEBIT
-  REFUND
-  BONUS
-  ADJUSTMENT
-}
-
-enum RechargeStatus {
-  INITIATED
-  SUCCESS
-  FAILED
-  REFUNDED
-}
-
-enum RechargePurpose {
-  ONBOARDING
-  WALLET_TOPUP
 }

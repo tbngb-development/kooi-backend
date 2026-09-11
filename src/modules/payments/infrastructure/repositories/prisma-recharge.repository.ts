@@ -1,87 +1,93 @@
 import prisma from "../../../../shared/config/database/prisma";
+import type { Recharge, RechargeStatus } from "@prisma/client";
 import type {
   RechargeRepository,
   CreateRechargeData,
-  RechargeEntity,
   RechargeWithTenant,
-  ListRechargeFilters,
-  Pagination,
-  PaymentSummary,
 } from "../../application/interfaces/recharge-repository.interface";
 
 export class PrismaRechargeRepository implements RechargeRepository {
-  async create(data: CreateRechargeData): Promise<RechargeEntity> {
-    return prisma.recharge.create({ data });
+  async create(data: CreateRechargeData): Promise<Recharge> {
+    return prisma.recharge.create({
+      data: {
+        walletId: data.walletId,
+        tenantId: data.tenantId,
+        amount: data.amount,
+        currency: data.currency ?? "INR",
+        purpose: data.purpose,
+        status: data.status,
+        provider: data.provider ?? "razorpay",
+        razorpayOrderId: data.razorpayOrderId ?? null,
+        tenantPlanId: data.tenantPlanId ?? null,
+        targetPlanVersionId: data.targetPlanVersionId ?? null,
+      },
+    });
   }
 
-  async findByRazorpayOrderId(orderId: string): Promise<RechargeEntity | null> {
+  async findById(id: string): Promise<Recharge | null> {
+    return prisma.recharge.findUnique({ where: { id } });
+  }
+
+  async findByRazorpayOrderId(orderId: string): Promise<Recharge | null> {
     return prisma.recharge.findUnique({
       where: { razorpayOrderId: orderId },
     });
   }
 
+  async findByRazorpayPaymentId(paymentId: string): Promise<Recharge | null> {
+    return prisma.recharge.findUnique({
+      where: { razorpayPaymentId: paymentId },
+    });
+  }
+
   async markSuccess(
-    id: string,
-    paymentId: string,
-    signature: string,
-  ): Promise<void> {
-    await prisma.recharge.update({
-      where: { id },
+    rechargeId: string,
+    razorpayPaymentId: string,
+    razorpaySignature: string,
+  ): Promise<Recharge> {
+    return prisma.recharge.update({
+      where: { id: rechargeId },
       data: {
         status: "SUCCESS",
-        razorpayPaymentId: paymentId,
-        razorpaySignature: signature,
+        razorpayPaymentId,
+        razorpaySignature,
         completedAt: new Date(),
       },
     });
   }
 
-  async getSummary(): Promise<PaymentSummary> {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-
-    const [totalRev, mrrResult, failedCount, successCount] = await Promise.all([
-      prisma.recharge.aggregate({
-        _sum: { amount: true },
-        where: { status: "SUCCESS" },
-      }),
-      prisma.recharge.aggregate({
-        _sum: { amount: true },
-        where: { status: "SUCCESS", completedAt: { gte: thirtyDaysAgo } },
-      }),
-      prisma.recharge.count({ where: { status: "FAILED" } }),
-      prisma.recharge.count({ where: { status: "SUCCESS" } }),
-    ]);
-
-    return {
-      totalRevenuePaisa: totalRev._sum?.amount ?? 0,
-      mrrApproxPaisa: mrrResult._sum?.amount ?? 0,
-      failedCount,
-      successCount,
-    };
+  async markFailed(rechargeId: string, reason: string): Promise<Recharge> {
+    return prisma.recharge.update({
+      where: { id: rechargeId },
+      data: {
+        status: "FAILED",
+        failureReason: reason,
+      },
+    });
   }
 
   async listWithTenant(
-    filters: ListRechargeFilters,
-    pagination: Pagination,
+    filter: { tenantId?: string; status?: RechargeStatus },
+    pagination: { page: number; limit: number },
   ): Promise<{ items: RechargeWithTenant[]; total: number }> {
-    const page = pagination.page > 0 ? pagination.page : 1;
-    const limit = pagination.limit > 0 ? Math.min(pagination.limit, 100) : 50;
-    const skip = (page - 1) * limit;
+    const skip = (pagination.page - 1) * pagination.limit;
+    const where = {
+      ...(filter.tenantId && { tenantId: filter.tenantId }),
+      ...(filter.status && { status: filter.status }),
+    };
 
-    const where: Record<string, unknown> = {};
-    if (filters.tenantId) where.tenantId = filters.tenantId;
-    if (filters.status) where.status = filters.status;
-
-    const [rows, total] = await Promise.all([
+    const [items, total] = await prisma.$transaction([
       prisma.recharge.findMany({
         where,
         orderBy: { createdAt: "desc" },
         skip,
-        take: limit,
+        take: pagination.limit,
         include: {
           wallet: {
             include: {
-              tenant: { select: { name: true } },
+              tenant: {
+                select: { name: true },
+              },
             },
           },
         },
@@ -89,11 +95,40 @@ export class PrismaRechargeRepository implements RechargeRepository {
       prisma.recharge.count({ where }),
     ]);
 
-    const items: RechargeWithTenant[] = rows.map((r) => ({
-      ...r,
-      tenantName: r.wallet?.tenant?.name ?? "Unknown Workspace",
-    }));
+    return {
+      items: items.map((r) => ({
+        ...r,
+        tenantName: r.wallet.tenant.name,
+      })),
+      total,
+    };
+  }
 
-    return { items, total };
+  async getSummary(tenantId?: string): Promise<{
+    totalRecharges: number;
+    totalAmountPaisa: number;
+    successfulRecharges: number;
+    failedRecharges: number;
+  }> {
+    const where = tenantId ? { tenantId } : {};
+
+    const [totalRecharges, successAgg, failedCount] = await prisma.$transaction(
+      [
+        prisma.recharge.count({ where }),
+        prisma.recharge.aggregate({
+          where: { ...where, status: "SUCCESS" },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        prisma.recharge.count({ where: { ...where, status: "FAILED" } }),
+      ],
+    );
+
+    return {
+      totalRecharges,
+      totalAmountPaisa: successAgg._sum.amount ?? 0,
+      successfulRecharges: successAgg._count,
+      failedRecharges: failedCount,
+    };
   }
 }

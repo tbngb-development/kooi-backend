@@ -2,8 +2,11 @@ import { Router } from "express";
 import type { AdminWalletController } from "./admin-wallet.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validate } from "../../../shared/middleware/validate";
-import { adjustWalletSchema } from "../application/dto/admin-wallet.dto";
+import { validate, validateQuery } from "../../../shared/middleware/validate";
+import {
+  adjustWalletSchema,
+  listTransactionsQuerySchema,
+} from "./wallet.schema";
 
 export function buildAdminWalletRoutes(
   controller: AdminWalletController,
@@ -11,11 +14,16 @@ export function buildAdminWalletRoutes(
   authorize: AuthorizeMiddleware,
 ): Router {
   const router = Router();
+
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  router.get("/", controller.get);
-  router.get("/transactions", controller.transactions);
+  router.get("/tenants/:tenantId", controller.getTenantWallet);
+  router.get(
+    "/tenants/:tenantId/transactions",
+    validateQuery(listTransactionsQuerySchema),
+    controller.listTenantTransactions,
+  );
   router.post("/adjust", validate(adjustWalletSchema), controller.adjust);
 
   return router;

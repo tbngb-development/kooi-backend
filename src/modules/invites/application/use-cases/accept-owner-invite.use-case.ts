@@ -13,7 +13,6 @@ import {
 } from "../../domain/errors/invite.errors";
 import { EmailAlreadyExistsError } from "../../../auth/domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../../auth/domain/rules/password.rules";
-import prisma from "../../../../shared/config/database/prisma";
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 
 export class AcceptOwnerInviteUseCase {
@@ -60,19 +59,21 @@ export class AcceptOwnerInviteUseCase {
       passwordHash,
     });
 
-    // TenantPlan PENDING_PAYMENT (no activate until Razorpay)
-    await prisma.tenantPlan.upsert({
-      where: { tenantId: result.tenantId },
-      create: {
-        tenantId: result.tenantId,
-        planId: invite.planId,
-        status: "PENDING_PAYMENT",
-      },
-      update: {
-        planId: invite.planId,
-        status: "PENDING_PAYMENT",
-      },
-    });
+    // Resolve published version for the invited plan family
+    const latestVersion = await this.planRepo.findLatestPublishedVersion(
+      invite.planId,
+    );
+    if (!latestVersion) {
+      throw new Error(`No published version found for plan ${invite.planId}`);
+    }
+
+    // Set TenantPlan to PENDING_PAYMENT via PlanRepository (records audit event)
+    await this.planRepo.selectPlan(
+      result.tenantId,
+      invite.planId,
+      latestVersion.id,
+      result.user.id,
+    );
 
     await this.walletRepo.ensureWallet(result.tenantId);
     await this.inviteRepo.markAccepted(invite.id);
@@ -120,7 +121,7 @@ export class AcceptOwnerInviteUseCase {
             id: plan.id,
             name: plan.name,
             slug: plan.slug,
-            onboardingFee: plan.onboardingFee,
+            onboardingFee: latestVersion.onboardingFee,
           }
         : null,
     };

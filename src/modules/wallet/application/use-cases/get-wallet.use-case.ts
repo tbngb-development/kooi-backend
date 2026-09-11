@@ -1,5 +1,5 @@
-import type { WalletResponse } from "../dto/wallet.dto";
 import type { WalletRepository } from "../interfaces/wallet-repository.interface";
+import type { WalletResponse } from "../dto/wallet.dto";
 import { toWalletResponse } from "../mappers/wallet.mapper";
 
 export class GetWalletUseCase {

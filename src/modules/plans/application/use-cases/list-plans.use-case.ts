@@ -1,4 +1,3 @@
-import type { Plan } from "@prisma/client";
 import type { PlanRepository } from "../interfaces/plan-repository.interface";
 import type { PlanResponse } from "../dto/plan.dto";
 import { toPlanResponse } from "../mappers/plan.mapper";
@@ -9,7 +8,7 @@ export class ListPlansUseCase {
   async execute(
     options: { includeInactive?: boolean } = {},
   ): Promise<PlanResponse[]> {
-    const plans: Plan[] = options.includeInactive
+    const plans = options.includeInactive
       ? await this.planRepo.listAll()
       : await this.planRepo.listActive();
 

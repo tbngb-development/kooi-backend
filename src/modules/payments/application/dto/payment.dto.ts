@@ -1,43 +1,76 @@
-export type RechargePurpose = "ONBOARDING" | "WALLET_TOPUP";
+import type { RechargeStatus, RechargePurpose } from "@prisma/client";
 
 export interface CreateOrderInput {
   tenantId: string;
-  purpose: RechargePurpose;
-  amountPaisa?: number; // required for WALLET_TOPUP; ignored for ONBOARDING
+  amountPaisa: number;
 }
 
-export interface CreateOrderResponse {
+export interface CreateOnboardingOrderInput {
+  tenantId: string;
+}
+
+export interface CreateOrderResult {
   orderId: string;
   amount: number;
   currency: string;
   keyId: string;
   rechargeId: string;
-  purpose: RechargePurpose;
 }
 
 export interface VerifyPaymentInput {
-  tenantId: string;
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature: string;
 }
 
-export interface VerifyPaymentResponse {
-  success: boolean;
+export interface CompletePaymentInput {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface CompletePaymentResult {
   alreadyProcessed: boolean;
   rechargeId: string;
   purpose: RechargePurpose;
 }
 
-export interface OrderStatusResponse {
-  orderId: string;
-  payments: Array<{
-    id: string;
-    status: string;
-    amount: number;
-    currency: string;
-    method: string | null;
-    captured: boolean;
-    createdAt: number;
-  }>;
+export interface WebhookInput {
+  rawBody: string;
+  signature: string;
+}
+
+export interface RechargeResponse {
+  id: string;
+  tenantId: string;
+  amount: number;
+  currency: string;
+  purpose: RechargePurpose;
+  status: RechargeStatus;
+  provider: string;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  failureReason: string | null;
+  tenantPlanId: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface PaymentSummaryResponse {
+  totalRecharges: number;
+  totalAmountPaisa: number;
+  successfulRecharges: number;
+  failedRecharges: number;
+}
+
+export interface ActivateFreeOnboardingInput {
+  tenantId: string;
+  adminUserId: string;
+}
+
+export interface ActivateFreeOnboardingResult {
+  tenantId: string;
+  planVersionId: string;
+  includedBalance: number;
+  bonusExpiresAt: string | null;
 }

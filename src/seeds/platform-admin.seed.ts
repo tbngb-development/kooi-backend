@@ -2,7 +2,7 @@
  * Seed a platform admin user.
  *
  * Usage:
- *  npx tsx src/seeds/platform-admin.seed.ts --email admin@kooi.com --password "Str0ngPass!" --name "Platform Admin"
+ *  npx tsx src/seeds/platform-admin.seed.ts --email admin@kooi.in --password "Str0ngPass" --name "Platform Admin"
  */
 
 import prisma from "../shared/config/database/prisma";

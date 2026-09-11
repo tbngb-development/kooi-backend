@@ -241,7 +241,7 @@ export class ProcessCallWebhookUseCase {
       "COMPLETED",
     );
 
-    // ── Step 2: Debit wallet + persist our cost breakdown ──────────
+    // ── Step 2: Debit wallet + snapshot immutable pricing terms ──
     if (this.debitWalletForCall && duration && duration > 0) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
@@ -251,15 +251,18 @@ export class ProcessCallWebhookUseCase {
           durationSec: duration,
         });
 
-        // Only record our cost if debit actually succeeded
         if (debitResult) {
           await this.webhookRepo.updateCallCostBreakdown(call.id, {
             platformCost: debitResult.amountPaisa,
             billableSeconds: debitResult.billableSeconds,
+            planVersionId: debitResult.planVersionId,
+            appliedRate: debitResult.appliedRate,
+            appliedMinSec: debitResult.appliedMinSec,
+            appliedIncrementSec: debitResult.appliedIncrementSec,
+            chargedAmount: debitResult.amountPaisa,
           });
         }
       } catch (err) {
-        // Never fail webhook resolution on billing errors
         console.error("[Webhook] wallet debit failed:", err);
       }
     }

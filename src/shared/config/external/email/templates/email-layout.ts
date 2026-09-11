@@ -142,10 +142,10 @@ export function infoBox(
   variant: "info" | "warning" | "success" | "danger" = "info",
 ): string {
   const styles = {
-    info: { bg: COLORS.primaryLight, color: COLORS.primaryDark, icon: "ℹ️" },
-    warning: { bg: COLORS.warningLight, color: COLORS.warning, icon: "⚠️" },
-    success: { bg: COLORS.successLight, color: COLORS.success, icon: "✅" },
-    danger: { bg: COLORS.dangerLight, color: COLORS.danger, icon: "🚨" },
+    info: { bg: COLORS.primaryLight, color: COLORS.primaryDark },
+    warning: { bg: COLORS.warningLight, color: COLORS.warning },
+    success: { bg: COLORS.successLight, color: COLORS.success },
+    danger: { bg: COLORS.dangerLight, color: COLORS.danger },
   };
   const s = styles[variant];
 
@@ -154,7 +154,7 @@ export function infoBox(
       <tr>
         <td style="background-color:${s.bg};border-radius:8px;padding:16px 18px;">
           <p style="margin:0;font-size:15px;color:${s.color};line-height:1.5;">
-            <span style="margin-right:6px;">${s.icon}</span>${text}
+           ${text}
           </p>
         </td>
       </tr>

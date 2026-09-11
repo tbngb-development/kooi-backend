@@ -1,47 +1,46 @@
 import type { Request, Response, NextFunction } from "express";
 import { sendSuccess } from "../../../shared/utils/response";
-import type { AuthRequest } from "../../../shared/types";
+import { param } from "../../../shared/utils/paramHelper";
 import type { GetWalletUseCase } from "../application/use-cases/get-wallet.use-case";
 import type { ListTransactionsUseCase } from "../application/use-cases/list-transactions.use-case";
 import type { AdjustWalletUseCase } from "../application/use-cases/adjust-wallet.use-case";
+import type { AuthRequest } from "../../../shared/types";
+import type { ListTransactionsQuery } from "../application/dto/wallet.dto";
+import type { AdjustWalletInput } from "../application/dto/admin-wallet.dto";
 
 export class AdminWalletController {
   constructor(
-    private readonly getWallet: GetWalletUseCase,
-    private readonly listTransactions: ListTransactionsUseCase,
-    private readonly adjustWallet: AdjustWalletUseCase,
+    private readonly getWalletUseCase: GetWalletUseCase,
+    private readonly listTransactionsUseCase: ListTransactionsUseCase,
+    private readonly adjustWalletUseCase: AdjustWalletUseCase,
   ) {}
 
-  get = async (
+  getTenantWallet = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const tenantId = req.query.tenantId as string;
-      if (!tenantId) throw new Error("tenantId is required");
-      const wallet = await this.getWallet.execute(tenantId);
+      const tenantId = param(req, "tenantId");
+      const wallet = await this.getWalletUseCase.execute(tenantId);
       sendSuccess(res, wallet);
     } catch (err) {
       next(err);
     }
   };
 
-  transactions = async (
+  listTenantTransactions = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const tenantId = req.query.tenantId as string;
-      if (!tenantId) throw new Error("tenantId is required");
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 50;
-      const result = await this.listTransactions.execute({
+      const tenantId = param(req, "tenantId");
+      const query = req.query as unknown as ListTransactionsQuery;
+      const result = await this.listTransactionsUseCase.execute(
         tenantId,
-        page,
-        limit,
-      });
+        query,
+      );
       sendSuccess(res, result);
     } catch (err) {
       next(err);
@@ -54,8 +53,11 @@ export class AdminWalletController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const adminId = (req as AuthRequest).user.userId;
-      const result = await this.adjustWallet.execute(req.body, adminId);
+      const authReq = req as AuthRequest;
+      const result = await this.adjustWalletUseCase.execute(
+        req.body as AdjustWalletInput,
+        authReq.user.userId,
+      );
       sendSuccess(res, result);
     } catch (err) {
       next(err);

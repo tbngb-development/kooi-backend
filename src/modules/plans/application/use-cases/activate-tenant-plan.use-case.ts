@@ -1,22 +1,22 @@
 import type { PlanRepository } from "../interfaces/plan-repository.interface";
-import { PlanNotFoundError } from "../../domain/errors/plan.errors";
+import { PlanVersionNotFoundError } from "../../domain/errors/plan.errors";
 
 export interface ActivateTenantPlanInput {
   tenantId: string;
-  planId: string;
+  planVersionId: string;
+  createdBy?: string;
 }
 
 export interface ActivateTenantPlanOutput {
   tenantId: string;
-  planId: string;
+  planVersionId: string;
   bonusExpiresAt: Date | null;
   includedBalance: number;
 }
 
 /**
- * Called after successful onboarding payment.
- * Sets TenantPlan to ACTIVE and returns bonus info so the Wallet
- * module (Sprint 2) can credit the included balance.
+ * Called after successful onboarding payment or Enterprise free activation.
+ * Activates TenantPlan, computes bonus expiry, and returns bonus info for wallet crediting.
  */
 export class ActivateTenantPlanUseCase {
   constructor(private readonly planRepo: PlanRepository) {}
@@ -24,24 +24,25 @@ export class ActivateTenantPlanUseCase {
   async execute(
     input: ActivateTenantPlanInput,
   ): Promise<ActivateTenantPlanOutput> {
-    const plan = await this.planRepo.findById(input.planId);
-    if (!plan) throw new PlanNotFoundError(input.planId);
+    const version = await this.planRepo.findVersionById(input.planVersionId);
+    if (!version) throw new PlanVersionNotFoundError(input.planVersionId);
 
-    const bonusExpiresAt = plan.bonusValidityDays
-      ? new Date(Date.now() + plan.bonusValidityDays * 24 * 60 * 60 * 1000)
+    const bonusExpiresAt = version.bonusValidityDays
+      ? new Date(Date.now() + version.bonusValidityDays * 24 * 60 * 60 * 1000)
       : null;
 
     await this.planRepo.activatePlan(
       input.tenantId,
-      input.planId,
+      input.planVersionId,
       bonusExpiresAt,
+      input.createdBy,
     );
 
     return {
       tenantId: input.tenantId,
-      planId: input.planId,
+      planVersionId: input.planVersionId,
       bonusExpiresAt,
-      includedBalance: plan.includedBalance,
+      includedBalance: version.includedBalance,
     };
   }
 }

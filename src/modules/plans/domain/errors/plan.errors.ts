@@ -8,15 +8,21 @@ export class PlanNotFoundError extends NotFoundError {
   }
 }
 
+export class PlanVersionNotFoundError extends NotFoundError {
+  constructor(identifier?: string) {
+    super(identifier ? `PlanVersion ${identifier}` : "Plan version");
+  }
+}
+
 export class TenantPlanNotFoundError extends NotFoundError {
   constructor(tenantId: string) {
-    super(`Plan for tenant ${tenantId}`);
+    super(`Active plan for tenant ${tenantId}`);
   }
 }
 
 export class PlanNotActiveError extends ForbiddenError {
   constructor() {
-    super("Plan is not active. Payment required.");
+    super("Plan is not active. Payment or onboarding required.");
   }
 }
 
@@ -49,7 +55,21 @@ export class PlanSlugConflictError extends ConflictError {
 export class CustomPlanSelectionNotAllowedError extends ForbiddenError {
   constructor() {
     super(
-      "Custom/Enterprise plans cannot be self-selected. Please contact sales.",
+      "Custom/Enterprise plans cannot be self-selected. Please contact support or request an invite.",
     );
+  }
+}
+
+export class PlanVersionImmutableError extends ConflictError {
+  constructor(status: string) {
+    super(
+      `Cannot modify plan version in '${status}' status. Create a new draft version instead.`,
+    );
+  }
+}
+
+export class NoPublishedPlanVersionError extends NotFoundError {
+  constructor(planSlugOrId: string) {
+    super(`No published version found for plan ${planSlugOrId}`);
   }
 }
