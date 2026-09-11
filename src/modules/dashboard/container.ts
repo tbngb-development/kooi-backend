@@ -1,10 +1,20 @@
 import { PrismaDashboardRepository } from "./infrastructure/repositories/prisma-dashboard.repository";
 import { PrismaAdminDashboardRepository } from "./infrastructure/repositories/prisma-admin-dashboard.repository";
 
+// Tenant use cases
 import { GetDashboardOverviewUseCase } from "./application/use-cases/get-dashboard-overview.use-case";
-import { GetDashboardActivityUseCase } from "./application/use-cases/get-dashboard-activity.use-case";
-import { GetDashboardCampaignsUseCase } from "./application/use-cases/get-dashboard-campaigns.use-case";
+import { GetCallTrendsUseCase } from "./application/use-cases/get-call-trends.use-case";
+import { GetSpendTrendsUseCase } from "./application/use-cases/get-spend-trends.use-case";
+import { GetLeadFunnelUseCase } from "./application/use-cases/get-lead-funnel.use-case";
+import { GetDispositionBreakdownUseCase } from "./application/use-cases/get-disposition-breakdown.use-case";
+import { GetTemperatureDistributionUseCase } from "./application/use-cases/get-temperature-distribution.use-case";
+import { GetCampaignPerformanceUseCase } from "./application/use-cases/get-campaign-performance.use-case";
+import { GetTopCampaignsUseCase } from "./application/use-cases/get-top-campaigns.use-case";
+import { GetRecentActivityUseCase } from "./application/use-cases/get-recent-activity.use-case";
+import { ExportCampaignPerformanceUseCase } from "./application/use-cases/export-campaign-performance.use-case";
+import { ExportCallTrendsUseCase } from "./application/use-cases/export-call-trends.use-case";
 
+// Admin use cases (unchanged)
 import { GetAdminOverviewUseCase } from "./application/use-cases/get-admin-overview.use-case";
 import { GetAdminTenantHealthUseCase } from "./application/use-cases/get-admin-tenant-health.use-case";
 import { GetAdminActivityUseCase } from "./application/use-cases/get-admin-activity.use-case";
@@ -24,8 +34,16 @@ export function buildDashboardModule(): DashboardModule {
   return {
     tenantController: new TenantDashboardController(
       new GetDashboardOverviewUseCase(tenantRepo),
-      new GetDashboardActivityUseCase(tenantRepo),
-      new GetDashboardCampaignsUseCase(tenantRepo),
+      new GetCallTrendsUseCase(tenantRepo),
+      new GetSpendTrendsUseCase(tenantRepo),
+      new GetLeadFunnelUseCase(tenantRepo),
+      new GetDispositionBreakdownUseCase(tenantRepo),
+      new GetTemperatureDistributionUseCase(tenantRepo),
+      new GetCampaignPerformanceUseCase(tenantRepo),
+      new GetTopCampaignsUseCase(tenantRepo),
+      new GetRecentActivityUseCase(tenantRepo),
+      new ExportCampaignPerformanceUseCase(tenantRepo),
+      new ExportCallTrendsUseCase(tenantRepo),
     ),
     adminController: new AdminDashboardController(
       new GetAdminOverviewUseCase(adminRepo),
