@@ -75,10 +75,14 @@ export class RunBatchUseCase {
         startedAt: new Date(),
       });
     }
+    const runsAt = new Date(bolnaScheduledAt ?? now).toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
 
     return {
       batch: updatedBatch,
-      message: `Batch scheduled. Bolna will start at ${bolnaScheduledAt ?? now}`,
+      message: `Batch processing started successfully at ${runsAt}`,
       ...(balanceWarning && { balanceWarning }),
     };
   }
