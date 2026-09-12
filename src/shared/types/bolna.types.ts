@@ -264,8 +264,9 @@ export interface BolnaAgentPrompts {
 export interface BolnaAgentResponse {
   id: string;
   agent_name: string;
-  agent_type: string;
   agent_status: string;
+  agent_welcome_message: string;
+  agent_type: string;
   created_at: string;
   updated_at: string;
   tasks: BolnaTask[];
