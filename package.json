@@ -1,5 +1,5 @@
 {
-  "name": "bolna-server",
+  "name": "Kooi-Backend | Partner for your AI Voice call agents",
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
