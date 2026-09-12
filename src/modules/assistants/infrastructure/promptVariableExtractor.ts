@@ -78,5 +78,5 @@ export function getAgentSystemPrompt(agent: BolnaAgentResponse): string {
 }
 
 export function getAgentFirstMessage(agent: BolnaAgentResponse): string {
-  return agent.agent_prompts?.task_1?.first_message?.trim() ?? "";
+  return agent.agent_welcome_message?.trim() ?? "";
 }

@@ -2,7 +2,6 @@ import type { CampaignRepository } from "../interfaces/campaign-repository.inter
 import type { CreateCampaignInput } from "../dto/campaign.dto";
 import {
   CampaignAssistantNotFoundError,
-  CampaignBrochureNotFoundError,
   BrochureNotConfirmedError,
 } from "../../domain/errors/campaign.errors";
 
