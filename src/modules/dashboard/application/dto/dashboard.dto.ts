@@ -19,11 +19,6 @@ export interface TenantOverviewOutput {
     total: number;
     active: number;
   };
-  wallet: {
-    cashBalancePaisa: number;
-    bonusBalancePaisa: number;
-    totalBalancePaisa: number;
-  };
   leads: {
     total: number;
     qualified: number;
@@ -35,15 +30,10 @@ export interface TenantOverviewOutput {
     completed: number;
     failed: number;
     noAnswer: number;
-    connectRate: number;
   };
   spend: {
     totalPaisa: number;
     avgCostPerQualifiedLeadPaisa: number;
-  };
-  projections: {
-    dailyBurnRatePaisa: number;
-    estimatedDaysRemaining: number | null;
   };
 }
 
@@ -114,32 +104,6 @@ export interface TemperatureBucket {
 export interface TemperatureDistributionOutput {
   total: number;
   data: TemperatureBucket[];
-}
-
-// ── Campaign Performance ────────────────────────────────────────────────────
-
-export interface CampaignPerformanceRow {
-  id: string;
-  name: string;
-  status: string;
-  assistantName: string;
-  totalLeads: number;
-  calledLeads: number;
-  completedLeads: number;
-  failedLeads: number;
-  qualifiedLeads: number;
-  completionRate: number;
-  qualificationRate: number;
-  totalSpendPaisa: number;
-  avgCostPerLeadPaisa: number;
-  startedAt: string | null;
-  completedAt: string | null;
-  createdAt: string;
-}
-
-export interface CampaignPerformanceOutput {
-  total: number;
-  data: CampaignPerformanceRow[];
 }
 
 // ── Top Campaigns ───────────────────────────────────────────────────────────

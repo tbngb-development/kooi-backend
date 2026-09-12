@@ -5,7 +5,6 @@ import type {
   LeadFunnelOutput,
   DispositionBreakdownOutput,
   TemperatureDistributionOutput,
-  CampaignPerformanceOutput,
   TopCampaignsOutput,
   TopCampaignMetric,
   RecentActivityOutput,
@@ -43,11 +42,6 @@ export interface DashboardRepository {
     tenantId: string,
     filters: DashboardFilters,
   ): Promise<TemperatureDistributionOutput>;
-
-  getCampaignPerformance(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<CampaignPerformanceOutput>;
 
   getTopCampaigns(
     tenantId: string,

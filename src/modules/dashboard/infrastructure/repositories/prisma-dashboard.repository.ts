@@ -1,4 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { Prisma, type Disposition } from "@prisma/client";
 import type { DashboardRepository } from "../../application/interfaces/dashboard-repository.interface";
 import type {
   TenantOverviewOutput,
@@ -7,7 +8,6 @@ import type {
   LeadFunnelOutput,
   DispositionBreakdownOutput,
   TemperatureDistributionOutput,
-  CampaignPerformanceOutput,
   TopCampaignsOutput,
   TopCampaignMetric,
   RecentActivityOutput,
@@ -19,9 +19,8 @@ import type {
 import {
   PG_GRANULARITY,
   generateDateBuckets,
-  daysBetween,
+  toDateString,
 } from "../../domain/rules/date-range.rules";
-import { type Disposition, Prisma } from "@prisma/client";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -43,13 +42,9 @@ const DISQUALIFYING_DISPOSITIONS: Disposition[] = [
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 function safeRate(numerator: number, denominator: number): number {
   if (denominator === 0) return 0;
-  return round2((numerator / denominator) * 100);
+  return Math.round((numerator / denominator) * 10000) / 100;
 }
 
 function campaignFilter(campaignId?: string) {
@@ -61,7 +56,7 @@ function campaignFilter(campaignId?: string) {
 // ── Raw query row types ─────────────────────────────────────────────────────
 
 interface RawTrendRow {
-  bucket: string;
+  bucket: Date | string;
   total: number;
   completed: number;
   failed: number;
@@ -69,7 +64,7 @@ interface RawTrendRow {
 }
 
 interface RawSpendRow {
-  bucket: string;
+  bucket: Date | string;
   cash_spent: number;
   bonus_spent: number;
 }
@@ -77,11 +72,6 @@ interface RawSpendRow {
 interface RawGroupCount {
   key: string;
   count: number;
-}
-
-interface RawCampaignAgg {
-  campaignId: string;
-  value: number;
 }
 
 // ── Repository ──────────────────────────────────────────────────────────────
@@ -103,7 +93,6 @@ export class PrismaDashboardRepository implements DashboardRepository {
     const [
       totalCampaigns,
       activeCampaigns,
-      wallet,
       totalLeads,
       totalCalls,
       completedCalls,
@@ -113,12 +102,8 @@ export class PrismaDashboardRepository implements DashboardRepository {
       notQualifiedCount,
       spendAgg,
     ] = await Promise.all([
-      // Point-in-time
       prisma.campaign.count({ where: { tenantId } }),
       prisma.campaign.count({ where: { tenantId, status: "RUNNING" } }),
-      prisma.wallet.findUnique({ where: { tenantId } }),
-
-      // Range-dependent
       prisma.lead.count({
         where: {
           tenantId,
@@ -157,21 +142,9 @@ export class PrismaDashboardRepository implements DashboardRepository {
     ]);
 
     const totalSpend = spendAgg._sum.chargedAmount ?? 0;
-    const cashBalance = wallet?.cashBalance ?? 0;
-    const bonusBalance = wallet?.bonusBalance ?? 0;
-    const days = daysBetween(dateFrom, dateTo);
-    const dailyBurn = days > 0 ? Math.round(totalSpend / days) : 0;
-    const totalBalance = cashBalance + bonusBalance;
-    const daysRemaining =
-      dailyBurn > 0 ? Math.floor(totalBalance / dailyBurn) : null;
 
     return {
       campaigns: { total: totalCampaigns, active: activeCampaigns },
-      wallet: {
-        cashBalancePaisa: cashBalance,
-        bonusBalancePaisa: bonusBalance,
-        totalBalancePaisa: totalBalance,
-      },
       leads: {
         total: totalLeads,
         qualified: qualifiedCount,
@@ -183,16 +156,11 @@ export class PrismaDashboardRepository implements DashboardRepository {
         completed: completedCalls,
         failed: failedCalls,
         noAnswer: noAnswerCalls,
-        connectRate: safeRate(completedCalls, totalCalls),
       },
       spend: {
         totalPaisa: totalSpend,
         avgCostPerQualifiedLeadPaisa:
           qualifiedCount > 0 ? Math.round(totalSpend / qualifiedCount) : 0,
-      },
-      projections: {
-        dailyBurnRatePaisa: dailyBurn,
-        estimatedDaysRemaining: daysRemaining,
       },
     };
   }
@@ -222,7 +190,7 @@ export class PrismaDashboardRepository implements DashboardRepository {
       ORDER BY bucket
     `;
 
-    const dbMap = new Map(rows.map((r) => [String(r.bucket), r]));
+    const dbMap = new Map(rows.map((r) => [toDateString(r.bucket), r]));
     const buckets = generateDateBuckets(dateFrom, dateTo, granularity);
 
     const data: CallTrendBucket[] = buckets.map((date) => {
@@ -263,7 +231,7 @@ export class PrismaDashboardRepository implements DashboardRepository {
       ORDER BY bucket
     `;
 
-    const dbMap = new Map(rows.map((r) => [String(r.bucket), r]));
+    const dbMap = new Map(rows.map((r) => [toDateString(r.bucket), r]));
     const buckets = generateDateBuckets(dateFrom, dateTo, granularity);
 
     const data: SpendTrendBucket[] = buckets.map((date) => {
@@ -414,82 +382,6 @@ export class PrismaDashboardRepository implements DashboardRepository {
     };
   }
 
-  // ── Campaign Performance ────────────────────────────────────────────────
-
-  async getCampaignPerformance(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<CampaignPerformanceOutput> {
-    const { dateFrom, dateTo, campaignId } = filters;
-
-    const campaigns = await prisma.campaign.findMany({
-      where: {
-        tenantId,
-        createdAt: { gte: dateFrom, lte: dateTo },
-        ...(campaignId ? { id: campaignId } : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      include: { assistant: { select: { name: true } } },
-    });
-
-    if (campaigns.length === 0) {
-      return { total: 0, data: [] };
-    }
-
-    const campaignIds = campaigns.map((c) => c.id);
-
-    const [qualifiedRows, spendRows] = await Promise.all([
-      prisma.$queryRaw<RawCampaignAgg[]>`
-        SELECT c."campaignId", COUNT(DISTINCT c."leadId")::int as value
-        FROM "Call" c
-        JOIN "CallAnalysis" ca ON ca."callId" = c.id
-        WHERE c."tenantId" = ${tenantId}
-          AND c."campaignId" IN (${Prisma.join(campaignIds)})
-          AND ca.disposition IN (${Prisma.join(QUALIFYING_DISPOSITIONS)})
-        GROUP BY c."campaignId"
-      `,
-      prisma.$queryRaw<RawCampaignAgg[]>`
-        SELECT "campaignId", COALESCE(SUM("chargedAmount"), 0)::int as value
-        FROM "Call"
-        WHERE "tenantId" = ${tenantId}
-          AND "campaignId" IN (${Prisma.join(campaignIds)})
-        GROUP BY "campaignId"
-      `,
-    ]);
-
-    const qualifiedMap = new Map(
-      qualifiedRows.map((r) => [r.campaignId, r.value]),
-    );
-    const spendMap = new Map(spendRows.map((r) => [r.campaignId, r.value]));
-
-    const data = campaigns.map((c) => {
-      const qualified = qualifiedMap.get(c.id) ?? 0;
-      const spend = spendMap.get(c.id) ?? 0;
-
-      return {
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        assistantName: c.assistant.name,
-        totalLeads: c.totalLeads,
-        calledLeads: c.calledLeads,
-        completedLeads: c.completedLeads,
-        failedLeads: c.failedLeads,
-        qualifiedLeads: qualified,
-        completionRate: safeRate(c.completedLeads, c.calledLeads),
-        qualificationRate: safeRate(qualified, c.completedLeads),
-        totalSpendPaisa: spend,
-        avgCostPerLeadPaisa:
-          c.calledLeads > 0 ? Math.round(spend / c.calledLeads) : 0,
-        startedAt: c.startedAt?.toISOString() ?? null,
-        completedAt: c.completedAt?.toISOString() ?? null,
-        createdAt: c.createdAt.toISOString(),
-      };
-    });
-
-    return { total: data.length, data };
-  }
-
   // ── Top Campaigns ───────────────────────────────────────────────────────
 
   async getTopCampaigns(
@@ -520,8 +412,10 @@ export class PrismaDashboardRepository implements DashboardRepository {
         cmp.id,
         cmp.name,
         CASE
-          WHEN ${Prisma.raw(`'${metric}'`)} = 'qualified_leads' THEN COALESCE(qual.qualified_count, 0)::int
-          WHEN ${Prisma.raw(`'${metric}'`)} = 'total_calls' THEN COALESCE(calls.call_count, 0)::int
+          WHEN ${Prisma.raw(`'${metric}'`)} = 'qualified_leads'
+            THEN COALESCE(qual.qualified_count, 0)::int
+          WHEN ${Prisma.raw(`'${metric}'`)} = 'total_calls'
+            THEN COALESCE(calls.call_count, 0)::int
           ELSE COALESCE(spend.total_spend, 0)::int
         END as value
       FROM "Campaign" cmp

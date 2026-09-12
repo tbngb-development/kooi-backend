@@ -23,15 +23,10 @@ export function buildTenantDashboardRoutes(
   router.get("/temperature-distribution", controller.temperatureDistribution);
 
   // ── Campaign Analytics ──
-  router.get("/campaign-performance", controller.campaignPerformance);
   router.get("/top-campaigns", controller.topCampaigns);
 
   // ── Activity Feed ──
   router.get("/recent-activity", controller.recentActivity);
-
-  // ── CSV Exports ──
-  router.get("/export/campaign-performance", controller.exportCampaignCsv);
-  router.get("/export/call-trends", controller.exportCallTrendsCsv);
 
   return router;
 }

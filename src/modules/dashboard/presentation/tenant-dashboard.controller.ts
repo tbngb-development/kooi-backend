@@ -1,7 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { sendSuccess } from "../../../shared/utils/response";
 import { parseDateRange } from "../domain/rules/date-range.rules";
-import { csvFilename } from "../domain/rules/csv-serializer";
 import {
   dashboardFiltersSchema,
   timeSeriesFiltersSchema,
@@ -14,11 +13,8 @@ import type { GetSpendTrendsUseCase } from "../application/use-cases/get-spend-t
 import type { GetLeadFunnelUseCase } from "../application/use-cases/get-lead-funnel.use-case";
 import type { GetDispositionBreakdownUseCase } from "../application/use-cases/get-disposition-breakdown.use-case";
 import type { GetTemperatureDistributionUseCase } from "../application/use-cases/get-temperature-distribution.use-case";
-import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
 import type { GetTopCampaignsUseCase } from "../application/use-cases/get-top-campaigns.use-case";
 import type { GetRecentActivityUseCase } from "../application/use-cases/get-recent-activity.use-case";
-import type { ExportCampaignPerformanceUseCase } from "../application/use-cases/export-campaign-performance.use-case";
-import type { ExportCallTrendsUseCase } from "../application/use-cases/export-call-trends.use-case";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 
 export class TenantDashboardController {
@@ -29,11 +25,8 @@ export class TenantDashboardController {
     private readonly getLeadFunnel: GetLeadFunnelUseCase,
     private readonly getDispositionBreakdown: GetDispositionBreakdownUseCase,
     private readonly getTemperatureDistribution: GetTemperatureDistributionUseCase,
-    private readonly getCampaignPerformance: GetCampaignPerformanceUseCase,
     private readonly getTopCampaigns: GetTopCampaignsUseCase,
     private readonly getRecentActivity: GetRecentActivityUseCase,
-    private readonly exportCampaignPerformance: ExportCampaignPerformanceUseCase,
-    private readonly exportCallTrends: ExportCallTrendsUseCase,
   ) {}
 
   private parseFilters(req: Request) {
@@ -155,23 +148,6 @@ export class TenantDashboardController {
     }
   };
 
-  campaignPerformance = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const filters = this.parseFilters(req);
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      sendSuccess(
-        res,
-        await this.getCampaignPerformance.execute(tenantId, filters),
-      );
-    } catch (err) {
-      next(err);
-    }
-  };
-
   topCampaigns = async (
     req: Request,
     res: Response,
@@ -208,39 +184,6 @@ export class TenantDashboardController {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
       sendSuccess(res, await this.getRecentActivity.execute(tenantId));
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  exportCampaignCsv = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const filters = this.parseFilters(req);
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      const csv = await this.exportCampaignPerformance.execute(
-        tenantId,
-        filters,
-      );
-      this.sendCsv(res, csv, csvFilename("campaign_performance"));
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  exportCallTrendsCsv = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const filters = this.parseTimeSeriesFilters(req);
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      const csv = await this.exportCallTrends.execute(tenantId, filters);
-      this.sendCsv(res, csv, csvFilename("call_trends"));
     } catch (err) {
       next(err);
     }
