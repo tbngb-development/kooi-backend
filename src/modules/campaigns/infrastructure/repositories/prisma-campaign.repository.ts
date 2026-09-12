@@ -8,7 +8,6 @@ import type {
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { CampaignStatus } from "@prisma/client";
-import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(tenantId: string): Promise<CampaignListItem[]> {
