@@ -1,16 +1,13 @@
 import type { DashboardRepository } from "../interfaces/dashboard-repository.interface";
-import type {
-  TenantOverviewOutput,
-  DashboardFilters,
-} from "../dto/dashboard.dto";
+import type { LeadFunnelOutput, DashboardFilters } from "../dto/dashboard.dto";
 
-export class GetDashboardOverviewUseCase {
+export class GetLeadFunnelUseCase {
   constructor(private readonly repo: DashboardRepository) {}
 
   execute(
     tenantId: string,
     filters: DashboardFilters,
-  ): Promise<TenantOverviewOutput> {
-    return this.repo.getOverview(tenantId, filters);
+  ): Promise<LeadFunnelOutput> {
+    return this.repo.getLeadFunnel(tenantId, filters);
   }
 }

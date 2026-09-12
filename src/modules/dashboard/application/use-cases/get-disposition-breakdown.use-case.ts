@@ -1,16 +1,16 @@
 import type { DashboardRepository } from "../interfaces/dashboard-repository.interface";
 import type {
-  TenantOverviewOutput,
+  DispositionBreakdownOutput,
   DashboardFilters,
 } from "../dto/dashboard.dto";
 
-export class GetDashboardOverviewUseCase {
+export class GetDispositionBreakdownUseCase {
   constructor(private readonly repo: DashboardRepository) {}
 
   execute(
     tenantId: string,
     filters: DashboardFilters,
-  ): Promise<TenantOverviewOutput> {
-    return this.repo.getOverview(tenantId, filters);
+  ): Promise<DispositionBreakdownOutput> {
+    return this.repo.getDispositionBreakdown(tenantId, filters);
   }
 }
