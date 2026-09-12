@@ -1,13 +1,13 @@
 import type { AdminDashboardRepository } from "../interfaces/admin-dashboard-repository.interface";
 import type {
-  PlatformOverviewOutput,
-  AdminDashboardFilters,
+  RevenueTrendsOutput,
+  AdminTimeSeriesFilters,
 } from "../dto/dashboard.dto";
 
-export class GetAdminOverviewUseCase {
+export class GetRevenueTrendsUseCase {
   constructor(private readonly repo: AdminDashboardRepository) {}
 
-  execute(filters: AdminDashboardFilters): Promise<PlatformOverviewOutput> {
-    return this.repo.getOverview(filters);
+  execute(filters: AdminTimeSeriesFilters): Promise<RevenueTrendsOutput> {
+    return this.repo.getRevenueTrends(filters);
   }
 }

@@ -14,11 +14,12 @@ import { GetRecentActivityUseCase } from "./application/use-cases/get-recent-act
 import { ExportCampaignPerformanceUseCase } from "./application/use-cases/export-campaign-performance.use-case";
 import { ExportCallTrendsUseCase } from "./application/use-cases/export-call-trends.use-case";
 
-// Admin use cases (unchanged)
+// Admin use cases
 import { GetAdminOverviewUseCase } from "./application/use-cases/get-admin-overview.use-case";
-import { GetAdminTenantHealthUseCase } from "./application/use-cases/get-admin-tenant-health.use-case";
-import { GetAdminActivityUseCase } from "./application/use-cases/get-admin-activity.use-case";
-
+import { GetRevenueTrendsUseCase } from "./application/use-cases/get-revenue-trends.use-case";
+import { GetPlatformCallTrendsUseCase } from "./application/use-cases/get-platform-call-trends.use-case";
+import { GetTenantDistributionUseCase } from "./application/use-cases/get-tenant-distribution.use-case";
+import { GetTopTenantsUseCase } from "./application/use-cases/get-top-tenants.use-case";
 import { TenantDashboardController } from "./presentation/tenant-dashboard.controller";
 import { AdminDashboardController } from "./presentation/admin-dashboard.controller";
 
@@ -47,8 +48,10 @@ export function buildDashboardModule(): DashboardModule {
     ),
     adminController: new AdminDashboardController(
       new GetAdminOverviewUseCase(adminRepo),
-      new GetAdminTenantHealthUseCase(adminRepo),
-      new GetAdminActivityUseCase(adminRepo),
+      new GetRevenueTrendsUseCase(adminRepo),
+      new GetPlatformCallTrendsUseCase(adminRepo),
+      new GetTenantDistributionUseCase(adminRepo),
+      new GetTopTenantsUseCase(adminRepo),
     ),
   };
 }

@@ -10,7 +10,7 @@ export interface DateRange {
   to: Date;
 }
 
-const MAX_RANGE_MS = 365 * 24 * 60 * 60 * 1000; // 12 months
+const MAX_RANGE_MS = 365 * 24 * 60 * 60 * 1000;
 const DEFAULT_RANGE_DAYS = 30;
 
 export const PG_GRANULARITY: Record<Granularity, string> = {
@@ -39,8 +39,9 @@ export function parseDateRange(dateFrom?: string, dateTo?: string): DateRange {
     throw new MaxDateRangeExceededError();
   }
 
-  from.setHours(0, 0, 0, 0);
-  to.setHours(23, 59, 59, 999);
+  // Use UTC to align with PostgreSQL's timestamptz storage
+  from.setUTCHours(0, 0, 0, 0);
+  to.setUTCHours(23, 59, 59, 999);
 
   return { from, to };
 }
@@ -50,6 +51,15 @@ export function daysBetween(from: Date, to: Date): number {
   return Math.max(1, Math.ceil(ms / (24 * 60 * 60 * 1000)));
 }
 
+/**
+ * Normalize any Date/string to "YYYY-MM-DD" UTC string.
+ * This is the single source of truth for bucket key format.
+ */
+export function toDateString(value: Date | string): string {
+  const d = value instanceof Date ? value : new Date(value);
+  return d.toISOString().split("T")[0];
+}
+
 export function generateDateBuckets(
   from: Date,
   to: Date,
@@ -57,20 +67,20 @@ export function generateDateBuckets(
 ): string[] {
   const buckets: string[] = [];
   const current = new Date(from);
-  current.setHours(0, 0, 0, 0);
+  current.setUTCHours(0, 0, 0, 0);
 
   while (current <= to) {
-    buckets.push(current.toISOString().split("T")[0]);
+    buckets.push(toDateString(current));
 
     switch (granularity) {
       case "daily":
-        current.setDate(current.getDate() + 1);
+        current.setUTCDate(current.getUTCDate() + 1);
         break;
       case "weekly":
-        current.setDate(current.getDate() + 7);
+        current.setUTCDate(current.getUTCDate() + 7);
         break;
       case "monthly":
-        current.setMonth(current.getMonth() + 1);
+        current.setUTCMonth(current.getUTCMonth() + 1);
         break;
     }
   }

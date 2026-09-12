@@ -13,9 +13,18 @@ export function buildAdminDashboardRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
+  // ── Platform KPIs ──
   router.get("/overview", controller.overview);
-  router.get("/tenants-health", controller.tenantHealth);
-  router.get("/activity", controller.activity);
+
+  // ── Time-Series Graphs ──
+  router.get("/revenue-trends", controller.revenueTrends);
+  router.get("/call-volume-trends", controller.callVolumeTrends);
+
+  // ── Distributions ──
+  router.get("/tenant-distribution", controller.tenantDistribution);
+
+  // ── Leaderboards ──
+  router.get("/top-tenants", controller.topTenants);
 
   return router;
 }
