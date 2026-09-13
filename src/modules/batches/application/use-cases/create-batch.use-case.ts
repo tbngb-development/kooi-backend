@@ -41,8 +41,7 @@ export class CreateBatchUseCase {
       throw new CampaignFailedError("upload to");
     if (!campaign.assistant) throw new CampaignNotFoundError();
 
-    // 2. Parse file — throws MissingRequiredHeaderError (400) if
-    //    contact_number header is absent.
+    // 2. Parse file — validates contact_number header and extracts rows
     const { rows } = parseLeadBuffer(input.fileBuffer, input.fileName);
     if (rows.length === 0) throw new EmptyFileError();
 
@@ -52,7 +51,7 @@ export class CreateBatchUseCase {
       .map((r) => ({ ...r, phone: normalizePhoneNumber(r.phone) }));
 
     if (validRows.length === 0) throw new NoValidIndianPhonesError();
-    
+
     // 4. In-file dedup
     const seenInFile = new Set<string>();
     const uniqueRows: LeadRow[] = [];
@@ -77,7 +76,8 @@ export class CreateBatchUseCase {
     if (newLeads.length === 0) throw new AllLeadsDuplicateError();
 
     // 6. Resolve retry config
-    const retryConfig = input.retryConfig ??
+    const retryConfig =
+      input.retryConfig ??
       (campaign.defaultRetryConfig as Record<string, unknown>) ?? {
         enabled: false,
       };
@@ -104,7 +104,7 @@ export class CreateBatchUseCase {
       })),
     );
 
-    // 8. Upload original file to storage
+    // 8. Upload original file to Cloudinary for reference
     let originalFileUrl: string | undefined;
     try {
       originalFileUrl = await this.storage.uploadBuffer(
@@ -116,25 +116,13 @@ export class CreateBatchUseCase {
       console.error("[CreateBatch] Original file upload failed:", err);
     }
 
-    // 9. Transform to Bolna CSV
+    // 9. Transform to Bolna CSV in memory (no secondary Cloudinary upload)
     const campaignVariables =
       (campaign.variables as Record<string, string>) ?? {};
     const { transformedBuffer, validCount, filteredOutCount } =
       transformToBolnaCSV(newLeads, campaignVariables);
 
-    // 10. Upload transformed CSV
-    let transformedCsvUrl: string | undefined;
-    try {
-      transformedCsvUrl = await this.storage.uploadBuffer(
-        transformedBuffer,
-        `bolna-${input.fileName.replace(/\.[^/.]+$/, ".csv")}`,
-        `kooi/${input.tenantId}/campaigns/${input.campaignId}/batches/${batch.id}`,
-      );
-    } catch (err) {
-      console.error("[CreateBatch] Transformed CSV upload failed:", err);
-    }
-
-    // 11. Create Bolna batch
+    // 10. Send transformed buffer directly to Bolna API
     let bolnaBatchId: string | undefined;
     const webhookUrl = env.webhook.baseUrl
       ? `${env.webhook.baseUrl}/api/webhooks/bolna-batch`
@@ -156,11 +144,10 @@ export class CreateBatchUseCase {
       );
     }
 
-    // 12. Final update
+    // 11. Final update (persists Bolna ID + original file URL)
     const updatedBatch = await this.batchRepo.update(batch.id, {
       bolnaBatchId,
       originalFileUrl,
-      transformedCsvUrl,
     });
 
     await this.campaignRepo.incrementTotalLeads(
