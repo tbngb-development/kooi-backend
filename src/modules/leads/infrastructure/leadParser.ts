@@ -2,6 +2,7 @@ import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
+import { MissingRequiredHeaderError } from "../domain/errors/lead.errors";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,27 @@ export interface LeadRow {
 }
 
 export type SupportedFileType = "csv" | "xlsx" | "xls";
+
+export interface HeaderValidationResult {
+  hasContactNumber: boolean;
+  hasCustomerName: boolean;
+  rawHeaders: string[];
+}
+
+export { MissingRequiredHeaderError };
+
+// ── Header Validator ─────────────────────────────────────────────────────────
+
+export function validateLeadHeaders(
+  rawHeaders: string[],
+): HeaderValidationResult {
+  const normalized = rawHeaders.map((h) => h.trim().toLowerCase());
+  return {
+    hasContactNumber: normalized.includes("contact_number"),
+    hasCustomerName: normalized.includes("customer_name"),
+    rawHeaders,
+  };
+}
 
 // ── Phone Sanitizer ──────────────────────────────────────────────────────────
 
@@ -45,60 +67,64 @@ const normalizeRow = (row: Record<string, unknown>): LeadRow => {
     return s === "" ? undefined : s;
   };
 
-  const rawName =
-    str(row["name"]) ||
-    str(row["Name"]) ||
-    str(row["full_name"]) ||
-    str(row["Full Name"]) ||
-    str(row["FullName"]);
-
   return {
-    name: rawName ?? null,
-    phone: sanitizePhone(
-      str(row["phone"]) ||
-        str(row["Phone"]) ||
-        str(row["phone_number"]) ||
-        str(row["Phone Number"]) ||
-        str(row["mobile"]) ||
-        str(row["Mobile"]) ||
-        str(row["contact"]) ||
-        str(row["Contact"]) ||
-        str(row["contact_number"]) ||
-        str(row["Contact Number"]) ||
-        "",
-    ),
-    email:
-      str(row["email"]) ||
-      str(row["Email"]) ||
-      str(row["email_address"]) ||
-      str(row["Email Address"]) ||
-      undefined,
-    company:
-      str(row["company"]) ||
-      str(row["Company"]) ||
-      str(row["organization"]) ||
-      str(row["Organization"]) ||
-      undefined,
+    name: str(row["customer_name"]) ?? null,
+    phone: sanitizePhone(str(row["contact_number"]) ?? ""),
+    email: str(row["email"]),
+    company: str(row["company"]),
     ...Object.fromEntries(
       Object.entries(row).map(([k, v]) => [k, str(v) ?? null]),
     ),
   };
 };
 
-// ── File-Based Parsing (existing — kept for backward compatibility) ──────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const parseCSVFile = (filePath: string): LeadRow[] => {
+const normalizeRecordKeys = <T extends Record<string, unknown>>(
+  record: T,
+): Record<string, unknown> => {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    normalized[key.trim().toLowerCase()] = value;
+  }
+  return normalized;
+};
+
+const assertContactNumberHeader = (
+  headerInfo: HeaderValidationResult,
+): void => {
+  if (headerInfo.rawHeaders.length > 0 && !headerInfo.hasContactNumber) {
+    throw new MissingRequiredHeaderError(headerInfo.rawHeaders);
+  }
+};
+
+// ── File-Based Parsing (backward compatibility) ─────────────────────────────
+
+const parseCSVFile = (
+  filePath: string,
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
   const content = fs.readFileSync(filePath);
+  let rawHeaders: string[] = [];
+
   const records = parse(content, {
-    columns: true,
+    columns: (headers: string[]) => {
+      rawHeaders = headers.map((h) => h.trim());
+      return headers.map((h) => h.trim().toLowerCase());
+    },
     skip_empty_lines: true,
     trim: true,
     bom: true,
   }) as Record<string, string>[];
-  return records.map(normalizeRow);
+
+  const headerInfo = validateLeadHeaders(rawHeaders);
+  assertContactNumberHeader(headerInfo);
+
+  return { rows: records.map(normalizeRow), headerInfo };
 };
 
-const parseExcelFile = (filePath: string): LeadRow[] => {
+const parseExcelFile = (
+  filePath: string,
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
   const workbook = XLSX.readFile(filePath, {
     type: "file",
     cellText: true,
@@ -109,18 +135,24 @@ const parseExcelFile = (filePath: string): LeadRow[] => {
   if (!sheetName) throw new Error("Excel file has no sheets");
   const worksheet = workbook.Sheets[sheetName];
   if (!worksheet) throw new Error(`Sheet "${sheetName}" could not be read`);
-  const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
-    defval: "",
-    raw: false,
-    blankrows: false,
-  });
-  if (records.length === 0) {
-    throw new Error("Excel file is empty or has no data rows");
-  }
-  return records.map(normalizeRow);
+
+  const rawRecords = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+    worksheet,
+    { defval: "", raw: false, blankrows: false },
+  );
+
+  const rawHeaders = rawRecords.length > 0 ? Object.keys(rawRecords[0]) : [];
+  const headerInfo = validateLeadHeaders(rawHeaders);
+  assertContactNumberHeader(headerInfo);
+
+  const rows = rawRecords.map(normalizeRecordKeys).map(normalizeRow);
+
+  return { rows, headerInfo };
 };
 
-export const parseLeadFile = (filePath: string): LeadRow[] => {
+export const parseLeadFile = (
+  filePath: string,
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
   const ext = path.extname(filePath).toLowerCase();
   switch (ext) {
     case ".csv":
@@ -137,50 +169,87 @@ export const parseLeadFile = (filePath: string): LeadRow[] => {
 
 export const parseCSV = parseLeadFile;
 
-// ── Buffer-Based Parsing (NEW — for memory storage) ──────────────────────────
+// ── Buffer-Based Parsing (primary — for memory storage) ─────────────────────
 
-const parseCSVBuffer = (buffer: Buffer): LeadRow[] => {
+const parseCSVBuffer = (
+  buffer: Buffer,
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
+  let rawHeaders: string[] = [];
+
   const records = parse(buffer, {
-    columns: true,
+    columns: (headers: string[]) => {
+      rawHeaders = headers.map((h) => h.trim());
+      return headers.map((h) => h.trim().toLowerCase());
+    },
     skip_empty_lines: true,
     trim: true,
     bom: true,
   }) as Record<string, string>[];
-  return records.map(normalizeRow);
+
+  const headerInfo = validateLeadHeaders(rawHeaders);
+  assertContactNumberHeader(headerInfo);
+
+  return { rows: records.map(normalizeRow), headerInfo };
 };
 
-const parseExcelBuffer = (buffer: Buffer, extension: string): LeadRow[] => {
+const parseExcelBuffer = (
+  buffer: Buffer,
+  _extension: string,
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
   const workbook = XLSX.read(buffer, {
     type: "buffer",
     cellText: true,
     cellDates: false,
     raw: false,
   });
+
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error("Excel file has no sheets");
+
   const worksheet = workbook.Sheets[sheetName];
   if (!worksheet) throw new Error(`Sheet "${sheetName}" could not be read`);
-  const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+
+  // 1. Extract raw headers directly from the first row of the sheet (header: 1)
+  const sheetRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+    header: 1,
     defval: "",
-    raw: false,
     blankrows: false,
   });
-  if (records.length === 0) {
-    throw new Error("Excel file is empty or has no data rows");
+
+  if (sheetRows.length === 0) {
+    return {
+      rows: [],
+      headerInfo: {
+        hasContactNumber: false,
+        hasCustomerName: false,
+        rawHeaders: [],
+      },
+    };
   }
-  return records.map(normalizeRow);
+
+  // Row 0 is the header array
+  const rawHeaders = (sheetRows[0] || [])
+    .map((h) => String(h ?? "").trim())
+    .filter(Boolean);
+
+  const headerInfo = validateLeadHeaders(rawHeaders);
+  assertContactNumberHeader(headerInfo);
+
+  // 2. Extract records as key-value objects
+  const rawRecords = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+    worksheet,
+    { defval: "", raw: false, blankrows: false },
+  );
+
+  const rows = rawRecords.map(normalizeRecordKeys).map(normalizeRow);
+
+  return { rows, headerInfo };
 };
 
-/**
- * Parses a lead file from a Buffer (memory storage).
- *
- * @param buffer   - File content as Buffer
- * @param fileName - Original file name (used to detect format via extension)
- */
 export const parseLeadBuffer = (
   buffer: Buffer,
   fileName: string,
-): LeadRow[] => {
+): { rows: LeadRow[]; headerInfo: HeaderValidationResult } => {
   const ext = path.extname(fileName).toLowerCase();
   switch (ext) {
     case ".csv":
@@ -195,9 +264,6 @@ export const parseLeadBuffer = (
   }
 };
 
-/**
- * Detects the file type from a filename extension.
- */
 export function detectFileType(fileName: string): SupportedFileType | null {
   const ext = path.extname(fileName).toLowerCase();
   switch (ext) {

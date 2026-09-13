@@ -29,7 +29,12 @@ export class ParseLeadsUseCase {
     if (campaign.status === "FAILED")
       throw new CampaignFailedError("parse leads for");
 
-    const rows = parseLeadBuffer(input.fileBuffer, input.fileName);
+    // parseLeadBuffer now validates headers and throws
+    // MissingRequiredHeaderError (400) if contact_number is absent.
+    const { rows, headerInfo } = parseLeadBuffer(
+      input.fileBuffer,
+      input.fileName,
+    );
 
     if (rows.length === 0) {
       return {
@@ -43,6 +48,10 @@ export class ParseLeadsUseCase {
         dbDuplicates: 0,
         dbDuplicateNumbers: [],
         readyToImport: 0,
+        detectedHeaders: {
+          contact_number: headerInfo.hasContactNumber,
+          customer_name: headerInfo.hasCustomerName,
+        },
       };
     }
 
@@ -104,6 +113,10 @@ export class ParseLeadsUseCase {
       dbDuplicates: dbDuplicateNumbers.length,
       dbDuplicateNumbers,
       readyToImport: newLeads.length,
+      detectedHeaders: {
+        contact_number: headerInfo.hasContactNumber,
+        customer_name: headerInfo.hasCustomerName,
+      },
     };
   }
 }

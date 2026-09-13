@@ -32,7 +32,15 @@ export function transformToBolnaCSV(
   for (const lead of leads) {
     for (const key of Object.keys(lead)) {
       if (
-        !["phone", "name", "email", "company", "welcome_message"].includes(key)
+        ![
+          "contact_number",
+          "customer_name",
+          "phone",
+          "name",
+          "email",
+          "company",
+          "welcome_message",
+        ].includes(key)
       ) {
         headers.add(key);
       }

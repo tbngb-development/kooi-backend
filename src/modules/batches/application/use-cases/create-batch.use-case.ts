@@ -41,8 +41,9 @@ export class CreateBatchUseCase {
       throw new CampaignFailedError("upload to");
     if (!campaign.assistant) throw new CampaignNotFoundError();
 
-    // 2. Parse file
-    const rows = parseLeadBuffer(input.fileBuffer, input.fileName);
+    // 2. Parse file — throws MissingRequiredHeaderError (400) if
+    //    contact_number header is absent.
+    const { rows } = parseLeadBuffer(input.fileBuffer, input.fileName);
     if (rows.length === 0) throw new EmptyFileError();
 
     // 3. Filter + normalize Indian phones
@@ -51,7 +52,7 @@ export class CreateBatchUseCase {
       .map((r) => ({ ...r, phone: normalizePhoneNumber(r.phone) }));
 
     if (validRows.length === 0) throw new NoValidIndianPhonesError();
-
+    
     // 4. In-file dedup
     const seenInFile = new Set<string>();
     const uniqueRows: LeadRow[] = [];
