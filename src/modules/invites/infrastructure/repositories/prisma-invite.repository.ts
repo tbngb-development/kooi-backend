@@ -16,6 +16,9 @@ export class PrismaInviteRepository implements InviteRepository {
         planId: data.planId,
         invitedBy: data.invitedBy,
         expiresAt: data.expiresAt,
+        skipPayment: data.skipPayment, // ← NEW
+        discountPercent: data.discountPercent, // ← NEW
+        creditIncludedBalance: data.creditIncludedBalance, // ← NEW
       },
       include: { plan: true },
     });
@@ -44,6 +47,7 @@ export class PrismaInviteRepository implements InviteRepository {
       },
     });
   }
+
   async list(status?: InviteStatus): Promise<InviteWithPlan[]> {
     return prisma.tenantInvite.findMany({
       where: status ? { status } : undefined,
