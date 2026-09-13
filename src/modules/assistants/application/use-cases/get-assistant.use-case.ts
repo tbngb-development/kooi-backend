@@ -27,7 +27,8 @@ export class GetAssistantUseCase {
     );
 
     const systemPrompt = getAgentSystemPrompt(bolnaAgent);
-    const firstMessage = getAgentFirstMessage(bolnaAgent);
+    // const firstMessage = getAgentFirstMessage(bolnaAgent);
+    const firstMessage = "";
 
     const variables = extractPromptInputFields(systemPrompt, firstMessage);
 
