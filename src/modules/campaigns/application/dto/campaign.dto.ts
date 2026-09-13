@@ -25,4 +25,8 @@ export interface ParseLeadsOutput {
   dbDuplicates: number;
   dbDuplicateNumbers: string[];
   readyToImport: number;
+  detectedHeaders: {
+    contact_number: boolean;
+    customer_name: boolean;
+  };
 }
