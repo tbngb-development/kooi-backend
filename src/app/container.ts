@@ -62,6 +62,7 @@ import {
   buildInviteModule,
   type InviteModule,
 } from "../modules/invites/container";
+import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
 
 export interface AppContainer {
   auth: AuthModule;
@@ -98,6 +99,9 @@ export function buildContainer(): AppContainer {
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
 
+  // shared repository
+  const rechargeRepository = new PrismaRechargeRepository();
+
   const auth = buildAuthModule({
     authRepository,
     tokenService,
@@ -133,6 +137,8 @@ export function buildContainer(): AppContainer {
     planRepository: plans.repository,
     authRepository,
     walletRepository: wallet.repository,
+    rechargeRepository,
+    autoAssignKeyUseCase: bolnaApiKeys.useCases.autoAssignKey,
     passwordService,
     tokenService,
     emailService: email,

@@ -1,8 +1,4 @@
-import type {
-  InviteStatus,
-  TenantInvite,
-  Plan,
-} from "@prisma/client";
+import type { InviteStatus, TenantInvite, Plan } from "@prisma/client";
 
 export type InviteWithPlan = TenantInvite & { plan: Plan };
 
@@ -13,6 +9,9 @@ export interface CreateInviteData {
   planId: string;
   invitedBy: string;
   expiresAt: Date;
+  skipPayment: boolean; // ← NEW
+  discountPercent: number; // ← NEW
+  creditIncludedBalance: boolean; // ← NEW
 }
 
 export interface InviteRepository {

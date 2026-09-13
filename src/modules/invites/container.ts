@@ -3,24 +3,28 @@ import type { InviteRepository } from "./application/interfaces/invite-repositor
 import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
 import type { AuthRepository } from "../auth/application/interfaces/auth-repository.interface";
 import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
+import type { RechargeRepository } from "../payments/application/interfaces/recharge-repository.interface";
 import type { PasswordService } from "../auth/application/interfaces/password-service.interface";
 import type { TokenService } from "../auth/application/interfaces/token-service.interface";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { AutoAssignKeyUseCase } from "../bolna-api-keys/application/use-cases/auto-assign-key.use-case";
 
 import { CreateOwnerInviteUseCase } from "./application/use-cases/create-owner-invite.use-case";
 import { GetOwnerInviteUseCase } from "./application/use-cases/get-owner-invite.use-case";
 import { AcceptOwnerInviteUseCase } from "./application/use-cases/accept-owner-invite.use-case";
-
-import { AdminInviteController } from "./presentation/admin-invite.controller";
-import { PublicInviteController } from "./presentation/public-invite.controller";
 import { ResendOwnerInviteUseCase } from "./application/use-cases/resend-owner-invite.use-case";
 import { RevokeOwnerInviteUseCase } from "./application/use-cases/revoke-owner-invite.use-case";
 import { ListOwnerInvitesUseCase } from "./application/use-cases/list-owner-invites.use-case";
+
+import { AdminInviteController } from "./presentation/admin-invite.controller";
+import { PublicInviteController } from "./presentation/public-invite.controller";
 
 export interface InviteModuleDeps {
   planRepository: PlanRepository;
   authRepository: AuthRepository;
   walletRepository: WalletRepository;
+  rechargeRepository: RechargeRepository; // ← NEW
+  autoAssignKeyUseCase: AutoAssignKeyUseCase; // ← NEW
   passwordService: PasswordService;
   tokenService: TokenService;
   emailService: IEmailService;
@@ -53,14 +57,17 @@ export function buildInviteModule(deps: InviteModuleDeps): InviteModule {
     deps.tokenService,
     deps.planRepository,
     deps.walletRepository,
+    deps.rechargeRepository, // ← NEW
+    deps.autoAssignKeyUseCase, // ← NEW
   );
 
   const resendInvite = new ResendOwnerInviteUseCase(
     repository,
+    deps.planRepository, // ← NEW (was only emailService before)
     deps.emailService,
   );
-  const revokeInvite = new RevokeOwnerInviteUseCase(repository);
 
+  const revokeInvite = new RevokeOwnerInviteUseCase(repository);
   const listInvites = new ListOwnerInvitesUseCase(repository);
 
   return {

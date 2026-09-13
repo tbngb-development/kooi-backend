@@ -1,11 +1,7 @@
 import type { InviteRepository } from "../interfaces/invite-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
+import { InviteNotFoundError } from "../../domain/errors/invite.errors";
 import type { PublicInviteView } from "../dto/invite.dto";
-import {
-  InviteInvalidError,
-  InviteNotFoundError,
-} from "../../domain/errors/invite.errors";
-import { PlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 
 export class GetOwnerInviteUseCase {
   constructor(
@@ -17,51 +13,42 @@ export class GetOwnerInviteUseCase {
     const invite = await this.inviteRepo.findByToken(token);
     if (!invite) throw new InviteNotFoundError();
 
-    if (invite.status === "REVOKED" || invite.status === "ACCEPTED") {
-      throw new InviteInvalidError();
-    }
-    if (invite.expiresAt < new Date()) {
-      throw new InviteInvalidError();
-    }
+    // Resolve the published version for accurate pricing
+    const latestVersion = await this.planRepo.findLatestPublishedVersion(
+      invite.planId,
+    );
 
-    let planName = "";
-    let planSlug = "";
-    let onboardingFee = 0;
+    const originalFee = latestVersion?.onboardingFee ?? 0;
+    const perMinuteRate = latestVersion?.perMinuteRate ?? 0;
+    const includedBalance = latestVersion?.includedBalance ?? 0;
 
-    if (this.planRepo) {
-      const plan = await this.planRepo.findById(invite.planId);
-      if (!plan) throw new PlanNotFoundError(invite.planId);
-
-      const latestVersion = await this.planRepo.findLatestPublishedVersion(
-        invite.planId,
-      );
-
-      planName = plan.name;
-      planSlug = plan.slug;
-      onboardingFee = latestVersion?.onboardingFee ?? 0;
-    } else if ((invite as any).plan) {
-      const plan = (invite as any).plan;
-      planName = plan.name;
-      planSlug = plan.slug;
-
-      const published =
-        plan.versions?.find((v: any) => v.status === "PUBLISHED") ??
-        plan.versions?.[0];
-
-      onboardingFee = published?.onboardingFee ?? 0;
-    }
+    // Compute discount
+    const discountPercent = invite.skipPayment ? 0 : invite.discountPercent;
+    const discountAmount = invite.skipPayment
+      ? originalFee
+      : Math.round(originalFee * (discountPercent / 100));
+    const payableAmount = originalFee - discountAmount;
+    const paymentRequired = !invite.skipPayment && payableAmount > 0;
 
     return {
       email: invite.email,
       tenantName: invite.tenantName,
+      status: invite.status,
+      expiresAt: invite.expiresAt.toISOString(),
       plan: {
         id: invite.planId,
-        name: planName,
-        slug: planSlug,
-        onboardingFee,
+        name: invite.plan.name,
+        slug: invite.plan.slug,
+        onboardingFee: originalFee,
+        perMinuteRate,
+        includedBalance,
       },
-      expiresAt: invite.expiresAt.toISOString(),
-      status: invite.status,
+      skipPayment: invite.skipPayment,
+      discountPercent,
+      discountAmount,
+      payableAmount,
+      creditIncludedBalance: invite.creditIncludedBalance,
+      paymentRequired,
     };
   }
 }
