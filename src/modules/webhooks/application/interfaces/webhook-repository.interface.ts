@@ -86,6 +86,7 @@ export interface WebhookRepository {
       duration?: number | null;
       recording?: string | null;
       cost?: number | null;
+      extracted_data?: Record<string, any> | null;
       endedAt: Date;
     },
   ): Promise<void>;

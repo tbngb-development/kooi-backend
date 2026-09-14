@@ -333,6 +333,8 @@ model Call {
   transcriptMessages  Json?
   summary             String?
   callHistory         Json?
+  extractionResult    Json?
+
   startedAt           DateTime?
   endedAt             DateTime?
   createdAt           DateTime   @default(now())
@@ -382,6 +384,9 @@ model CallAnalysis {
   followupSchedule        String?
   doNotCall               ExtractionFlag?
   languageSupportRequired ExtractionFlag?
+
+  dynamicExtractions Json?   // NEW — dynamic extraction results based on PlatformAgent's extraction config
+  extractionResult Json?     // new row extraction
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

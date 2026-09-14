@@ -38,6 +38,7 @@ export function buildAdminPlatformAgentRoutes(
   router.get("/:id", controller.get);
   router.patch("/:id", validate(updatePlatformAgentSchema), controller.update);
   router.post("/:id/sync", controller.sync);
+  router.post("/:id/sync-blueprint", controller.syncBlueprint);
   router.delete("/:id", controller.remove);
 
   return router;

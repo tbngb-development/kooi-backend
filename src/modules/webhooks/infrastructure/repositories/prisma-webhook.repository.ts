@@ -22,6 +22,7 @@ import type {
   CallHistoryItem,
   ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
+import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 export class PrismaWebhookRepository implements WebhookRepository {
   async findCallByBolnaCallId(
@@ -133,6 +134,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
       duration?: number | null;
       recording?: string | null;
       cost?: number | null;
+      extracted_data?: Record<string, any> | null;
       endedAt: Date;
     },
   ): Promise<void> {
@@ -146,6 +148,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
           data.transcriptMessages as unknown as Prisma.InputJsonValue,
         duration: data.duration,
         recording: data.recording,
+        extractionResult: data.extracted_data as InputJsonValue,
         cost: data.cost,
         endedAt: data.endedAt,
       },

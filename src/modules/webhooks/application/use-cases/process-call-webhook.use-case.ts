@@ -20,10 +20,12 @@ import type {
   ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
+import type { GenerateDynamicExtractionsUseCase } from "../../../calls/application/use-cases/generate-dynamic-extractions.use-case";
 
 export class ProcessCallWebhookUseCase {
   constructor(
     private readonly webhookRepo: WebhookRepository,
+    private readonly generateDynamicExtractions: GenerateDynamicExtractionsUseCase,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
   ) {}
 
@@ -210,6 +212,16 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
+    try {
+      await this.generateDynamicExtractions.execute(
+        call.id,
+        payload.extracted_data as unknown as Record<string, any>,
+      );
+    } catch (err) {
+      // Best-effort — don't fail the webhook if extraction parsing fails
+      console.error("[Webhook] Dynamic extraction generation failed:", err);
+    }
+
     const parsed = this.parseExtractionData(payload.extracted_data);
     const summary = parsed?.callSummary ?? null;
 
@@ -223,6 +235,7 @@ export class ProcessCallWebhookUseCase {
       recording:
         payload.telephony_data?.recording_url ?? payload.recording_url ?? null,
       cost: payload.total_cost ?? null, // Bolna cost in USD cents
+      extracted_data: payload.extracted_data,
       endedAt: new Date(),
     });
 
