@@ -102,7 +102,10 @@ model Assistant {
   config    Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  platformAgentId String?
 
+  platformAgent   PlatformAgent? @relation(fields: [platformAgentId], references: [id], onDelete: SetNull)
+  
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   campaigns Campaign[]
 }
@@ -826,4 +829,135 @@ enum InviteStatus {
   ACCEPTED
   EXPIRED
   REVOKED
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRY ENUM (Phase 1 — used by PlatformAgent; IndustryPack comes in Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Industry {
+  GENERIC
+  REAL_ESTATE
+  BFSI
+  HEALTHCARE
+  RECRUITMENT
+  EDUCATION
+  ECOMMERCE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM AGENT (pre-built templates managed by KOOI admins)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PlatformAgent {
+  id            String   @id @default(uuid())
+  bolnaId       String   @unique
+  slug          String   @unique
+  name          String
+  category      String?
+  description   String?
+
+  defaultConfig Json
+  systemPrompt  String?
+
+  isActive      Boolean  @default(true)
+  isFeatured    Boolean  @default(false)
+  sortOrder     Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  industryPackId String?
+  industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
+
+  assistants    Assistant[]
+  extractionCategories ExtractionCategory[]
+
+  @@index([industryPackId])
+  @@index([category])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION CATEGORY (synced from Bolna, platform-scoped catalog)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractionCategory {
+  id          String   @id @default(uuid())
+  bolnaId     String?  @unique
+  slug        String   @unique
+  name        String
+  model       String   @default("gpt-4.1-mini")
+  industry    Industry @default(GENERIC)
+  description String?
+  isActive    Boolean  @default(true)
+
+  platformAgentId String?
+  platformAgent   PlatformAgent? @relation(fields: [platformAgentId], references: [id], onDelete: SetNull)
+
+  dispositions ExtractionDisposition[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([industry])
+  @@index([platformAgentId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION DISPOSITION (synced from Bolna, platform-scoped catalog)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractionDisposition {
+  id          String   @id @default(uuid())
+  bolnaId     String?  @unique
+  slug        String   @unique
+  name        String
+  question    String
+  systemPrompt String?
+  model       String   @default("gpt-4.1-mini")
+
+  isSubjective         Boolean @default(false)
+  isObjective          Boolean @default(false)
+  subjectiveType       String  @default("text")
+  subjectiveTypeConfig Json?
+  objectiveOptions     Json?
+
+  industry    Industry @default(GENERIC)
+  description String?
+  isActive    Boolean  @default(true)
+
+  categoryId String
+  category   ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([industry])
+  @@index([categoryId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRY PACK (admin-curated grouping per industry)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model IndustryPack {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  industry    Industry @unique
+  description String?
+  icon        String?
+
+  // Compliance rules (stored now, enforced in future phases)
+  allowedCallingHours Json?   // { start: "09:00", end: "21:00", tz: "Asia/Kolkata" }
+  requiresConsent     Boolean @default(false)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  platformAgents PlatformAgent[]
+
+  @@index([industry])
 }

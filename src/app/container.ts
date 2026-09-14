@@ -64,6 +64,19 @@ import {
 } from "../modules/invites/container";
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
 
+import {
+  buildPlatformAgentModule,
+  type PlatformAgentModule,
+} from "../modules/platform-agents/container";
+import {
+  buildExtractionModule,
+  type ExtractionModule,
+} from "../modules/extractions/container";
+import {
+  buildIndustryPackModule,
+  type IndustryPackModule,
+} from "../modules/industry-packs/container";
+
 export interface AppContainer {
   auth: AuthModule;
   assistants: AssistantModule;
@@ -82,6 +95,9 @@ export interface AppContainer {
   wallet: WalletModule;
   payments: PaymentModule;
   invites: InviteModule;
+  platformAgents: PlatformAgentModule;
+  extractions: ExtractionModule;
+  industryPacks: IndustryPackModule;
 
   authenticate: AuthenticateMiddleware;
   authorize: AuthorizeMiddleware;
@@ -162,6 +178,9 @@ export function buildContainer(): AppContainer {
     webhooks: buildWebhookModule({
       debitWalletForCall: wallet.useCases.debitWalletForCall,
     }),
+    platformAgents: buildPlatformAgentModule(),
+    extractions: buildExtractionModule(),
+    industryPacks: buildIndustryPackModule(),
 
     plans,
     bolnaApiKeys,
