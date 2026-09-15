@@ -29,4 +29,17 @@ export interface ParseLeadsOutput {
     contact_number: boolean;
     customer_name: boolean;
   };
+  // ── Financial Estimations (Paisa) ──────────────────────────────────
+  estimation: {
+    estimatedCostMinPaisa: number;
+    estimatedCostMaxPaisa: number;
+    currentBalancePaisa: number;
+    perMinuteRatePaisa: number;
+    assumptions: {
+      historicalAnswerRate: number; // e.g. 0.40
+      retryCount: number; // e.g. 1
+      durationMinSec: number; // e.g. 45
+      durationMaxSec: number; // e.g. 90
+    };
+  };
 }

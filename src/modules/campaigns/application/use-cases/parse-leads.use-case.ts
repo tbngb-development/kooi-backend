@@ -1,5 +1,7 @@
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { BatchRepository } from "../../../batches/application/interfaces/batch-repository.interface";
+import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
+import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 import type { ParseLeadsInput, ParseLeadsOutput } from "../dto/campaign.dto";
 import {
   CampaignNotFoundError,
@@ -17,6 +19,8 @@ export class ParseLeadsUseCase {
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly batchRepo: BatchRepository,
+    private readonly planRepo: PlanRepository,
+    private readonly walletRepo: WalletRepository,
   ) {}
 
   async execute(input: ParseLeadsInput): Promise<ParseLeadsOutput> {
@@ -26,17 +30,20 @@ export class ParseLeadsUseCase {
     );
 
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED")
+    if (campaign.status === "FAILED") {
       throw new CampaignFailedError("parse leads for");
+    }
 
-    // parseLeadBuffer now validates headers and throws
-    // MissingRequiredHeaderError (400) if contact_number is absent.
+    // Parse files safely
     const { rows, headerInfo } = parseLeadBuffer(
       input.fileBuffer,
       input.fileName,
     );
 
     if (rows.length === 0) {
+      const zeroEstimation = await this.calculateEmptyEstimation(
+        input.tenantId,
+      );
       return {
         total: 0,
         valid: 0,
@@ -52,6 +59,7 @@ export class ParseLeadsUseCase {
           contact_number: headerInfo.hasContactNumber,
           customer_name: headerInfo.hasCustomerName,
         },
+        estimation: zeroEstimation,
       };
     }
 
@@ -66,7 +74,7 @@ export class ParseLeadsUseCase {
       .filter((r) => !isIndianPhone(r.phone))
       .map((r) => r.phone);
 
-    // In-file dedup
+    // In-file deduplication
     const seenInFile = new Set<string>();
     const inFileDuplicateNumbers: string[] = [];
     const uniqueRows: LeadRow[] = [];
@@ -80,7 +88,7 @@ export class ParseLeadsUseCase {
       }
     }
 
-    // Cross-batch dedup
+    // Cross-batch deduplication
     const dbDuplicateNumbers: string[] = [];
     let newLeads: LeadRow[] = [];
 
@@ -102,6 +110,12 @@ export class ParseLeadsUseCase {
       }
     }
 
+    // ── Generate Financial Cost Estimations ──────────────────────────
+    const estimation = await this.estimateCampaignCost(
+      input.tenantId,
+      newLeads.length,
+    );
+
     return {
       total: rows.length,
       valid: indianRows.length,
@@ -116,6 +130,120 @@ export class ParseLeadsUseCase {
       detectedHeaders: {
         contact_number: headerInfo.hasContactNumber,
         customer_name: headerInfo.hasCustomerName,
+      },
+      estimation,
+    };
+  }
+
+  /**
+   * Pure mathematical billing calculator utilizing the active tenant plan config.
+   */
+  private async estimateCampaignCost(
+    tenantId: string,
+    leadCount: number,
+  ): Promise<ParseLeadsOutput["estimation"]> {
+    // 1. Core Mathematical Constants
+    const ANSWER_RATE = 0.4; // Historical answer pickup rate (40%)
+    const RETRIES = 1; // Retries configured
+    const MIN_DURATION_SEC = 45;
+    const MAX_DURATION_SEC = 90;
+
+    // 2. Fetch Active Tenant Plan Terms
+    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
+
+    // Sensible system fallbacks if no plan has been active (e.g. initial setup)
+    const perMinuteRate = activePlan?.perMinuteRate ?? 500; // Default ₹5.00/min
+    const billingMinSec = activePlan?.billingMinimumSec ?? 30;
+    const billingIncrementSec = activePlan?.billingIncrementSec ?? 60;
+
+    // 3. Fetch Tenant Wallet Balance
+    const wallet = await this.walletRepo.findByTenantId(tenantId);
+    const cashBalance = wallet?.cashBalance ?? 0;
+    const bonusBalance = wallet?.bonusBalance ?? 0;
+    const currentBalancePaisa = cashBalance + bonusBalance;
+
+    if (leadCount === 0) {
+      return {
+        estimatedCostMinPaisa: 0,
+        estimatedCostMaxPaisa: 0,
+        currentBalancePaisa,
+        perMinuteRatePaisa: perMinuteRate,
+        assumptions: {
+          historicalAnswerRate: ANSWER_RATE,
+          retryCount: RETRIES,
+          durationMinSec: MIN_DURATION_SEC,
+          durationMaxSec: MAX_DURATION_SEC,
+        },
+      };
+    }
+
+    // 4. Calculate Connected Call Counts
+    // First attempt: N calls -> N * 40% connect. N * 60% fail.
+    const firstAttemptConnected = leadCount * ANSWER_RATE;
+    const firstAttemptFailed = leadCount * (1 - ANSWER_RATE);
+
+    // Second attempt (1 retry): retry attempts placed on failed calls -> failed * 40% connect.
+    const retryAttemptConnected = firstAttemptFailed * ANSWER_RATE;
+
+    const totalConnectedCalls = firstAttemptConnected + retryAttemptConnected;
+
+    // 5. Account for Carrier Plan Billing Minimums and Increments
+    const getBilledSeconds = (durationSec: number): number => {
+      let billed = Math.max(durationSec, billingMinSec);
+      if (billingIncrementSec > 0) {
+        billed = Math.ceil(billed / billingIncrementSec) * billingIncrementSec;
+      }
+      return billed;
+    };
+
+    const minBilledSec = getBilledSeconds(MIN_DURATION_SEC);
+    const maxBilledSec = getBilledSeconds(MAX_DURATION_SEC);
+
+    // Calculate dynamic cost in paisa
+    const costPerCallMinPaisa = (minBilledSec / 60) * perMinuteRate;
+    const costPerCallMaxPaisa = (maxBilledSec / 60) * perMinuteRate;
+
+    const estimatedCostMinPaisa = Math.round(
+      totalConnectedCalls * costPerCallMinPaisa,
+    );
+    const estimatedCostMaxPaisa = Math.round(
+      totalConnectedCalls * costPerCallMaxPaisa,
+    );
+
+    return {
+      estimatedCostMinPaisa,
+      estimatedCostMaxPaisa,
+      currentBalancePaisa,
+      perMinuteRatePaisa: perMinuteRate,
+      assumptions: {
+        historicalAnswerRate: ANSWER_RATE,
+        retryCount: RETRIES,
+        durationMinSec: MIN_DURATION_SEC,
+        durationMaxSec: MAX_DURATION_SEC,
+      },
+    };
+  }
+
+  private async calculateEmptyEstimation(
+    tenantId: string,
+  ): Promise<ParseLeadsOutput["estimation"]> {
+    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
+    const perMinuteRate = activePlan?.perMinuteRate ?? 500;
+
+    const wallet = await this.walletRepo.findByTenantId(tenantId);
+    const currentBalancePaisa =
+      (wallet?.cashBalance ?? 0) + (wallet?.bonusBalance ?? 0);
+
+    return {
+      estimatedCostMinPaisa: 0,
+      estimatedCostMaxPaisa: 0,
+      currentBalancePaisa,
+      perMinuteRatePaisa: perMinuteRate,
+      assumptions: {
+        historicalAnswerRate: 0.4,
+        retryCount: 1,
+        durationMinSec: 45,
+        durationMaxSec: 90,
       },
     };
   }
