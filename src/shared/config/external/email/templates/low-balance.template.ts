@@ -27,26 +27,26 @@ export function lowBalanceEmailHtml(p: LowBalanceTemplateInput): string {
 
   const content = sectionPadding(`
     ${heading(
-      "Low wallet balance",
-      `Your wallet balance for ${p.tenantName} has dropped below the alert threshold.`,
+      "Low wallet balance alert",
+      `The wallet balance for your organization ${p.tenantName} has dipped below safety threshold limit.`,
     )}
 
     <!-- Balance Card -->
-    <div style="margin:28px 0;background-color:${COLORS.dangerLight};border-radius:12px;padding:28px;text-align:center;">
-      <p style="margin:0 0 6px 0;font-size:13px;color:${COLORS.danger};text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+    <div style="margin:24px 0;background-color:${COLORS.dangerLight};border:1px solid ${COLORS.danger}30;border-radius:12px;padding:24px;text-align:center;">
+      <p style="margin:0 0 6px 0;font-size:12px;color:${COLORS.danger};text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">
         Current Balance
       </p>
-      <p style="margin:0;font-size:36px;font-weight:800;color:${COLORS.danger};line-height:1.2;">
+      <p style="margin:0;font-size:36px;font-weight:800;color:${COLORS.danger};line-height:1.2;letter-spacing:-1px;">
         ₹${balance}
       </p>
     </div>
 
     <!-- Progress Bar -->
-    <div style="margin:0 0 28px 0;">
+    <div style="margin:0 0 24px 0;">
       <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
         <tr>
-          <td style="font-size:14px;color:${COLORS.textMuted};padding-bottom:8px;">
-            Balance vs Threshold
+          <td style="font-size:13px;color:${COLORS.textSecondary};padding-bottom:8px;font-weight:600;">
+            Remaining Balance safety status
           </td>
         </tr>
         <tr>
@@ -55,30 +55,32 @@ export function lowBalanceEmailHtml(p: LowBalanceTemplateInput): string {
           </td>
         </tr>
         <tr>
-          <td style="font-size:13px;color:${COLORS.textMuted};padding-top:6px;text-align:right;">
-            Threshold: ₹${threshold}
+          <td style="font-size:12px;color:${COLORS.textMuted};padding-top:6px;text-align:right;font-weight:500;">
+            Threshold Limit: ₹${threshold}
           </td>
         </tr>
       </table>
     </div>
 
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
-           style="background-color:${COLORS.surface};border-radius:8px;padding:4px 0;">
-      ${keyValueRow("Organization", p.tenantName)}
-      ${keyValueRow("Current Balance", `<span style="color:${COLORS.danger};font-weight:700;">₹${balance}</span>`)}
-      ${keyValueRow("Alert Threshold", `₹${threshold}`)}
-    </table>
+    <div style="border:1px solid ${COLORS.border}; border-radius:8px; overflow:hidden; margin-bottom:24px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+             style="background-color:${COLORS.surface};">
+        ${keyValueRow("Organization", p.tenantName)}
+        ${keyValueRow("Current Balance", `<span style="color:${COLORS.danger};font-weight:700;">₹${balance}</span>`)}
+        ${keyValueRow("Threshold Trigger", `₹${threshold}`)}
+      </table>
+    </div>
 
     ${divider()}
 
     ${infoBox(
-      "<strong>Running batches may be automatically stopped</strong> if your balance reaches zero. Please recharge your wallet to avoid service interruption.",
+      "<strong>Action Required:</strong> Running campaigns & calling agents will automatically halt if balance reaches ₹0.00. Recharge to ensure service continuity.",
       "danger",
     )}
   `);
 
   return emailLayout({
-    previewText: `Kooi wallet balance is ₹${balance} — below ₹${threshold} threshold`,
+    previewText: `CRITICAL: Kooi wallet balance is ₹${balance} (threshold ₹${threshold})`,
     content,
   });
 }
