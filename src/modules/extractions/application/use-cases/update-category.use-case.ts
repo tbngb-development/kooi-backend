@@ -1,31 +1,43 @@
 import type { ExtractionRepository } from "../interfaces/extraction-repository.interface";
-import type { BolnaExtractionProvider } from "../interfaces/bolna-extraction-provider.interface";
 import type { UpdateCategoryDTO } from "../dto/extraction.dto";
-import { ExtractionCategoryNotFoundError, DuplicateExtractionSlugError } from "../../domain/errors/extraction.errors";
+import type { ExtractionCategory } from "@prisma/client";
+import {
+  ExtractionCategoryNotFoundError,
+  DuplicateExtractionCategoryNameError,
+  DuplicateExtractionCategorySlugError,
+} from "../../domain/errors/extraction.errors";
+import { generateSlug } from "../../domain/rules/slug-generator";
 
 export class UpdateCategoryUseCase {
-  constructor(
-    private readonly repository: ExtractionRepository,
-    private readonly bolnaProvider: BolnaExtractionProvider,
-  ) {}
+  constructor(private readonly repository: ExtractionRepository) {}
 
-  async execute(id: string, dto: UpdateCategoryDTO) {
+  async execute(
+    id: string,
+    dto: UpdateCategoryDTO,
+  ): Promise<ExtractionCategory> {
+    // 1. Verify exists
     const existing = await this.repository.findCategoryById(id);
-    if (!existing) throw new ExtractionCategoryNotFoundError(id);
-
-    if (dto.slug && dto.slug !== existing.slug) {
-      const collision = await this.repository.findCategoryBySlug(dto.slug);
-      if (collision) throw new DuplicateExtractionSlugError(dto.slug);
+    if (!existing) {
+      throw new ExtractionCategoryNotFoundError(id);
     }
 
-    // Push name/model changes to Bolna if synced
-    if (existing.bolnaId && (dto.name || dto.model)) {
-      await this.bolnaProvider.updateCategory(existing.bolnaId, {
-        ...(dto.name && { name: dto.name }),
-        ...(dto.model && { model: dto.model }),
-      });
+    // 2. If name is changing, check uniqueness (exclude self)
+    if (dto.name !== undefined && dto.name.trim() !== existing.name) {
+      const duplicate = await this.repository.findCategoryByNameInsensitive(
+        dto.name,
+      );
+      if (duplicate && duplicate.id !== id) {
+        throw new DuplicateExtractionCategoryNameError(dto.name);
+      }
+
+      const newSlug = generateSlug(dto.name);
+      const slugDuplicate = await this.repository.findCategoryBySlug(newSlug);
+      if (slugDuplicate && slugDuplicate.id !== id) {
+        throw new DuplicateExtractionCategorySlugError(newSlug);
+      }
     }
 
+    // 3. Update
     return this.repository.updateCategory(id, dto);
   }
 }

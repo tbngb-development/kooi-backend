@@ -1,36 +1,36 @@
-import type { Industry } from "@prisma/client";
-
-// ── Category DTOs ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORIES
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CreateCategoryDTO {
-  slug: string;
   name: string;
   model?: string;
-  industry: Industry;
   description?: string;
-  platformAgentId?: string;
+  /** Optional: attach industry packs at creation time */
+  industryPackIds?: string[];
+  /** Optional: attach dispositions at creation time */
+  dispositionIds?: string[];
 }
 
 export interface UpdateCategoryDTO {
-  slug?: string;
   name?: string;
   model?: string;
-  industry?: Industry;
   description?: string;
   isActive?: boolean;
-  platformAgentId?: string;
 }
 
 export interface ListCategoriesFilters {
-  industry?: Industry;
+  industryPackId?: string;
   isActive?: boolean;
+  /** Filter by platform agent assignment */
   platformAgentId?: string;
 }
 
-// ── Disposition DTOs ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DISPOSITIONS
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CreateDispositionDTO {
-  slug: string;
   name: string;
   question: string;
   systemPrompt?: string;
@@ -38,15 +38,14 @@ export interface CreateDispositionDTO {
   isSubjective?: boolean;
   isObjective?: boolean;
   subjectiveType?: string;
-  subjectiveTypeConfig?: Record<string, unknown> | null;
-  objectiveOptions?: unknown[] | null;
-  industry: Industry;
+  subjectiveTypeConfig?: Record<string, unknown>;
+  objectiveOptions?: Record<string, unknown>[];
   description?: string;
-  categoryId: string;
+  /** Optional: attach industry packs at creation time */
+  industryPackIds?: string[];
 }
 
 export interface UpdateDispositionDTO {
-  slug?: string;
   name?: string;
   question?: string;
   systemPrompt?: string;
@@ -55,15 +54,31 @@ export interface UpdateDispositionDTO {
   isObjective?: boolean;
   subjectiveType?: string;
   subjectiveTypeConfig?: Record<string, unknown> | null;
-  objectiveOptions?: unknown[] | null;
-  industry?: Industry;
+  objectiveOptions?: Record<string, unknown>[] | null;
   description?: string;
   isActive?: boolean;
-  categoryId?: string;
 }
 
 export interface ListDispositionsFilters {
-  industry?: Industry;
-  isActive?: boolean;
+  industryPackId?: string;
   categoryId?: string;
+  isActive?: boolean;
+  /** Filter by platform agent assignment */
+  platformAgentId?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M2M ATTACH / DETACH
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AttachIndustriesDTO {
+  industryPackIds: string[];
+}
+
+export interface AttachDispositionsDTO {
+  dispositionIds: string[];
+}
+
+export interface AttachCategoriesDTO {
+  categoryIds: string[];
 }

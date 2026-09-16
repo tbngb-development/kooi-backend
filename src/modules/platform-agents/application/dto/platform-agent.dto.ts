@@ -1,10 +1,7 @@
-import type { Industry } from "@prisma/client";
-
 export interface RegisterPlatformAgentDTO {
   bolnaId: string;
   slug: string;
   name: string;
-  industry?: Industry;
   industryPackId?: string;
   category?: string;
   description?: string;
@@ -15,7 +12,6 @@ export interface RegisterPlatformAgentDTO {
 export interface UpdatePlatformAgentDTO {
   slug?: string;
   name?: string;
-  industry?: Industry;
   industryPackId?: string | null;
   category?: string;
   description?: string;
@@ -25,7 +21,22 @@ export interface UpdatePlatformAgentDTO {
 }
 
 export interface ListPlatformAgentsFilters {
-  industry?: Industry;
   industryPackId?: string;
   isActive?: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Extraction Assignment DTOs
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AssignCategoriesToAgentDTO {
+  categoryIds: string[];
+}
+
+export interface AssignDispositionsToAgentDTO {
+  /**
+   * Disposition IDs to assign to this agent.
+   * They will be placed in the agent's "General" category (auto-created per industry).
+   */
+  dispositionIds: string[];
 }

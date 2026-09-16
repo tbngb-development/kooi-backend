@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import { Prisma, type Industry, type IndustryPack } from "@prisma/client";
+import { Prisma, type IndustryPack } from "@prisma/client";
 import type {
   IndustryPackRepository,
   IndustryPackWithCount,
@@ -16,22 +16,22 @@ export class PrismaIndustryPackRepository implements IndustryPackRepository {
     return prisma.industryPack.create({
       data: {
         slug: data.slug,
-        name: data.name,
-        industry: data.industry,
+        name: data.name.trim(),
         description: data.description ?? null,
         icon: data.icon ?? null,
         allowedCallingHours:
-          (data.allowedCallingHours as any) ?? Prisma.JsonNull,
+          (data.allowedCallingHours as Prisma.InputJsonValue) ??
+          Prisma.JsonNull,
         requiresConsent: data.requiresConsent ?? false,
       },
     });
   }
 
   async update(id: string, data: UpdateIndustryPackDTO): Promise<IndustryPack> {
-    const updateData: Prisma.IndustryPackUncheckedUpdateInput = {};
+    const updateData: Prisma.IndustryPackUpdateInput = {};
 
     if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.name !== undefined) updateData.name = data.name;
+    if (data.name !== undefined) updateData.name = data.name.trim();
     if (data.description !== undefined)
       updateData.description = data.description;
     if (data.icon !== undefined) updateData.icon = data.icon;
@@ -39,7 +39,7 @@ export class PrismaIndustryPackRepository implements IndustryPackRepository {
       updateData.allowedCallingHours =
         data.allowedCallingHours === null
           ? Prisma.JsonNull
-          : (data.allowedCallingHours as any);
+          : (data.allowedCallingHours as Prisma.InputJsonValue);
     }
     if (data.requiresConsent !== undefined)
       updateData.requiresConsent = data.requiresConsent;
@@ -66,7 +66,7 @@ export class PrismaIndustryPackRepository implements IndustryPackRepository {
           orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
           include: {
             _count: {
-              select: { assistants: true, extractionCategories: true },
+              select: { assistants: true, categories: true },
             },
           },
         },
@@ -78,8 +78,12 @@ export class PrismaIndustryPackRepository implements IndustryPackRepository {
     return prisma.industryPack.findUnique({ where: { slug } });
   }
 
-  async findByIndustry(industry: Industry): Promise<IndustryPack | null> {
-    return prisma.industryPack.findUnique({ where: { industry } });
+  async findByNameInsensitive(name: string): Promise<IndustryPack | null> {
+    return prisma.industryPack.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: "insensitive" },
+      },
+    });
   }
 
   async list(
@@ -102,32 +106,11 @@ export class PrismaIndustryPackRepository implements IndustryPackRepository {
     return prisma.platformAgent.count({ where: { industryPackId: packId } });
   }
 
-  async assignAgentToPack(
-    agentId: string,
-    packId: string,
-    industry: Industry,
-  ): Promise<void> {
-    await prisma.$transaction([
-      // 1. Link agent to pack
-      prisma.platformAgent.update({
-        where: { id: agentId },
-        data: { industryPackId: packId },
-      }),
-      // 2. Propagate industry to all extraction categories under this agent
-      prisma.extractionCategory.updateMany({
-        where: { platformAgentId: agentId },
-        data: { industry },
-      }),
-      // 3. Propagate industry to all dispositions under those categories
-      prisma.extractionDisposition.updateMany({
-        where: {
-          category: {
-            platformAgentId: agentId,
-          },
-        },
-        data: { industry },
-      }),
-    ]);
+  async assignAgentToPack(agentId: string, packId: string): Promise<void> {
+    await prisma.platformAgent.update({
+      where: { id: agentId },
+      data: { industryPackId: packId },
+    });
   }
 
   async removeAgentFromPack(agentId: string): Promise<void> {

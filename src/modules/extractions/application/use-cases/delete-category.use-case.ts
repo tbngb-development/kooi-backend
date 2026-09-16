@@ -1,24 +1,26 @@
 import type { ExtractionRepository } from "../interfaces/extraction-repository.interface";
-import type { BolnaExtractionProvider } from "../interfaces/bolna-extraction-provider.interface";
-import { ExtractionCategoryNotFoundError, ExtractionCategoryHasDispositionsError } from "../../domain/errors/extraction.errors";
+import {
+  ExtractionCategoryNotFoundError,
+  ExtractionCategoryAttachedToAgentError,
+} from "../../domain/errors/extraction.errors";
 
 export class DeleteCategoryUseCase {
-  constructor(
-    private readonly repository: ExtractionRepository,
-    private readonly bolnaProvider: BolnaExtractionProvider,
-  ) {}
+  constructor(private readonly repository: ExtractionRepository) {}
 
-  async execute(id: string) {
+  async execute(id: string): Promise<void> {
+    // 1. Verify exists
     const existing = await this.repository.findCategoryById(id);
-    if (!existing) throw new ExtractionCategoryNotFoundError(id);
-
-    const count = await this.repository.countDispositionsInCategory(id);
-    if (count > 0) throw new ExtractionCategoryHasDispositionsError(count);
-
-    if (existing.bolnaId) {
-      await this.bolnaProvider.deleteCategory(existing.bolnaId);
+    if (!existing) {
+      throw new ExtractionCategoryNotFoundError(id);
     }
 
+    // 2. Guard: cannot delete if attached to any platform agent
+    const isAttached = await this.repository.isCategoryAttachedToAgent(id);
+    if (isAttached) {
+      throw new ExtractionCategoryAttachedToAgentError(id);
+    }
+
+    // 3. Delete (cascade removes M2M junction rows)
     await this.repository.deleteCategory(id);
   }
 }

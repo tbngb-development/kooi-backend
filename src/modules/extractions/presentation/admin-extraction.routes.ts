@@ -10,8 +10,10 @@ import {
   createDispositionSchema,
   updateDispositionSchema,
   listDispositionsQuerySchema,
+  attachIndustriesSchema,
+  attachDispositionsSchema,
+  listBolnaCategoriesQuerySchema,
   listBolnaDispositionsQuerySchema,
-  importExtractionsFromBolnaSchema,
 } from "./extraction.schema";
 
 export function buildAdminExtractionRoutes(
@@ -24,27 +26,19 @@ export function buildAdminExtractionRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  // ── Bolna Discovery ──────────────────────────────────────
+  // ── Bolna Preview (Read-Only) ──────────────────────────────────────────────
   router.get(
-    "/bolna/agents/:platformAgentId/categories",
-    controller.listBolnaCategoriesHandler,
-  );
-  router.get(
-    "/bolna/agents/:platformAgentId/dispositions",
-    controller.listBolnaDispositionsHandler,
+    "/bolna/categories",
+    validateQuery(listBolnaCategoriesQuerySchema),
+    controller.previewBolnaCategoriesHandler,
   );
   router.get(
     "/bolna/dispositions",
     validateQuery(listBolnaDispositionsQuerySchema),
-    controller.listBolnaDispositionsHandler,
-  );
-  router.post(
-    "/import-from-bolna",
-    validate(importExtractionsFromBolnaSchema),
-    controller.importExtractionsFromBolnaHandler,
+    controller.previewBolnaDispositionsHandler,
   );
 
-  // ── Categories ──────────────────────────────────────────────
+  // ── Categories CRUD ────────────────────────────────────────────────────────
   router.post(
     "/categories",
     validate(createCategorySchema),
@@ -62,12 +56,28 @@ export function buildAdminExtractionRoutes(
     controller.updateCategoryHandler,
   );
   router.delete("/categories/:id", controller.deleteCategoryHandler);
+
+  // ── Categories M2M Associations ────────────────────────────────────────────
   router.post(
-    "/categories/sync/:platformAgentId",
-    controller.syncCategoriesHandler,
+    "/categories/:id/industries",
+    validate(attachIndustriesSchema),
+    controller.attachIndustriesToCategoryHandler,
+  );
+  router.delete(
+    "/categories/:id/industries/:industryPackId",
+    controller.detachIndustryFromCategoryHandler,
+  );
+  router.post(
+    "/categories/:id/dispositions",
+    validate(attachDispositionsSchema),
+    controller.attachDispositionsToCategoryHandler,
+  );
+  router.delete(
+    "/categories/:id/dispositions/:dispositionId",
+    controller.detachDispositionFromCategoryHandler,
   );
 
-  // ── Dispositions ────────────────────────────────────────────
+  // ── Dispositions CRUD ─────────────────────────────────────────────────────
   router.post(
     "/dispositions",
     validate(createDispositionSchema),
@@ -85,9 +95,17 @@ export function buildAdminExtractionRoutes(
     controller.updateDispositionHandler,
   );
   router.delete("/dispositions/:id", controller.deleteDispositionHandler);
+
+  // ── Dispositions M2M Associations ─────────────────────────────────────────
   router.post(
-    "/dispositions/sync/:platformAgentId",
-    controller.syncDispositionsHandler,
+    "/dispositions/:id/industries",
+    validate(attachIndustriesSchema),
+    controller.attachIndustriesToDispositionHandler,
   );
+  router.delete(
+    "/dispositions/:id/industries/:industryPackId",
+    controller.detachIndustryFromDispositionHandler,
+  );
+
   return router;
 }

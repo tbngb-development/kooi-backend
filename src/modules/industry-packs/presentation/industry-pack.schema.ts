@@ -1,17 +1,18 @@
 import { z } from "zod";
-import { Industry } from "@prisma/client";
 
 export const createIndustryPackSchema = z.object({
   slug: z.string().min(3).max(60).regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(100),
-  industry: z.nativeEnum(Industry),
   description: z.string().max(500).optional(),
   icon: z.string().max(50).optional(),
-  allowedCallingHours: z.object({
-    start: z.string().regex(/^\d{2}:\d{2}$/),
-    end: z.string().regex(/^\d{2}:\d{2}$/),
-    tz: z.string().min(1),
-  }).nullable().optional(),
+  allowedCallingHours: z
+    .object({
+      start: z.string().regex(/^\d{2}:\d{2}$/),
+      end: z.string().regex(/^\d{2}:\d{2}$/),
+      tz: z.string().min(1),
+    })
+    .nullable()
+    .optional(),
   requiresConsent: z.boolean().optional(),
 });
 
@@ -20,11 +21,14 @@ export const updateIndustryPackSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
   icon: z.string().max(50).optional(),
-  allowedCallingHours: z.object({
-    start: z.string().regex(/^\d{2}:\d{2}$/),
-    end: z.string().regex(/^\d{2}:\d{2}$/),
-    tz: z.string().min(1),
-  }).nullable().optional(),
+  allowedCallingHours: z
+    .object({
+      start: z.string().regex(/^\d{2}:\d{2}$/),
+      end: z.string().regex(/^\d{2}:\d{2}$/),
+      tz: z.string().min(1),
+    })
+    .nullable()
+    .optional(),
   requiresConsent: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });

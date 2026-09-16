@@ -8,6 +8,8 @@ import {
   updatePlatformAgentSchema,
   listPlatformAgentsQuerySchema,
   importFromBolnaSchema,
+  assignCategoriesSchema,
+  assignDispositionsSchema,
 } from "./platform-agent.schema";
 
 export function buildAdminPlatformAgentRoutes(
@@ -20,7 +22,7 @@ export function buildAdminPlatformAgentRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  // ── Bolna Discovery (must be before /:id) ────────────────
+  // ── Bolna Discovery ────────────────────────────────────────────────────────
   router.get("/bolna/agents", controller.listBolnaAgents);
   router.get("/bolna/agents/:bolnaId/preview", controller.previewBolnaAgent);
   router.post(
@@ -29,6 +31,7 @@ export function buildAdminPlatformAgentRoutes(
     controller.importFromBolna,
   );
 
+  // ── Agent CRUD ─────────────────────────────────────────────────────────────
   router.post("/", validate(registerPlatformAgentSchema), controller.register);
   router.get(
     "/",
@@ -40,6 +43,34 @@ export function buildAdminPlatformAgentRoutes(
   router.post("/:id/sync", controller.sync);
   router.post("/:id/sync-blueprint", controller.syncBlueprint);
   router.delete("/:id", controller.remove);
+
+  // ── [NEW] Extraction Assignment & Sync ─────────────────────────────────────
+  router.get("/:id/extractions", controller.getAgentExtractionsHandler);
+
+  router.post(
+    "/:id/categories",
+    validate(assignCategoriesSchema),
+    controller.assignCategoryHandler,
+  );
+  router.delete(
+    "/:id/categories/:categoryId",
+    controller.removeCategoryHandler,
+  );
+
+  router.post(
+    "/:id/dispositions",
+    validate(assignDispositionsSchema),
+    controller.assignDispositionHandler,
+  );
+  router.delete(
+    "/:id/dispositions/:dispositionId",
+    controller.removeDispositionHandler,
+  );
+
+  router.post(
+    "/:id/sync-extractions",
+    controller.syncExtractionsToBolnaHandler,
+  );
 
   return router;
 }

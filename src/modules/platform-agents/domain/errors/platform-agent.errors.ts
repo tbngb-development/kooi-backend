@@ -50,3 +50,13 @@ export class BolnaTemplateFetchError extends AppError {
     );
   }
 }
+
+export class PlatformAgentBolnaIdRequiredError extends AppError {
+  constructor(agentId: string) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Platform agent '${agentId}' has no Bolna ID. Cannot sync extractions.`,
+      "PLATFORM_AGENT_BOLNA_ID_REQUIRED",
+    );
+  }
+}

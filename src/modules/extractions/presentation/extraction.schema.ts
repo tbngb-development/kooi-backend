@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { Industry } from "@prisma/client";
 
 const SUPPORTED_MODELS = [
   "gpt-4.1-mini",
@@ -13,53 +12,35 @@ const SUPPORTED_MODELS = [
   "gemini-3.5-flash-lite",
 ] as const;
 
-// ── Category Schemas ─────────────────────────────────────────────────
+// ── Category Schemas ─────────────────────────────────────────────────────────
 
 export const createCategorySchema = z.object({
-  slug: z
-    .string()
-    .min(3)
-    .max(60)
-    .regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(100),
   model: z.enum(SUPPORTED_MODELS).optional(),
-  industry: z.nativeEnum(Industry),
   description: z.string().max(500).optional(),
-  platformAgentId: z.string().uuid().optional(),
+  industryPackIds: z.array(z.string().uuid()).optional(),
+  dispositionIds: z.array(z.string().uuid()).optional(),
 });
 
 export const updateCategorySchema = z.object({
-  slug: z
-    .string()
-    .min(3)
-    .max(60)
-    .regex(/^[a-z0-9-]+$/)
-    .optional(),
   name: z.string().min(1).max(100).optional(),
   model: z.enum(SUPPORTED_MODELS).optional(),
-  industry: z.nativeEnum(Industry).optional(),
   description: z.string().max(500).optional(),
   isActive: z.boolean().optional(),
-  platformAgentId: z.string().uuid().optional(),
 });
 
 export const listCategoriesQuerySchema = z.object({
-  industry: z.nativeEnum(Industry).optional(),
+  industryPackId: z.string().uuid().optional(),
+  platformAgentId: z.string().uuid().optional(),
   isActive: z.preprocess(
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),
   ),
-  platformAgentId: z.string().uuid().optional(),
 });
 
-// ── Disposition Schemas ──────────────────────────────────────────────
+// ── Disposition Schemas ──────────────────────────────────────────────────────
 
 export const createDispositionSchema = z.object({
-  slug: z
-    .string()
-    .min(3)
-    .max(60)
-    .regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(100),
   question: z.string().min(1).max(1000),
   systemPrompt: z.string().max(2000).optional(),
@@ -86,18 +67,11 @@ export const createDispositionSchema = z.object({
     )
     .nullable()
     .optional(),
-  industry: z.nativeEnum(Industry),
   description: z.string().max(500).optional(),
-  categoryId: z.string().uuid(),
+  industryPackIds: z.array(z.string().uuid()).optional(),
 });
 
 export const updateDispositionSchema = z.object({
-  slug: z
-    .string()
-    .min(3)
-    .max(60)
-    .regex(/^[a-z0-9-]+$/)
-    .optional(),
   name: z.string().min(1).max(100).optional(),
   question: z.string().min(1).max(1000).optional(),
   systemPrompt: z.string().max(2000).optional(),
@@ -124,27 +98,36 @@ export const updateDispositionSchema = z.object({
     )
     .nullable()
     .optional(),
-  industry: z.nativeEnum(Industry).optional(),
   description: z.string().max(500).optional(),
   isActive: z.boolean().optional(),
-  categoryId: z.string().uuid().optional(),
 });
 
 export const listDispositionsQuerySchema = z.object({
-  industry: z.nativeEnum(Industry).optional(),
+  industryPackId: z.string().uuid().optional(),
+  categoryId: z.string().uuid().optional(),
+  platformAgentId: z.string().uuid().optional(),
   isActive: z.preprocess(
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),
   ),
-  categoryId: z.string().uuid().optional(),
 });
 
-export const importExtractionsFromBolnaSchema = z.object({
-  platformAgentId: z.string().uuid(),
-  categoryBolnaIds: z.array(z.string().uuid()).optional(),
-  dispositionBolnaIds: z.array(z.string().uuid()).optional(),
+// ── M2M Schemas ──────────────────────────────────────────────────────────────
+
+export const attachIndustriesSchema = z.object({
+  industryPackIds: z.array(z.string().uuid()).min(1),
+});
+
+export const attachDispositionsSchema = z.object({
+  dispositionIds: z.array(z.string().uuid()).min(1),
+});
+
+// ── Discovery Schemas ────────────────────────────────────────────────────────
+
+export const listBolnaCategoriesQuerySchema = z.object({
+  agentBolnaId: z.string().uuid(),
 });
 
 export const listBolnaDispositionsQuerySchema = z.object({
-  platformAgentId: z.string().uuid().optional(),
+  agentBolnaId: z.string().uuid().optional(),
 });

@@ -1,6 +1,11 @@
 import prisma from "../../../../shared/config/database/prisma";
-import { Prisma, type PlatformAgent } from "@prisma/client";
 import type {
+  AgentBolnaExtractionBinding,
+  Prisma,
+  PlatformAgent,
+} from "@prisma/client";
+import type {
+  AgentExtractionConfig,
   PlatformAgentRepository,
   PlatformAgentWithCount,
 } from "../../application/interfaces/platform-agent-repository.interface";
@@ -13,7 +18,7 @@ import type {
 export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
   async create(
     data: RegisterPlatformAgentDTO & {
-      defaultConfig: any;
+      defaultConfig: unknown;
       systemPrompt: string | null;
     },
   ): Promise<PlatformAgent> {
@@ -23,7 +28,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       name: data.name,
       category: data.category ?? null,
       description: data.description ?? null,
-      defaultConfig: (data.defaultConfig as any) ?? Prisma.JsonNull,
+      defaultConfig: data.defaultConfig as Prisma.InputJsonValue,
       systemPrompt: data.systemPrompt ?? null,
       isFeatured: data.isFeatured ?? false,
       sortOrder: data.sortOrder ?? 0,
@@ -32,25 +37,15 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
 
     if (data.industryPackId) {
       createData.industryPack = { connect: { id: data.industryPackId } };
-    } else if (data.industry) {
-      // Auto-connect or create the parent IndustryPack for this industry
-      createData.industryPack = {
-        connectOrCreate: {
-          where: { industry: data.industry },
-          create: {
-            slug: data.industry.toLowerCase().replace(/_/g, "-"),
-            name: data.industry.replace(/_/g, " "),
-            industry: data.industry,
-          },
-        },
-      };
     }
 
     return prisma.platformAgent.create({
       data: createData,
       include: {
         industryPack: true,
-        _count: { select: { assistants: true, extractionCategories: true } },
+        _count: {
+          select: { assistants: true, categories: true },
+        },
       },
     });
   }
@@ -58,7 +53,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
   async update(
     id: string,
     data: UpdatePlatformAgentDTO & {
-      defaultConfig?: any;
+      defaultConfig?: unknown;
       systemPrompt?: string | null;
     },
   ): Promise<PlatformAgent> {
@@ -70,7 +65,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     if (data.description !== undefined)
       updateData.description = data.description;
     if (data.defaultConfig !== undefined) {
-      updateData.defaultConfig = (data.defaultConfig as any) ?? Prisma.JsonNull;
+      updateData.defaultConfig = data.defaultConfig as Prisma.InputJsonValue;
     }
     if (data.systemPrompt !== undefined)
       updateData.systemPrompt = data.systemPrompt;
@@ -84,17 +79,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       } else {
         updateData.industryPack = { connect: { id: data.industryPackId } };
       }
-    } else if (data.industry) {
-      updateData.industryPack = {
-        connectOrCreate: {
-          where: { industry: data.industry },
-          create: {
-            slug: data.industry.toLowerCase().replace(/_/g, "-"),
-            name: data.industry.replace(/_/g, " "),
-            industry: data.industry,
-          },
-        },
-      };
     }
 
     return prisma.platformAgent.update({
@@ -102,7 +86,9 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       data: updateData,
       include: {
         industryPack: true,
-        _count: { select: { assistants: true, extractionCategories: true } },
+        _count: {
+          select: { assistants: true, categories: true },
+        },
       },
     });
   }
@@ -112,7 +98,9 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       where: { id },
       include: {
         industryPack: true,
-        _count: { select: { assistants: true, extractionCategories: true } },
+        _count: {
+          select: { assistants: true, categories: true },
+        },
       },
     });
   }
@@ -140,11 +128,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
   ): Promise<PlatformAgentWithCount[]> {
     return prisma.platformAgent.findMany({
       where: {
-        ...(filters.industry !== undefined && {
-          industryPack: {
-            industry: filters.industry,
-          },
-        }),
         ...(filters.industryPackId !== undefined && {
           industryPackId: filters.industryPackId,
         }),
@@ -155,12 +138,171 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       include: {
         industryPack: true,
-        _count: { select: { assistants: true, extractionCategories: true } },
+        _count: {
+          select: { assistants: true, categories: true },
+        },
       },
     });
   }
 
   async delete(id: string): Promise<void> {
     await prisma.platformAgent.delete({ where: { id } });
+  }
+
+  // ── Extraction: Category Assignment ───────────────────────────────────────
+
+  async assignCategoriesToAgent(
+    platformAgentId: string,
+    categoryIds: string[],
+  ): Promise<void> {
+    if (!categoryIds.length) return;
+
+    await prisma.platformAgentCategory.createMany({
+      data: categoryIds.map((categoryId, idx) => ({
+        platformAgentId,
+        categoryId,
+        sortOrder: idx,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  async removeCategoryFromAgent(
+    platformAgentId: string,
+    categoryId: string,
+  ): Promise<void> {
+    await prisma.platformAgentCategory.deleteMany({
+      where: { platformAgentId, categoryId },
+    });
+  }
+
+  async removeAllCategoriesFromAgent(platformAgentId: string): Promise<void> {
+    await prisma.platformAgentCategory.deleteMany({
+      where: { platformAgentId },
+    });
+  }
+
+  // ── Extraction: Full Config ───────────────────────────────────────────────
+
+  async getAgentExtractionConfig(
+    platformAgentId: string,
+  ): Promise<AgentExtractionConfig | null> {
+    const agent = await prisma.platformAgent.findUnique({
+      where: { id: platformAgentId },
+      select: {
+        id: true,
+        bolnaId: true,
+        categories: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            categoryId: true,
+            sortOrder: true,
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                model: true,
+                dispositions: {
+                  orderBy: { sortOrder: "asc" },
+                  select: {
+                    dispositionId: true,
+                    sortOrder: true,
+                    disposition: {
+                      select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        bolnaBindings: true,
+      },
+    });
+
+    if (!agent) return null;
+
+    return {
+      platformAgentId: agent.id,
+      bolnaId: agent.bolnaId,
+      categories: agent.categories.map((c) => ({
+        categoryId: c.categoryId,
+        categoryName: c.category.name,
+        categorySlug: c.category.slug,
+        model: c.category.model,
+        sortOrder: c.sortOrder,
+        dispositions: c.category.dispositions.map((d) => ({
+          dispositionId: d.dispositionId,
+          dispositionName: d.disposition.name,
+          dispositionSlug: d.disposition.slug,
+          sortOrder: d.sortOrder,
+        })),
+      })),
+      bolnaBindings: agent.bolnaBindings,
+    };
+  }
+
+  // ── Bolna Bindings ────────────────────────────────────────────────────────
+
+  async upsertBolnaBinding(data: {
+    platformAgentId: string;
+    dispositionId: string;
+    bolnaAgentId: string;
+    bolnaCategoryId: string;
+    bolnaDispositionId: string;
+  }): Promise<AgentBolnaExtractionBinding> {
+    return prisma.agentBolnaExtractionBinding.upsert({
+      where: {
+        platformAgentId_dispositionId: {
+          platformAgentId: data.platformAgentId,
+          dispositionId: data.dispositionId,
+        },
+      },
+      create: {
+        platformAgentId: data.platformAgentId,
+        dispositionId: data.dispositionId,
+        bolnaAgentId: data.bolnaAgentId,
+        bolnaCategoryId: data.bolnaCategoryId,
+        bolnaDispositionId: data.bolnaDispositionId,
+      },
+      update: {
+        bolnaCategoryId: data.bolnaCategoryId,
+        bolnaDispositionId: data.bolnaDispositionId,
+        lastSyncedAt: new Date(),
+      },
+    });
+  }
+
+  async deleteBolnaBindings(
+    platformAgentId: string,
+    dispositionIds: string[],
+  ): Promise<void> {
+    if (!dispositionIds.length) return;
+
+    await prisma.agentBolnaExtractionBinding.deleteMany({
+      where: {
+        platformAgentId,
+        dispositionId: { in: dispositionIds },
+      },
+    });
+  }
+
+  async deleteAllBolnaBindings(platformAgentId: string): Promise<void> {
+    await prisma.agentBolnaExtractionBinding.deleteMany({
+      where: { platformAgentId },
+    });
+  }
+
+  async getBolnaBindings(
+    platformAgentId: string,
+  ): Promise<AgentBolnaExtractionBinding[]> {
+    return prisma.agentBolnaExtractionBinding.findMany({
+      where: { platformAgentId },
+    });
   }
 }

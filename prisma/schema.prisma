@@ -8,7 +8,7 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH & MULTI-TENANCY
+// AUTH & MULTI-TENANCY  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Tenant {
@@ -91,7 +91,7 @@ model RefreshToken {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ASSISTANT
+// ASSISTANT  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Assistant {
@@ -111,7 +111,7 @@ model Assistant {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BROCHURE
+// BROCHURE  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Brochure {
@@ -184,7 +184,7 @@ model Brochure {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CAMPAIGN
+// CAMPAIGN  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Campaign {
@@ -224,7 +224,7 @@ enum CampaignStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEAD BATCH
+// LEAD BATCH  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model LeadBatch {
@@ -268,7 +268,7 @@ enum BatchStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEAD
+// LEAD  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Lead {
@@ -308,7 +308,7 @@ enum LeadStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL
+// CALL  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Call {
@@ -324,10 +324,10 @@ model Call {
   platformCost        Int?
   billableSeconds     Int?
   planVersionId       String?
-  appliedRate         Int? // paisa per minute actually charged
-  appliedMinSec       Int? // billing minimum used
-  appliedIncrementSec Int? // billing increment used
-  chargedAmount       Int? // total paisa charged (mirrors platformCost as int)
+  appliedRate         Int?
+  appliedMinSec       Int?
+  appliedIncrementSec Int?
+  chargedAmount       Int?
   recording           String?
   transcript          String?
   transcriptMessages  Json?
@@ -363,7 +363,7 @@ enum CallStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL ANALYSIS
+// CALL ANALYSIS  [CHANGED — added extractionDispositionId]
 // ─────────────────────────────────────────────────────────────────────────────
 
 model CallAnalysis {
@@ -385,8 +385,12 @@ model CallAnalysis {
   doNotCall               ExtractionFlag?
   languageSupportRequired ExtractionFlag?
 
-  dynamicExtractions Json?   // NEW — dynamic extraction results based on PlatformAgent's extraction config
-  extractionResult Json?     // new row extraction
+  dynamicExtractions Json?
+  extractionResult   Json?
+
+  // [NEW] FK to local dynamic disposition (coexists with enum above)
+  extractionDispositionId String?
+  extractionDisposition   ExtractionDisposition? @relation(fields: [extractionDispositionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -398,8 +402,10 @@ model CallAnalysis {
   @@index([callId])
   @@index([disposition])
   @@index([leadTemperature])
+  @@index([extractionDispositionId])  // [NEW]
 }
 
+// [KEPT] All existing enums for backward compatibility (Q1=B, Q2=B)
 enum Disposition {
   INTERESTED_SEND_DETAILS
   QUALIFIED_CONSULTANT_FOLLOWUP
@@ -469,7 +475,7 @@ enum ExtractionFlag {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLANS & BILLING
+// PLANS & BILLING  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum PricingModel {
@@ -511,8 +517,6 @@ enum SupportTier {
   SLA
 }
 
-// ── Plan (product family — stable, metadata only) ──────────────────────────
-
 model Plan {
   id           String  @id @default(uuid())
   name         String
@@ -529,8 +533,6 @@ model Plan {
   invites     TenantInvite[]
 }
 
-// ── Plan Version (immutable commercial snapshot) ───────────────────────────
-
 enum PlanVersionStatus {
   DRAFT
   PUBLISHED
@@ -540,11 +542,10 @@ enum PlanVersionStatus {
 model PlanVersion {
   id       String            @id @default(uuid())
   planId   String
-  version  Int // monotonic per plan: 1, 2, 3…
+  version  Int
   status   PlanVersionStatus @default(DRAFT)
   currency String            @default("INR")
 
-  // ── Pricing (all values in paisa) ──
   pricingModel          PricingModel @default(STANDARD)
   onboardingFee         Int
   onboardingFeeOriginal Int?
@@ -552,7 +553,6 @@ model PlanVersion {
   billingMinimumSec     Int          @default(30)
   billingIncrementSec   Int          @default(15)
 
-  // ── Limits (NULL = unlimited) ──
   maxActiveCampaigns Int?
   maxLeadsPerBatch   Int?
   maxAgents          Int?
@@ -560,28 +560,23 @@ model PlanVersion {
   retryAutomation    Boolean @default(false)
   industryPackLimit  Int?
 
-  // ── Capabilities ──
   callingChannel CallingChannel @default(SHARED)
   brochureUpload Boolean        @default(false)
 
-  // ── Feature Tiers ──
   dashboardTier   DashboardTier   @default(BASIC)
   agentCapability AgentCapability @default(BASIC)
   integrations    IntegrationTier @default(NONE)
   supportTier     SupportTier     @default(STANDARD)
 
-  // ── Wallet / Bonus ──
   lowBalanceThreshold Int  @default(10000)
   includedBalance     Int  @default(0)
   bonusValidityDays   Int?
 
-  // ── Lifecycle ──
   publishedAt DateTime?
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // ── Relations ──
   plan        Plan              @relation(fields: [planId], references: [id])
   tenantPlans TenantPlan[]
   calls       Call[]
@@ -591,8 +586,6 @@ model PlanVersion {
   @@unique([planId, version])
   @@index([status])
 }
-
-// ── Tenant Plan (current assignment + overrides) ───────────────────────────
 
 enum TenantPlanStatus {
   PENDING_PAYMENT
@@ -604,11 +597,10 @@ enum TenantPlanStatus {
 model TenantPlan {
   id            String           @id @default(uuid())
   tenantId      String           @unique
-  planId        String // family reference
-  planVersionId String // exact commercial version
+  planId        String
+  planVersionId String
   status        TenantPlanStatus @default(PENDING_PAYMENT)
 
-  // ── Enterprise overrides (NULL = inherit from PlanVersion) ──
   onboardingFeeOverride Int?
   perMinuteRateOverride Int?
 
@@ -627,8 +619,6 @@ model TenantPlan {
   @@index([planVersionId])
   @@index([status])
 }
-
-// ── Tenant Plan Event (immutable audit log) ────────────────────────────────
 
 enum TenantPlanEventType {
   CREATED
@@ -664,14 +654,14 @@ model TenantPlanEvent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WALLET 
+// WALLET  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Wallet {
   id             String    @id @default(uuid())
   tenantId       String    @unique
-  cashBalance    Int       @default(0) // cash from recharges only
-  bonusBalance   Int       @default(0) // promotional balance only
+  cashBalance    Int       @default(0)
+  bonusBalance   Int       @default(0)
   bonusExpiresAt DateTime?
   currency       String    @default("INR")
   isActive       Boolean   @default(true)
@@ -683,15 +673,13 @@ model Wallet {
   recharges    Recharge[]
 }
 
-// ── Wallet Transaction (append-only ledger) ────────────────────────────────
-
 enum WalletTxType {
-  CREDIT // cash added via recharge
-  DEBIT // spent on calls
-  BONUS // promotional bonus granted
-  BONUS_EXPIRY // bonus clawed back on expiry
-  REFUND // reversal of a previous debit
-  ADJUSTMENT // manual admin correction
+  CREDIT
+  DEBIT
+  BONUS
+  BONUS_EXPIRY
+  REFUND
+  ADJUSTMENT
 }
 
 enum WalletTxSourceType {
@@ -706,12 +694,12 @@ enum WalletTxSourceType {
 model WalletTransaction {
   id       String @id @default(uuid())
   walletId String
-  tenantId String // denormalized for query speed; app enforces consistency
+  tenantId String
 
   type       WalletTxType
-  amount     Int // always positive; type determines direction
-  cashDelta  Int // signed: how cash changed (+/-)
-  bonusDelta Int // signed: how bonus changed (+/-)
+  amount     Int
+  cashDelta  Int
+  bonusDelta Int
 
   cashBalanceAfter  Int
   bonusBalanceAfter Int
@@ -720,22 +708,18 @@ model WalletTransaction {
 
   sourceType     WalletTxSourceType?
   sourceId       String?
-  idempotencyKey String? // explicit idempotency guard
+  idempotencyKey String?
 
   createdAt DateTime @default(now())
   createdBy String?
 
   wallet Wallet @relation(fields: [walletId], references: [id])
 
-  // Idempotency: one transaction per (wallet, key) when key is provided.
-  // Postgres treats NULLs as distinct, so rows without a key are unconstrained.
   @@unique([walletId, idempotencyKey], name: "uniq_wallet_tx_idem")
   @@index([tenantId, createdAt])
   @@index([walletId, createdAt])
   @@index([sourceType, sourceId])
 }
-
-// ── Recharge (payment operation) ───────────────────────────────────────────
 
 enum RechargeStatus {
   INITIATED
@@ -758,16 +742,14 @@ model Recharge {
   purpose  RechargePurpose @default(WALLET_TOPUP)
   status   RechargeStatus
 
-  // ── Provider fields ──
   provider          String  @default("razorpay")
   razorpayOrderId   String? @unique
   razorpayPaymentId String? @unique
   razorpaySignature String?
   failureReason     String?
 
-  // ── Association ──
-  tenantPlanId String? // links onboarding payment to the TenantPlan it activates
-  targetPlanVersionId String? 
+  tenantPlanId        String?
+  targetPlanVersionId String?
 
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -780,7 +762,7 @@ model Recharge {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BOLNA API KEYS
+// BOLNA API KEYS  (UNCHANGED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model BolnaApiKey {
@@ -791,12 +773,12 @@ model BolnaApiKey {
   isPlatformDefault Boolean         @default(false)
   isActive          Boolean         @default(true)
 
-  createdBy      String // PlatformAdmin userId
+  createdBy      String
   lastAccessedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  tenants Tenant[] // Reverse relation
+  tenants Tenant[]
 }
 
 enum BolnaApiKeyType {
@@ -816,9 +798,9 @@ model TenantInvite {
   acceptedAt            DateTime?
   resendCount           Int          @default(0)
   lastResentAt          DateTime?
-  skipPayment           Boolean      @default(false)       // ← NEW
-  discountPercent       Int          @default(0)           // ← NEW (0-100)
-  creditIncludedBalance Boolean      @default(true)        // ← NEW
+  skipPayment           Boolean      @default(false)
+  discountPercent       Int          @default(0)
+  creditIncludedBalance Boolean      @default(true)
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
@@ -836,23 +818,8 @@ enum InviteStatus {
   REVOKED
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// INDUSTRY ENUM (Phase 1 — used by PlatformAgent; IndustryPack comes in Phase 3)
-// ─────────────────────────────────────────────────────────────────────────────
-
-enum Industry {
-  GENERIC
-  REAL_ESTATE
-  BFSI
-  HEALTHCARE
-  RECRUITMENT
-  EDUCATION
-  ECOMMERCE
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PLATFORM AGENT (pre-built templates managed by KOOI admins)
+// PLATFORM AGENT  [CHANGED — replaced extractionCategories 1:M with M2M]
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PlatformAgent {
@@ -877,47 +844,48 @@ model PlatformAgent {
   industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
   assistants    Assistant[]
-  extractionCategories ExtractionCategory[]
+
+  // [NEW] M2M relations
+  categories      PlatformAgentCategory[]
+  bolnaBindings   AgentBolnaExtractionBinding[]
 
   @@index([industryPackId])
   @@index([category])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXTRACTION CATEGORY (synced from Bolna, platform-scoped catalog)
+// EXTRACTION CATEGORY  [CHANGED — removed bolnaId, industry, platformAgentId]
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionCategory {
   id          String   @id @default(uuid())
-  bolnaId     String?  @unique
   slug        String   @unique
-  name        String
+  name        String   // [NEW] case-insensitive unique via raw SQL index
   model       String   @default("gpt-4.1-mini")
-  industry    Industry @default(GENERIC)
+
   description String?
   isActive    Boolean  @default(true)
+ 
 
-  platformAgentId String?
-  platformAgent   PlatformAgent? @relation(fields: [platformAgentId], references: [id], onDelete: SetNull)
-
-  dispositions ExtractionDisposition[]
+  // [NEW] M2M relations
+  industries      ExtractionCategoryIndustry[]
+  dispositions    ExtractionCategoryDisposition[]
+  platformAgents  PlatformAgentCategory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([industry])
-  @@index([platformAgentId])
+  @@index([slug])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXTRACTION DISPOSITION (synced from Bolna, platform-scoped catalog)
+// EXTRACTION DISPOSITION  [CHANGED — removed bolnaId, industry, categoryId]
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionDisposition {
   id          String   @id @default(uuid())
-  bolnaId     String?  @unique
   slug        String   @unique
-  name        String
+  name        String   // [NEW] case-insensitive unique via raw SQL index
   question    String
   systemPrompt String?
   model       String   @default("gpt-4.1-mini")
@@ -928,34 +896,34 @@ model ExtractionDisposition {
   subjectiveTypeConfig Json?
   objectiveOptions     Json?
 
-  industry    Industry @default(GENERIC)
+  // [REMOVED] industry    Industry @default(GENERIC)
   description String?
   isActive    Boolean  @default(true)
 
-  categoryId String
-  category   ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // [NEW] M2M relations
+  industries      ExtractionDispositionIndustry[]
+  categories      ExtractionCategoryDisposition[]
+  bolnaBindings   AgentBolnaExtractionBinding[]
+  callAnalyses    CallAnalysis[]  // [NEW] reverse from CallAnalysis.extractionDispositionId
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([industry])
-  @@index([categoryId])
+  @@index([slug])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INDUSTRY PACK (admin-curated grouping per industry)
+// INDUSTRY PACK  [CHANGED — removed industry enum field]
 // ─────────────────────────────────────────────────────────────────────────────
 
 model IndustryPack {
   id          String   @id @default(uuid())
   slug        String   @unique
-  name        String
-  industry    Industry @unique
+  name        String   // [NEW] case-insensitive unique via raw SQL index
   description String?
   icon        String?
 
-  // Compliance rules (stored now, enforced in future phases)
-  allowedCallingHours Json?   // { start: "09:00", end: "21:00", tz: "Asia/Kolkata" }
+  allowedCallingHours Json?
   requiresConsent     Boolean @default(false)
 
   isActive  Boolean  @default(true)
@@ -964,5 +932,80 @@ model IndustryPack {
 
   platformAgents PlatformAgent[]
 
-  @@index([industry])
+  // [NEW] M2M relations
+  extractionCategories   ExtractionCategoryIndustry[]
+  extractionDispositions ExtractionDispositionIndustry[]
+
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [NEW] JUNCTION TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Category ↔ Industry M2M ──────────────────────────────────────────────────
+model ExtractionCategoryIndustry {
+  categoryId     String
+  industryPackId String
+
+  category     ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  industryPack IndustryPack       @relation(fields: [industryPackId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, industryPackId])
+  @@index([industryPackId])
+}
+
+// ── Disposition ↔ Industry M2M ───────────────────────────────────────────────
+model ExtractionDispositionIndustry {
+  dispositionId  String
+  industryPackId String
+
+  disposition  ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+  industryPack IndustryPack          @relation(fields: [industryPackId], references: [id], onDelete: Cascade)
+
+  @@id([dispositionId, industryPackId])
+  @@index([industryPackId])
+}
+
+// ── Category ↔ Disposition M2M ───────────────────────────────────────────────
+model ExtractionCategoryDisposition {
+  categoryId    String
+  dispositionId String
+  sortOrder     Int      @default(0)
+
+  category    ExtractionCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  disposition ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, dispositionId])
+  @@index([dispositionId])
+}
+
+// ── Agent ↔ Category M2M ────────────────────────────────────────────────────
+model PlatformAgentCategory {
+  platformAgentId String
+  categoryId      String
+  sortOrder       Int      @default(0)
+
+  platformAgent PlatformAgent      @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
+  category      ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([platformAgentId, categoryId])
+  @@index([categoryId])
+}
+
+// ── Bolna Binding (tracks per-agent Bolna copies) ────────────────────────────
+model AgentBolnaExtractionBinding {
+  id                 String   @id @default(uuid())
+  platformAgentId    String
+  dispositionId      String
+  bolnaAgentId       String   // PlatformAgent.bolnaId snapshot
+  bolnaCategoryId    String   // Bolna's category ID (may be per-agent "General")
+  bolnaDispositionId String   // Bolna's disposition ID (copy-on-write)
+  lastSyncedAt       DateTime @default(now())
+
+  platformAgent PlatformAgent         @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@unique([platformAgentId, dispositionId])
+  @@index([bolnaAgentId])
 }

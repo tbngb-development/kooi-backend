@@ -17,6 +17,7 @@ import {
 import type {
   WebhookRepository,
   ResolvedCallContext,
+  AgentDispositionMap,
 } from "../../application/interfaces/webhook-repository.interface";
 import type {
   CallHistoryItem,
@@ -313,6 +314,73 @@ export class PrismaWebhookRepository implements WebhookRepository {
         chargedAmount: data.chargedAmount,
       },
     });
+  }
+
+  // ── [NEW] Agent Disposition Resolution ──────────────────────────────────
+
+  async getAgentDispositionsForCall(
+    callId: string,
+  ): Promise<AgentDispositionMap> {
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: {
+        campaign: {
+          select: {
+            assistant: {
+              select: {
+                platformAgentId: true,
+                platformAgent: {
+                  select: {
+                    id: true,
+                    categories: {
+                      select: {
+                        category: {
+                          select: {
+                            dispositions: {
+                              select: {
+                                disposition: {
+                                  select: {
+                                    id: true,
+                                    name: true,
+                                    slug: true,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const platformAgent = call?.campaign?.assistant?.platformAgent ?? null;
+    const platformAgentId = call?.campaign?.assistant?.platformAgentId ?? null;
+
+    if (!platformAgent) {
+      return { platformAgentId, dispositions: [] };
+    }
+
+    const seen = new Set<string>();
+    const dispositions: { id: string; name: string; slug: string }[] = [];
+
+    // All dispositions come through categories (including "General")
+    for (const cat of platformAgent.categories) {
+      for (const cd of cat.category.dispositions) {
+        if (!seen.has(cd.disposition.id)) {
+          seen.add(cd.disposition.id);
+          dispositions.push(cd.disposition);
+        }
+      }
+    }
+
+    return { platformAgentId, dispositions };
   }
 
   private toMapContext(c: {

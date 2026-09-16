@@ -2,21 +2,30 @@ import type { Request, Response, NextFunction } from "express";
 import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
+
+// Use Case Imports
 import type { CreateCategoryUseCase } from "../application/use-cases/create-category.use-case";
 import type { UpdateCategoryUseCase } from "../application/use-cases/update-category.use-case";
 import type { DeleteCategoryUseCase } from "../application/use-cases/delete-category.use-case";
 import type { GetCategoryUseCase } from "../application/use-cases/get-category.use-case";
 import type { ListCategoriesUseCase } from "../application/use-cases/list-categories.use-case";
-import type { SyncCategoriesFromBolnaUseCase } from "../application/use-cases/sync-categories-from-bolna.use-case";
 import type { CreateDispositionUseCase } from "../application/use-cases/create-disposition.use-case";
 import type { UpdateDispositionUseCase } from "../application/use-cases/update-disposition.use-case";
 import type { DeleteDispositionUseCase } from "../application/use-cases/delete-disposition.use-case";
 import type { GetDispositionUseCase } from "../application/use-cases/get-disposition.use-case";
 import type { ListDispositionsUseCase } from "../application/use-cases/list-dispositions.use-case";
-import type { SyncDispositionsFromBolnaUseCase } from "../application/use-cases/sync-dispositions-from-bolna.use-case";
-import type { ListBolnaCategoriesUseCase } from "../application/use-cases/list-bolna-categories.use-case";
-import type { ListBolnaDispositionsUseCase } from "../application/use-cases/list-bolna-dispositions.use-case";
-import type { ImportExtractionsFromBolnaUseCase } from "../application/use-cases/import-extractions-from-bolna.use-case";
+
+// M2M Use Case Imports
+import type { AttachIndustriesToCategoryUseCase } from "../application/use-cases/attach-industries-to-category.use-case";
+import type { DetachIndustryFromCategoryUseCase } from "../application/use-cases/detach-industry-from-category.use-case";
+import type { AttachDispositionsToCategoryUseCase } from "../application/use-cases/attach-dispositions-to-category.use-case";
+import type { DetachDispositionFromCategoryUseCase } from "../application/use-cases/detach-disposition-from-category.use-case";
+import type { AttachIndustriesToDispositionUseCase } from "../application/use-cases/attach-industries-to-disposition.use-case";
+import type { DetachIndustryFromDispositionUseCase } from "../application/use-cases/detach-industry-from-disposition.use-case";
+
+// Discovery Use Case Imports
+import type { PreviewBolnaCategoriesUseCase } from "../application/use-cases/preview-bolna-categories.use-case";
+import type { PreviewBolnaDispositionsUseCase } from "../application/use-cases/preview-bolna-dispositions.use-case";
 
 export class AdminExtractionController {
   constructor(
@@ -25,19 +34,24 @@ export class AdminExtractionController {
     private readonly deleteCategory: DeleteCategoryUseCase,
     private readonly getCategory: GetCategoryUseCase,
     private readonly listCategories: ListCategoriesUseCase,
-    private readonly syncCategories: SyncCategoriesFromBolnaUseCase,
     private readonly createDisposition: CreateDispositionUseCase,
     private readonly updateDisposition: UpdateDispositionUseCase,
     private readonly deleteDisposition: DeleteDispositionUseCase,
     private readonly getDisposition: GetDispositionUseCase,
     private readonly listDispositions: ListDispositionsUseCase,
-    private readonly syncDispositions: SyncDispositionsFromBolnaUseCase,
-    private readonly listBolnaCategories: ListBolnaCategoriesUseCase,
-    private readonly listBolnaDispositions: ListBolnaDispositionsUseCase,
-    private readonly importExtractionsFromBolna: ImportExtractionsFromBolnaUseCase,
+    // M2M
+    private readonly attachIndustriesToCategory: AttachIndustriesToCategoryUseCase,
+    private readonly detachIndustryFromCategory: DetachIndustryFromCategoryUseCase,
+    private readonly attachDispositionsToCategory: AttachDispositionsToCategoryUseCase,
+    private readonly detachDispositionFromCategory: DetachDispositionFromCategoryUseCase,
+    private readonly attachIndustriesToDisposition: AttachIndustriesToDispositionUseCase,
+    private readonly detachIndustryFromDisposition: DetachIndustryFromDispositionUseCase,
+    // Discovery
+    private readonly previewBolnaCategories: PreviewBolnaCategoriesUseCase,
+    private readonly previewBolnaDispositions: PreviewBolnaDispositionsUseCase,
   ) {}
 
-  // ── Categories ──────────────────────────────────────────────
+  // ── Categories CRUD ────────────────────────────────────────────────────────
 
   createCategoryHandler = async (
     req: Request,
@@ -107,22 +121,78 @@ export class AdminExtractionController {
     }
   };
 
-  syncCategoriesHandler = async (
+  // ── Categories M2M Associations ───────────────────────────────────────────
+
+  attachIndustriesToCategoryHandler = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.syncCategories.execute(
-        param(req, "platformAgentId"),
-      );
-      sendSuccess(res, data);
+      await this.attachIndustriesToCategory.execute(param(req, "id"), req.body);
+      sendSuccess(res, {
+        message: "Industries attached to category successfully",
+      });
     } catch (err) {
       next(err);
     }
   };
 
-  // ── Dispositions ────────────────────────────────────────────
+  detachIndustryFromCategoryHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      await this.detachIndustryFromCategory.execute(
+        param(req, "id"),
+        param(req, "industryPackId"),
+      );
+      sendSuccess(res, {
+        message: "Industry detached from category successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  attachDispositionsToCategoryHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      await this.attachDispositionsToCategory.execute(
+        param(req, "id"),
+        req.body,
+      );
+      sendSuccess(res, {
+        message: "Dispositions attached to category successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  detachDispositionFromCategoryHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      await this.detachDispositionFromCategory.execute(
+        param(req, "id"),
+        param(req, "dispositionId"),
+      );
+      sendSuccess(res, {
+        message: "Disposition detached from category successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── Dispositions CRUD ─────────────────────────────────────────────────────
 
   createDispositionHandler = async (
     req: Request,
@@ -194,14 +264,54 @@ export class AdminExtractionController {
     }
   };
 
-  syncDispositionsHandler = async (
+  // ── Dispositions M2M Associations ────────────────────────────────────────
+
+  attachIndustriesToDispositionHandler = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.syncDispositions.execute(
-        param(req, "platformAgentId"),
+      await this.attachIndustriesToDisposition.execute(
+        param(req, "id"),
+        req.body,
+      );
+      sendSuccess(res, {
+        message: "Industries attached to disposition successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  detachIndustryFromDispositionHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      await this.detachIndustryFromDisposition.execute(
+        param(req, "id"),
+        param(req, "industryPackId"),
+      );
+      sendSuccess(res, {
+        message: "Industry detached from disposition successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── Bolna Discovery & Preview ────────────────────────────────────────────
+
+  previewBolnaCategoriesHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const data = await this.previewBolnaCategories.execute(
+        req.query.agentBolnaId as string,
       );
       sendSuccess(res, data);
     } catch (err) {
@@ -209,44 +319,15 @@ export class AdminExtractionController {
     }
   };
 
-  // ── Bolna Discovery & Import ───────────────────────────────
-
-  listBolnaCategoriesHandler = async (
+  previewBolnaDispositionsHandler = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.listBolnaCategories.execute(
-        param(req, "platformAgentId"),
+      const data = await this.previewBolnaDispositions.execute(
+        req.query.agentBolnaId as string | undefined,
       );
-      sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  listBolnaDispositionsHandler = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const platformAgentId = req.query.platformAgentId as string | undefined;
-      const data = await this.listBolnaDispositions.execute(platformAgentId);
-      sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  importExtractionsFromBolnaHandler = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const data = await this.importExtractionsFromBolna.execute(req.body);
       sendSuccess(res, data);
     } catch (err) {
       next(err);

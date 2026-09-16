@@ -5,56 +5,76 @@ export class PreviewBolnaAgentUseCase {
   constructor(private readonly templateProvider: BolnaTemplateProvider) {}
 
   async execute(bolnaId: string) {
-    // Fetch agent blueprint
+    // 1. Fetch agent blueprint from Bolna
     const template = await this.templateProvider.fetchTemplate(bolnaId);
 
-    // Fetch extraction categories + dispositions from Bolna
+    // 2. Fetch extraction categories + dispositions from Bolna
     let extractions: any[] = [];
     try {
       const categoryData = await this.templateProvider.listCategories(bolnaId);
-      extractions = categoryData.categories ?? [];
+      extractions = categoryData?.categories ?? [];
     } catch {
-      // Agent may have no extractions — that's fine
+      // Agent may have no extractions on Bolna — that's fine
     }
 
-    // Check what's already imported locally
+    // 3. Check if platform agent is already registered locally
     const existingAgent = await prisma.platformAgent.findUnique({
       where: { bolnaId },
       select: { id: true, slug: true },
     });
 
-    const existingCategoryBolnaIds = new Set(
-      (
-        await prisma.extractionCategory.findMany({
-          where: { bolnaId: { not: null } },
-          select: { bolnaId: true },
-        })
-      ).map((c) => c.bolnaId),
+    // 4. Load local catalog names to detect duplicates
+    const [localCategories, localDispositions] = await Promise.all([
+      prisma.extractionCategory.findMany({ select: { name: true } }),
+      prisma.extractionDisposition.findMany({ select: { name: true } }),
+    ]);
+
+    const localCategoryNames = new Set(
+      localCategories.map((c) => c.name.toLowerCase()),
+    );
+    const localDispositionNames = new Set(
+      localDispositions.map((d) => d.name.toLowerCase()),
     );
 
-    const existingDispositionBolnaIds = new Set(
-      (
-        await prisma.extractionDisposition.findMany({
-          where: { bolnaId: { not: null } },
-          select: { bolnaId: true },
-        })
-      ).map((d) => d.bolnaId),
-    );
+    // 5. Check existing Bolna bindings for this agent if registered
+    let boundDispositionBolnaIds = new Set<string>();
+    if (existingAgent) {
+      const bindings = await prisma.agentBolnaExtractionBinding.findMany({
+        where: { platformAgentId: existingAgent.id },
+        select: { bolnaDispositionId: true },
+      });
+      boundDispositionBolnaIds = new Set(
+        bindings.map((b) => b.bolnaDispositionId),
+      );
+    }
 
-    const enrichedExtractions = extractions.map((cat: any) => ({
-      bolnaId: cat.id,
-      name: cat.name,
-      model: cat.model,
-      alreadyImported: existingCategoryBolnaIds.has(cat.id),
-      dispositions: (cat.dispositions ?? []).map((disp: any) => ({
-        bolnaId: disp.id,
-        name: disp.name,
-        question: disp.question,
-        isSubjective: disp.is_subjective,
-        isObjective: disp.is_objective,
-        alreadyImported: existingDispositionBolnaIds.has(disp.id),
-      })),
-    }));
+    // 6. Enrich extraction tree with catalog and binding status
+    const enrichedExtractions = extractions.map((cat: any) => {
+      const categoryExists = localCategoryNames.has(cat.name.toLowerCase());
+
+      return {
+        bolnaId: cat.id,
+        name: cat.name,
+        model: cat.model,
+        alreadyImported: categoryExists,
+        dispositions: (cat.dispositions ?? []).map((disp: any) => {
+          const dispositionExists = localDispositionNames.has(
+            disp.name.toLowerCase(),
+          );
+          const isBound = boundDispositionBolnaIds.has(disp.id);
+
+          return {
+            bolnaId: disp.id,
+            name: disp.name,
+            question: disp.question,
+            isSubjective: disp.is_subjective,
+            isObjective: disp.is_objective,
+            alreadyImported: dispositionExists,
+            isBoundToAgent: isBound,
+          };
+        }),
+      };
+    });
 
     return {
       agent: {

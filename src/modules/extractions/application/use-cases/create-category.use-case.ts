@@ -1,45 +1,32 @@
 import type { ExtractionRepository } from "../interfaces/extraction-repository.interface";
-import type { BolnaExtractionProvider } from "../interfaces/bolna-extraction-provider.interface";
 import type { CreateCategoryDTO } from "../dto/extraction.dto";
-import { DuplicateExtractionSlugError } from "../../domain/errors/extraction.errors";
-import prisma from "../../../../shared/config/database/prisma";
+import type { ExtractionCategory } from "@prisma/client";
+import {
+  DuplicateExtractionCategoryNameError,
+  DuplicateExtractionCategorySlugError,
+} from "../../domain/errors/extraction.errors";
+import { generateSlug } from "../../domain/rules/slug-generator";
 
 export class CreateCategoryUseCase {
-  constructor(
-    private readonly repository: ExtractionRepository,
-    private readonly bolnaProvider: BolnaExtractionProvider,
-  ) {}
+  constructor(private readonly repository: ExtractionRepository) {}
 
-  async execute(dto: CreateCategoryDTO) {
-    const existing = await this.repository.findCategoryBySlug(dto.slug);
-    if (existing) throw new DuplicateExtractionSlugError(dto.slug);
-
-    // If linked to a PlatformAgent, push to Bolna first
-    let bolnaId: string | null = null;
-    if (dto.platformAgentId) {
-      const agent = await prisma.platformAgent.findUnique({
-        where: { id: dto.platformAgentId },
-      });
-      if (agent?.bolnaId) {
-        const bolnaCategory = await this.bolnaProvider.createCategory(agent.bolnaId, {
-          name: dto.name,
-          model: dto.model ?? "gpt-4.1-mini",
-        });
-        bolnaId = bolnaCategory.id;
-      }
+  async execute(dto: CreateCategoryDTO): Promise<ExtractionCategory> {
+    // 1. Check case-insensitive name uniqueness
+    const existingByName = await this.repository.findCategoryByNameInsensitive(
+      dto.name,
+    );
+    if (existingByName) {
+      throw new DuplicateExtractionCategoryNameError(dto.name);
     }
 
-    const category = await this.repository.createCategory(dto);
-
-    if (bolnaId) {
-      return this.repository.updateCategory(category.id, { } as any).then(() =>
-        prisma.extractionCategory.update({
-          where: { id: category.id },
-          data: { bolnaId },
-        }),
-      );
+    // 2. Check slug uniqueness (edge case: different names → same slug)
+    const slug = generateSlug(dto.name);
+    const existingBySlug = await this.repository.findCategoryBySlug(slug);
+    if (existingBySlug) {
+      throw new DuplicateExtractionCategorySlugError(slug);
     }
 
-    return category;
+    // 3. Create with optional M2M relations
+    return this.repository.createCategory(dto);
   }
 }

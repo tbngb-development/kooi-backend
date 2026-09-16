@@ -20,12 +20,13 @@ import type {
   ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
-import type { GenerateDynamicExtractionsUseCase } from "../../../calls/application/use-cases/generate-dynamic-extractions.use-case";
+import prisma from "../../../../shared/config/database/prisma";
+import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 export class ProcessCallWebhookUseCase {
   constructor(
     private readonly webhookRepo: WebhookRepository,
-    private readonly generateDynamicExtractions: GenerateDynamicExtractionsUseCase,
+    // [REMOVED] private readonly generateDynamicExtractions: GenerateDynamicExtractionsUseCase,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
   ) {}
 
@@ -212,14 +213,16 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
+    // [NEW] Map extracted_data to local dispositions (replaces GenerateDynamicExtractionsUseCase)
     try {
-      await this.generateDynamicExtractions.execute(
+      await this.mapCallExtractions(
         call.id,
-        payload.extracted_data as unknown as Record<string, any>,
+        call.tenantId,
+        payload.extracted_data as Record<string, any> | null | undefined,
       );
     } catch (err) {
-      // Best-effort — don't fail the webhook if extraction parsing fails
-      console.error("[Webhook] Dynamic extraction generation failed:", err);
+      // Best-effort — don't fail the webhook if extraction mapping fails
+      console.error("[Webhook] Dynamic extraction mapping failed:", err);
     }
 
     const parsed = this.parseExtractionData(payload.extracted_data);
@@ -234,7 +237,7 @@ export class ProcessCallWebhookUseCase {
       duration,
       recording:
         payload.telephony_data?.recording_url ?? payload.recording_url ?? null,
-      cost: payload.total_cost ?? null, // Bolna cost in USD cents
+      cost: payload.total_cost ?? null,
       extracted_data: payload.extracted_data,
       endedAt: new Date(),
     });
@@ -279,7 +282,6 @@ export class ProcessCallWebhookUseCase {
         console.error("[Webhook] wallet debit failed:", err);
       }
     }
-    // ───────────────────────────────────────────────────────────────
 
     await this.checkBatchCompletion(call);
   }
@@ -312,6 +314,126 @@ export class ProcessCallWebhookUseCase {
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "PENDING");
     await this.checkBatchCompletion(call);
+  }
+
+  /**
+   * Maps Bolna's extracted_data to local disposition IDs and stores
+   * the result in CallAnalysis.dynamicExtractions + extractionDispositionId.
+   *
+   * Replaces the old GenerateDynamicExtractionsUseCase.
+   */
+  private async mapCallExtractions(
+    callId: string,
+    tenantId: string,
+    extractedData: Record<string, any> | null | undefined,
+  ): Promise<void> {
+    if (!extractedData || Object.keys(extractedData).length === 0) return;
+
+    const agentMap = await this.webhookRepo.getAgentDispositionsForCall(callId);
+
+    if (!agentMap.platformAgentId || agentMap.dispositions.length === 0) {
+      await prisma.callAnalysis.upsert({
+        where: { callId },
+        create: {
+          callId,
+          tenantId,
+          extractionResult: extractedData as InputJsonValue,
+        },
+        update: {
+          extractionResult: extractedData as InputJsonValue,
+        },
+      });
+      return;
+    }
+
+    // Build lookup — all dispositions come through categories now
+    const dispositionLookup = new Map<string, { id: string; slug: string }>();
+    for (const disp of agentMap.dispositions) {
+      dispositionLookup.set(disp.name.toLowerCase(), {
+        id: disp.id,
+        slug: disp.slug,
+      });
+      dispositionLookup.set(disp.slug.toLowerCase(), {
+        id: disp.id,
+        slug: disp.slug,
+      });
+    }
+
+    const dynamicResult: Record<string, any> = {};
+    let primaryDispositionId: string | null = null;
+
+    for (const [categoryName, dispositions] of Object.entries(extractedData)) {
+      if (typeof dispositions !== "object" || dispositions === null) continue;
+
+      const categoryResult: Record<string, any> = {};
+
+      for (const [dispName, value] of Object.entries(
+        dispositions as Record<string, any>,
+      )) {
+        if (typeof value !== "object" || value === null) continue;
+
+        const localDisp =
+          dispositionLookup.get(dispName.toLowerCase()) ??
+          dispositionLookup.get(dispName);
+
+        categoryResult[dispName] = {
+          localDispositionId: localDisp?.id ?? null,
+          localDispositionSlug: localDisp?.slug ?? null,
+          subjective: value.subjective ?? null,
+          objective: value.objective ?? null,
+          confidence: value.confidence ?? null,
+          confidenceLabel: value.confidence_label ?? null,
+          reasoning: {
+            subjective: value.reasoning_subjective ?? null,
+            objective: value.reasoning_objective ?? null,
+          },
+          validation: value.validation ?? null,
+        };
+
+        if (!primaryDispositionId && localDisp && value.objective != null) {
+          const slugLower = localDisp.slug.toLowerCase();
+          if (
+            slugLower.includes("disposition") ||
+            slugLower.includes("outcome")
+          ) {
+            primaryDispositionId = localDisp.id;
+          }
+        }
+      }
+
+      dynamicResult[categoryName] = categoryResult;
+    }
+
+    if (!primaryDispositionId) {
+      for (const [, dispositions] of Object.entries(dynamicResult)) {
+        for (const [, result] of Object.entries(
+          dispositions as Record<string, any>,
+        )) {
+          const r = result as any;
+          if (r.localDispositionId && r.objective != null) {
+            primaryDispositionId = r.localDispositionId;
+            break;
+          }
+        }
+        if (primaryDispositionId) break;
+      }
+    }
+
+    await prisma.callAnalysis.upsert({
+      where: { callId },
+      create: {
+        callId,
+        tenantId,
+        extractionResult: extractedData as InputJsonValue,
+        dynamicExtractions: dynamicResult as InputJsonValue,
+        extractionDispositionId: primaryDispositionId,
+      },
+      update: {
+        extractionResult: extractedData as InputJsonValue,
+        dynamicExtractions: dynamicResult as InputJsonValue,
+        extractionDispositionId: primaryDispositionId,
+      },
+    });
   }
 
   // ── Completion Checks ────────────────────────────────────────────────────

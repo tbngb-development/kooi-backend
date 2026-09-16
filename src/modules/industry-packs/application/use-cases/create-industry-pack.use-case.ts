@@ -2,7 +2,7 @@ import type { IndustryPackRepository } from "../interfaces/industry-pack-reposit
 import type { CreateIndustryPackDTO } from "../dto/industry-pack.dto";
 import {
   DuplicateIndustryPackSlugError,
-  DuplicateIndustryPackIndustryError,
+  DuplicateIndustryPackNameError,
 } from "../../domain/errors/industry-pack.errors";
 
 export class CreateIndustryPackUseCase {
@@ -10,10 +10,14 @@ export class CreateIndustryPackUseCase {
 
   async execute(dto: CreateIndustryPackDTO) {
     const existingSlug = await this.repository.findBySlug(dto.slug);
-    if (existingSlug) throw new DuplicateIndustryPackSlugError(dto.slug);
+    if (existingSlug) {
+      throw new DuplicateIndustryPackSlugError(dto.slug);
+    }
 
-    const existingIndustry = await this.repository.findByIndustry(dto.industry);
-    if (existingIndustry) throw new DuplicateIndustryPackIndustryError(dto.industry);
+    const existingName = await this.repository.findByNameInsensitive(dto.name);
+    if (existingName) {
+      throw new DuplicateIndustryPackNameError(dto.name);
+    }
 
     return this.repository.create(dto);
   }
