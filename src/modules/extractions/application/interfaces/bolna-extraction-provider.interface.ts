@@ -24,6 +24,12 @@ export interface BolnaExtractionProvider {
     bolnaApiKeyId?: string,
   ): Promise<BolnaExtractionCategoryResponse>;
 
+  updateCategory(
+    categoryId: string,
+    payload: { name?: string; model?: string },
+    bolnaApiKeyId?: string,
+  ): Promise<void>;
+
   createDisposition(
     payload: BolnaDispositionCreatePayload,
     bolnaApiKeyId?: string,

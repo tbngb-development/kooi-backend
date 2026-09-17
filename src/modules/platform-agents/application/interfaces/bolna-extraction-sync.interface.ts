@@ -4,7 +4,6 @@ import type {
   PlatformAgentRepository,
 } from "./platform-agent-repository.interface";
 
-/** Result of syncing a single disposition to Bolna */
 export interface SyncedDispositionResult {
   dispositionId: string;
   dispositionName: string;
@@ -13,7 +12,6 @@ export interface SyncedDispositionResult {
   action: "created" | "updated";
 }
 
-/** Result of removing a stale disposition from Bolna */
 export interface RemovedDispositionResult {
   dispositionId: string;
   bolnaDispositionId: string;
@@ -27,7 +25,6 @@ export interface SyncError {
   error: string;
 }
 
-/** Full sync report returned to the caller */
 export interface BolnaSyncReport {
   platformAgentId: string;
   bolnaAgentId: string;
@@ -44,12 +41,24 @@ export interface BolnaSyncReport {
   };
 }
 
+/** Lightweight remote category shape for dedup checks */
+export interface RemoteBolnaCategory {
+  id: string;
+  name: string;
+}
+
 export interface BolnaExtractionSyncService {
   syncAgentExtractions(
     config: AgentExtractionConfig,
     extractionRepo: ExtractionRepository,
     agentRepo: PlatformAgentRepository,
   ): Promise<BolnaSyncReport>;
+
+  /** List categories already on Bolna (for dedup) */
+  listRemoteCategories(
+    agentId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<RemoteBolnaCategory[]>;
 
   ensureBolnaCategory(
     agentId: string,
@@ -64,6 +73,13 @@ export interface BolnaExtractionSyncService {
     disposition: any,
     bolnaApiKeyId?: string,
   ): Promise<string>;
+
+  /** Update an existing Bolna disposition in-place (no duplicate) */
+  updateDispositionOnBolna(
+    bolnaDispositionId: string,
+    disposition: any,
+    bolnaApiKeyId?: string,
+  ): Promise<void>;
 
   removeDispositionFromBolna(
     dispositionId: string,

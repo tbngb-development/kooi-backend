@@ -11,9 +11,13 @@ export interface BolnaTemplateData {
 }
 
 export interface BolnaTemplateProvider {
-  fetchTemplate(bolnaId: string, bolnaApiKeyId: string): Promise<BolnaTemplateData>;
+  fetchTemplate(
+    bolnaId: string,
+    bolnaApiKeyId: string,
+  ): Promise<BolnaTemplateData>;
   listAllAgents(): Promise<BolnaAgentResponse[]>;
   listCategories(
     agentBolnaId: string,
+    bolnaApiKeyId?: string,
   ): Promise<BolnaExtractionCategoryListResponse>;
 }

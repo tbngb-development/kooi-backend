@@ -7,8 +7,7 @@ import type { ExtractionRepository } from "../../../extractions/application/inte
 import type {
   BolnaExtractionSyncService,
   BolnaSyncReport,
-  SyncedDispositionResult,
-  SyncError,
+  RemoteBolnaCategory,
 } from "../../application/interfaces/bolna-extraction-sync.interface";
 
 export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncService {
@@ -16,10 +15,10 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
 
   async syncAgentExtractions(
     config: AgentExtractionConfig,
-    extractionRepo: ExtractionRepository,
-    agentRepo: PlatformAgentRepository,
+    _extractionRepo: ExtractionRepository,
+    _agentRepo: PlatformAgentRepository,
   ): Promise<BolnaSyncReport> {
-    const report: BolnaSyncReport = {
+    return {
       platformAgentId: config.platformAgentId,
       bolnaAgentId: config.bolnaId,
       synced: [],
@@ -34,113 +33,25 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
         failed: 0,
       },
     };
-
-    const bolnaApiKeyId = config.bolnaApiKeyId;
-
-    let remoteCategoriesResponse;
-    try {
-      remoteCategoriesResponse = await this.extractionProvider.listCategories(
-        config.bolnaId,
-        bolnaApiKeyId,
-      );
-    } catch (err: any) {
-      report.errors.push({
-        dispositionId: "-",
-        dispositionName: "-",
-        error: `Failed to list remote categories: ${err.message}`,
-      });
-      report.summary.failed += 1;
-      return report;
-    }
-
-    const remoteCategoryMap = new Map<string, string>();
-    for (const cat of remoteCategoriesResponse.categories || []) {
-      remoteCategoryMap.set(cat.name.toLowerCase().trim(), cat.id);
-    }
-
-    for (const catConfig of config.categories) {
-      let bolnaCategoryId = remoteCategoryMap.get(
-        catConfig.categoryName.toLowerCase().trim(),
-      );
-
-      if (!bolnaCategoryId) {
-        try {
-          bolnaCategoryId = await this.ensureBolnaCategory(
-            config.bolnaId,
-            catConfig.categoryName,
-            catConfig.model,
-            bolnaApiKeyId,
-          );
-          remoteCategoryMap.set(
-            catConfig.categoryName.toLowerCase().trim(),
-            bolnaCategoryId,
-          );
-          report.summary.categoriesCreated += 1;
-        } catch (err: any) {
-          report.errors.push({
-            dispositionId: "-",
-            dispositionName: catConfig.categoryName,
-            error: `Failed to create category '${catConfig.categoryName}': ${err.message}`,
-          });
-          continue;
-        }
-      }
-
-      for (const dispRef of catConfig.dispositions) {
-        report.summary.totalAssigned += 1;
-
-        const fullDisp = await extractionRepo.findDispositionById(
-          dispRef.dispositionId,
-        );
-        if (!fullDisp) continue;
-
-        const existingBinding = config.bolnaBindings.find(
-          (b) => b.dispositionId === dispRef.dispositionId,
-        );
-
-        if (!existingBinding) {
-          try {
-            const bolnaDispId = await this.syncDispositionToBolna(
-              config.bolnaId,
-              bolnaCategoryId,
-              fullDisp,
-              bolnaApiKeyId,
-            );
-
-            await agentRepo.upsertBolnaBinding({
-              platformAgentId: config.platformAgentId,
-              dispositionId: fullDisp.id,
-              bolnaAgentId: config.bolnaId,
-              bolnaCategoryId,
-              bolnaDispositionId: bolnaDispId,
-            });
-
-            const synced: SyncedDispositionResult = {
-              dispositionId: fullDisp.id,
-              dispositionName: fullDisp.name,
-              bolnaDispositionId: bolnaDispId,
-              bolnaCategoryId,
-              action: "created",
-            };
-            report.synced.push(synced);
-            report.summary.created += 1;
-          } catch (err: any) {
-            const syncErr: SyncError = {
-              dispositionId: fullDisp.id,
-              dispositionName: fullDisp.name,
-              error: `Failed to create disposition '${fullDisp.name}': ${err.message}`,
-            };
-            report.errors.push(syncErr);
-            report.summary.failed += 1;
-          }
-        } else {
-          report.summary.updated += 1;
-        }
-      }
-    }
-
-    return report;
   }
+
+  // ── List remote categories (for dedup) ──────────────────────────────────
+
+  async listRemoteCategories(
+    agentId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<RemoteBolnaCategory[]> {
+    const response = await this.extractionProvider.listCategories(
+      agentId,
+      bolnaApiKeyId,
+    );
+    return (response.categories ?? []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+    }));
+  }
+
+  // ── Create category ONLY if it doesn't exist ────────────────────────────
 
   async ensureBolnaCategory(
     agentId: string,
@@ -148,13 +59,26 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
     model: string,
     bolnaApiKeyId?: string,
   ): Promise<string> {
-    const createdCat = await this.extractionProvider.createCategory(
+    // Check if category already exists on this agent
+    const remoteCats = await this.listRemoteCategories(agentId, bolnaApiKeyId);
+    const existing = remoteCats.find(
+      (c) => c.name.toLowerCase().trim() === categoryName.toLowerCase().trim(),
+    );
+
+    if (existing) {
+      return existing.id; // ✅ Reuse — don't create duplicate
+    }
+
+    // Create only if truly missing
+    const created = await this.extractionProvider.createCategory(
       agentId,
       { name: categoryName, model },
       bolnaApiKeyId,
     );
-    return createdCat.id;
+    return created.id;
   }
+
+  // ── Create NEW disposition on Bolna ─────────────────────────────────────
 
   async syncDispositionToBolna(
     agentId: string,
@@ -162,24 +86,50 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
     disposition: any,
     bolnaApiKeyId?: string,
   ): Promise<string> {
-    const createdDisp = await this.extractionProvider.createDisposition(
+    const created = await this.extractionProvider.createDisposition(
       {
         agent_id: agentId,
-        category_id: categoryId,
+        category_id: categoryId, 
         name: disposition.name,
         question: disposition.question,
-        system_prompt: disposition.systemPrompt ?? undefined,
-        model: disposition.model,
-        is_subjective: disposition.isSubjective,
-        is_objective: disposition.isObjective,
-        subjective_type: disposition.subjectiveType,
-        subjective_type_config: disposition.subjectiveTypeConfig as any,
-        objective_options: disposition.objectiveOptions as any,
+        system_prompt: disposition.systemPrompt,
+        model: disposition.model ?? "gpt-4.1-mini",
+        is_subjective: disposition.isSubjective ?? false,
+        is_objective: disposition.isObjective ?? false,
+        subjective_type: disposition.subjectiveType ?? "text",
+        subjective_type_config: disposition.subjectiveTypeConfig ?? undefined,
+        objective_options: disposition.objectiveOptions ?? undefined,
       },
       bolnaApiKeyId,
     );
-    return createdDisp.id;
+    return created.id;
   }
+
+  // ── Update EXISTING disposition (PUT, copy-on-write aware) ──────────────
+
+  async updateDispositionOnBolna(
+    bolnaDispositionId: string,
+    disposition: any,
+    bolnaApiKeyId?: string,
+  ): Promise<void> {
+    await this.extractionProvider.updateDisposition(
+      bolnaDispositionId,
+      {
+        name: disposition.name,
+        question: disposition.question,
+        system_prompt: disposition.systemPrompt ?? undefined,
+        model: disposition.model ?? "gpt-4.1-mini",
+        is_subjective: disposition.isSubjective ?? false,
+        is_objective: disposition.isObjective ?? false,
+        subjective_type: disposition.subjectiveType ?? "text",
+        subjective_type_config: disposition.subjectiveTypeConfig ?? undefined,
+        objective_options: disposition.objectiveOptions ?? undefined,
+      },
+      bolnaApiKeyId,
+    );
+  }
+
+  // ── Remove (best-effort) ────────────────────────────────────────────────
 
   async removeDispositionFromBolna(
     dispositionId: string,

@@ -11,11 +11,10 @@ export class SyncBlueprintUseCase {
   ) {}
 
   async execute(id: string) {
-    // 1. Verify agent exists
     const agent = await this.agentRepository.findById(id);
     if (!agent) throw new PlatformAgentNotFoundError(id);
 
-    // 2. Sync agent blueprint config & prompts from Bolna
+    // 1. Sync agent blueprint config & prompts from Bolna
     const template = await this.templateProvider.fetchTemplate(
       agent.bolnaId,
       agent.bolnaApiKeyId,
@@ -25,17 +24,18 @@ export class SyncBlueprintUseCase {
       systemPrompt: template.systemPrompt,
     });
 
-    // 3. Sync extractions from Bolna blueprint into local M2M catalog (best-effort)
+    // 2. Sync extractions from Bolna blueprint into local M2M catalog
     const extractionSync = { categories: 0, dispositions: 0 };
 
     try {
+      // ✅ FIXED: pass agent.bolnaApiKeyId
       const categoryData = await this.templateProvider.listCategories(
         agent.bolnaId,
+        agent.bolnaApiKeyId,
       );
       const categories = categoryData?.categories ?? [];
 
       for (const cat of categories) {
-        // Find existing category by name (case-insensitive) or create a new catalog entry
         let localCat =
           await this.extractionRepository.findCategoryByNameInsensitive(
             cat.name,
@@ -51,11 +51,9 @@ export class SyncBlueprintUseCase {
           });
         }
 
-        // Assign category to this agent (idempotent)
         await this.agentRepository.assignCategoriesToAgent(id, [localCat.id]);
         extractionSync.categories++;
 
-        // Process category's dispositions
         for (const disp of cat.dispositions ?? []) {
           let localDisp =
             await this.extractionRepository.findDispositionByNameInsensitive(
@@ -87,13 +85,11 @@ export class SyncBlueprintUseCase {
             });
           }
 
-          // Link disposition to category (idempotent)
           await this.extractionRepository.attachDispositionsToCategory(
             localCat.id,
             [localDisp.id],
           );
 
-          // Record Bolna binding for sync parity
           await this.agentRepository.upsertBolnaBinding({
             platformAgentId: id,
             dispositionId: localDisp.id,
@@ -106,7 +102,6 @@ export class SyncBlueprintUseCase {
         }
       }
     } catch (err) {
-      // Best-effort: log and return what succeeded
       console.error("[SyncBlueprintUseCase] Extractions sync error:", err);
     }
 

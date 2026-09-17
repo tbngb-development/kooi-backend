@@ -29,7 +29,7 @@ export class SyncExtractionsToBolnaUseCase {
       errors: [],
       summary: {
         totalAssigned: 0,
-        categoriesCreated: 0, 
+        categoriesCreated: 0,
         created: 0,
         updated: 0,
         removed: 0,
@@ -37,38 +37,64 @@ export class SyncExtractionsToBolnaUseCase {
       },
     };
 
-    // All dispositions are now in categories (including "General")
-    const activeDispositionIds = new Set<string>();
-    const bolnaCategoryCache = new Map<string, string>();
+    const apiKeyId = config.bolnaApiKeyId;
 
+    // ── Step 1: Fetch remote categories ONCE for dedup ────────────────────
+    // Maps lowercase category name → Bolna category ID
+    const remoteCatMap = new Map<string, string>();
+    try {
+      const remoteCats = await this.syncService.listRemoteCategories(
+        config.bolnaId,
+        apiKeyId,
+      );
+      for (const rc of remoteCats) {
+        remoteCatMap.set(rc.name.toLowerCase().trim(), rc.id);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? "Unknown";
+      report.errors.push({
+        dispositionId: "-",
+        dispositionName: "-",
+        error: `Failed to list remote categories: ${msg}`,
+      });
+      report.summary.failed++;
+      return report;
+    }
+
+    const activeDispositionIds = new Set<string>();
+
+    // ── Step 2: Walk each local category → disposition ────────────────────
     for (const cat of config.categories) {
       if (cat.dispositions.length === 0) continue;
 
-      // Ensure category exists on Bolna
-      let bolnaCatId: string | undefined;
-      try {
-        bolnaCatId = await this.syncService.ensureBolnaCategory(
-          config.bolnaId,
-          cat.categoryName,
-          cat.model,
-          config.bolnaApiKeyId, 
-        );
-        bolnaCategoryCache.set(cat.categoryId, bolnaCatId);
-        report.summary.categoriesCreated++;
-      } catch (err: any) {
-        const msg = err?.response?.data?.message ?? err?.message ?? "Unknown";
-        for (const disp of cat.dispositions) {
-          report.errors.push({
-            dispositionId: disp.dispositionId,
-            dispositionName: disp.dispositionName,
-            error: `Category "${cat.categoryName}" sync failed: ${msg}`,
-          });
-          report.summary.failed++;
+      // 2a. Resolve Bolna category (create only if missing)
+      let bolnaCatId = remoteCatMap.get(cat.categoryName.toLowerCase().trim());
+
+      if (!bolnaCatId) {
+        try {
+          bolnaCatId = await this.syncService.ensureBolnaCategory(
+            config.bolnaId,
+            cat.categoryName,
+            cat.model,
+            apiKeyId,
+          );
+          remoteCatMap.set(cat.categoryName.toLowerCase().trim(), bolnaCatId);
+          report.summary.categoriesCreated++;
+        } catch (err: any) {
+          const msg = err?.response?.data?.message ?? err?.message ?? "Unknown";
+          for (const disp of cat.dispositions) {
+            report.errors.push({
+              dispositionId: disp.dispositionId,
+              dispositionName: disp.dispositionName,
+              error: `Category "${cat.categoryName}": ${msg}`,
+            });
+            report.summary.failed++;
+          }
+          continue;
         }
-        continue;
       }
 
-      // Sync each disposition in this category
+      // 2b. Sync each disposition
       for (const disp of cat.dispositions) {
         activeDispositionIds.add(disp.dispositionId);
         report.summary.totalAssigned++;
@@ -82,45 +108,64 @@ export class SyncExtractionsToBolnaUseCase {
           (b) => b.dispositionId === disp.dispositionId,
         );
 
+        const payload = {
+          id: full.id,
+          name: full.name,
+          question: full.question,
+          systemPrompt: full.systemPrompt,
+          model: full.model,
+          isSubjective: full.isSubjective,
+          isObjective: full.isObjective,
+          subjectiveType: full.subjectiveType,
+          subjectiveTypeConfig: full.subjectiveTypeConfig,
+          objectiveOptions: full.objectiveOptions,
+        };
+
         try {
-          const bolnaDispId = await this.syncService.syncDispositionToBolna(
-            config.bolnaId,
-            bolnaCatId,
-            {
-              id: full.id,
-              name: full.name,
-              question: full.question,
-              systemPrompt: full.systemPrompt,
-              model: full.model,
-              isSubjective: full.isSubjective,
-              isObjective: full.isObjective,
-              subjectiveType: full.subjectiveType,
-              subjectiveTypeConfig: full.subjectiveTypeConfig,
-              objectiveOptions: full.objectiveOptions,
-            },
-            config.bolnaApiKeyId, // ✅ Fixed: pass config.bolnaApiKeyId instead of existingBinding.bolnaDispositionId
-          );
+          if (existingBinding) {
+            // ── UPDATE existing (PUT /dispositions/{id}) ──────────────────
+            // Bolna's copy-on-write may return a new ID, but since we
+            // use PUT, the ID stays the same for private dispositions.
+            await this.syncService.updateDispositionOnBolna(
+              existingBinding.bolnaDispositionId,
+              payload,
+              apiKeyId,
+            );
 
-          const action = existingBinding ? "updated" : "created";
+            report.synced.push({
+              dispositionId: full.id,
+              dispositionName: full.name,
+              bolnaDispositionId: existingBinding.bolnaDispositionId,
+              bolnaCategoryId: existingBinding.bolnaCategoryId,
+              action: "updated",
+            });
+            report.summary.updated++;
+          } else {
+            // ── CREATE new (POST /dispositions/) ─────────────────────────
+            const bolnaDispId = await this.syncService.syncDispositionToBolna(
+              config.bolnaId,
+              bolnaCatId,
+              payload,
+              apiKeyId,
+            );
 
-          await this.agentRepository.upsertBolnaBinding({
-            platformAgentId: config.platformAgentId,
-            dispositionId: full.id,
-            bolnaAgentId: config.bolnaId,
-            bolnaCategoryId: bolnaCatId!,
-            bolnaDispositionId: bolnaDispId,
-          });
+            await this.agentRepository.upsertBolnaBinding({
+              platformAgentId: config.platformAgentId,
+              dispositionId: full.id,
+              bolnaAgentId: config.bolnaId,
+              bolnaCategoryId: bolnaCatId!,
+              bolnaDispositionId: bolnaDispId,
+            });
 
-          report.synced.push({
-            dispositionId: full.id,
-            dispositionName: full.name,
-            bolnaDispositionId: bolnaDispId,
-            bolnaCategoryId: bolnaCatId!,
-            action,
-          });
-
-          if (action === "created") report.summary.created++;
-          else report.summary.updated++;
+            report.synced.push({
+              dispositionId: full.id,
+              dispositionName: full.name,
+              bolnaDispositionId: bolnaDispId,
+              bolnaCategoryId: bolnaCatId!,
+              action: "created",
+            });
+            report.summary.created++;
+          }
         } catch (err: any) {
           const msg = err?.response?.data?.message ?? err?.message ?? "Unknown";
           report.errors.push({
@@ -133,7 +178,7 @@ export class SyncExtractionsToBolnaUseCase {
       }
     }
 
-    // Remove stale bindings
+    // ── Step 3: Remove stale bindings ─────────────────────────────────────
     const staleBindings = config.bolnaBindings.filter(
       (b) => !activeDispositionIds.has(b.dispositionId),
     );
@@ -141,7 +186,7 @@ export class SyncExtractionsToBolnaUseCase {
     for (const stale of staleBindings) {
       const errorMsg = await this.syncService.removeDispositionFromBolna(
         stale.bolnaDispositionId,
-        config.bolnaApiKeyId, 
+        apiKeyId,
       );
 
       const result: RemovedDispositionResult = {

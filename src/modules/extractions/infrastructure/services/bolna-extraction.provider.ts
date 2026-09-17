@@ -60,6 +60,15 @@ export class BolnaExtractionProviderImpl implements BolnaExtractionProvider {
     return client.extractions.createCategory(agentId, payload);
   }
 
+  async updateCategory(
+    categoryId: string,
+    payload: { name?: string; model?: string },
+    bolnaApiKeyId?: string,
+  ): Promise<void> {
+    const client = await this.getClient(bolnaApiKeyId);
+    await client.extractions.updateCategory(categoryId, payload);
+  }
+
   async createDisposition(
     payload: BolnaDispositionCreatePayload,
     bolnaApiKeyId?: string,
