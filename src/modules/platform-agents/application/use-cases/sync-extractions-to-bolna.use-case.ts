@@ -29,6 +29,7 @@ export class SyncExtractionsToBolnaUseCase {
       errors: [],
       summary: {
         totalAssigned: 0,
+        categoriesCreated: 0, 
         created: 0,
         updated: 0,
         removed: 0,
@@ -50,8 +51,10 @@ export class SyncExtractionsToBolnaUseCase {
           config.bolnaId,
           cat.categoryName,
           cat.model,
+          config.bolnaApiKeyId, 
         );
         bolnaCategoryCache.set(cat.categoryId, bolnaCatId);
+        report.summary.categoriesCreated++;
       } catch (err: any) {
         const msg = err?.response?.data?.message ?? err?.message ?? "Unknown";
         for (const disp of cat.dispositions) {
@@ -82,7 +85,7 @@ export class SyncExtractionsToBolnaUseCase {
         try {
           const bolnaDispId = await this.syncService.syncDispositionToBolna(
             config.bolnaId,
-            bolnaCatId!,
+            bolnaCatId,
             {
               id: full.id,
               name: full.name,
@@ -95,7 +98,7 @@ export class SyncExtractionsToBolnaUseCase {
               subjectiveTypeConfig: full.subjectiveTypeConfig,
               objectiveOptions: full.objectiveOptions,
             },
-            existingBinding?.bolnaDispositionId ?? null,
+            config.bolnaApiKeyId, // ✅ Fixed: pass config.bolnaApiKeyId instead of existingBinding.bolnaDispositionId
           );
 
           const action = existingBinding ? "updated" : "created";
@@ -138,6 +141,7 @@ export class SyncExtractionsToBolnaUseCase {
     for (const stale of staleBindings) {
       const errorMsg = await this.syncService.removeDispositionFromBolna(
         stale.bolnaDispositionId,
+        config.bolnaApiKeyId, 
       );
 
       const result: RemovedDispositionResult = {

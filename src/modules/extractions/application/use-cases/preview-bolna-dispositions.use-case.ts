@@ -7,7 +7,7 @@ export class PreviewBolnaDispositionsUseCase {
    * Read-only: fetches dispositions from Bolna for preview/reference.
    * Does NOT store anything locally.
    */
-  async execute(agentBolnaId?: string) {
-    return this.bolnaProvider.listDispositions(agentBolnaId);
+  async execute(bolnaApiKeyId: string, agentBolnaId?: string) {
+    return this.bolnaProvider.listDispositions(bolnaApiKeyId, agentBolnaId);
   }
 }

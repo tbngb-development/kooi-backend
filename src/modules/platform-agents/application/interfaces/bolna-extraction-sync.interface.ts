@@ -1,4 +1,8 @@
-import type { AgentExtractionConfig } from "./platform-agent-repository.interface";
+import type { ExtractionRepository } from "../../../extractions/application/interfaces/extraction-repository.interface";
+import type {
+  AgentExtractionConfig,
+  PlatformAgentRepository,
+} from "./platform-agent-repository.interface";
 
 /** Result of syncing a single disposition to Bolna */
 export interface SyncedDispositionResult {
@@ -17,19 +21,22 @@ export interface RemovedDispositionResult {
   error?: string;
 }
 
+export interface SyncError {
+  dispositionId: string;
+  dispositionName: string;
+  error: string;
+}
+
 /** Full sync report returned to the caller */
 export interface BolnaSyncReport {
   platformAgentId: string;
   bolnaAgentId: string;
   synced: SyncedDispositionResult[];
   removed: RemovedDispositionResult[];
-  errors: {
-    dispositionId: string;
-    dispositionName: string;
-    error: string;
-  }[];
+  errors: SyncError[];
   summary: {
     totalAssigned: number;
+    categoriesCreated: number;
     created: number;
     updated: number;
     removed: number;
@@ -37,49 +44,29 @@ export interface BolnaSyncReport {
   };
 }
 
-/**
- * Encapsulates all Bolna extraction API interactions for a single agent sync.
- * Stateless — each method receives the IDs it needs.
- */
 export interface BolnaExtractionSyncService {
-  /**
-   * Ensures a category exists on Bolna for the given agent.
-   * If a category with the same name already exists, returns its ID.
-   * Otherwise creates a new one.
-   */
+  syncAgentExtractions(
+    config: AgentExtractionConfig,
+    extractionRepo: ExtractionRepository,
+    agentRepo: PlatformAgentRepository,
+  ): Promise<BolnaSyncReport>;
+
   ensureBolnaCategory(
-    agentBolnaId: string,
+    agentId: string,
     categoryName: string,
     model: string,
+    bolnaApiKeyId?: string,
   ): Promise<string>;
 
-  /**
-   * Creates or updates a single disposition on Bolna.
-   * Returns the Bolna disposition ID (may change due to copy-on-write).
-   */
   syncDispositionToBolna(
-    agentBolnaId: string,
-    bolnaCategoryId: string,
-    disposition: {
-      id: string;
-      name: string;
-      question: string;
-      systemPrompt: string | null;
-      model: string;
-      isSubjective: boolean;
-      isObjective: boolean;
-      subjectiveType: string;
-      subjectiveTypeConfig: unknown;
-      objectiveOptions: unknown;
-    },
-    existingBolnaDispositionId: string | null,
+    agentId: string,
+    categoryId: string,
+    disposition: any,
+    bolnaApiKeyId?: string,
   ): Promise<string>;
 
-  /**
-   * Deletes a disposition from Bolna.
-   * Best-effort — returns error message instead of throwing.
-   */
   removeDispositionFromBolna(
-    bolnaDispositionId: string,
+    dispositionId: string,
+    bolnaApiKeyId?: string,
   ): Promise<string | null>;
 }

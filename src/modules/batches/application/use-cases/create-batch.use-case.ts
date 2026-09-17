@@ -41,7 +41,7 @@ export class CreateBatchUseCase {
       throw new CampaignFailedError("upload to");
     if (!campaign.assistant) throw new CampaignNotFoundError();
 
-    // 2. Parse file — validates contact_number header and extracts rows
+    // 2. Parse file
     const { rows } = parseLeadBuffer(input.fileBuffer, input.fileName);
     if (rows.length === 0) throw new EmptyFileError();
 
@@ -76,8 +76,7 @@ export class CreateBatchUseCase {
     if (newLeads.length === 0) throw new AllLeadsDuplicateError();
 
     // 6. Resolve retry config
-    const retryConfig =
-      input.retryConfig ??
+    const retryConfig = input.retryConfig ??
       (campaign.defaultRetryConfig as Record<string, unknown>) ?? {
         enabled: false,
       };
@@ -116,7 +115,7 @@ export class CreateBatchUseCase {
       console.error("[CreateBatch] Original file upload failed:", err);
     }
 
-    // 9. Transform to Bolna CSV in memory (no secondary Cloudinary upload)
+    // 9. Transform to Bolna CSV in memory
     const campaignVariables =
       (campaign.variables as Record<string, string>) ?? {};
     const { transformedBuffer, validCount, filteredOutCount } =
@@ -130,7 +129,8 @@ export class CreateBatchUseCase {
 
     try {
       const result = await this.bolnaProvider.createBatch(input.tenantId, {
-        agentId: campaign.assistant.bolnaId,
+        // Safe runtime inheritance of platform level template bolnaId
+        agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batch.id}.csv`,
         retryConfig: retryConfig as CreateBatchInput["retryConfig"],
@@ -144,7 +144,7 @@ export class CreateBatchUseCase {
       );
     }
 
-    // 11. Final update (persists Bolna ID + original file URL)
+    // 11. Final update
     const updatedBatch = await this.batchRepo.update(batch.id, {
       bolnaBatchId,
       originalFileUrl,

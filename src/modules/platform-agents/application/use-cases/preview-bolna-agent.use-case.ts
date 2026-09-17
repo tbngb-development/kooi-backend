@@ -1,107 +1,76 @@
-import type { BolnaTemplateProvider } from "../interfaces/bolna-template-provider.interface";
-import prisma from "../../../../shared/config/database/prisma";
+import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
+import { type PlatformAgentRepository } from "../interfaces/platform-agent-repository.interface";
+import { type ExtractionRepository } from "../../../extractions/application/interfaces/extraction-repository.interface";
+import { decryptKey } from "../../../../shared/utils/encryption";
+import { BolnaClient } from "../../../../shared/config/external/bolna/bolna.client";
+import { env } from "../../../../shared/config/env";
+import { type BolnaAgentBlueprintPreview } from "../dto/platform-agent.dto";
+import { PlatformApiKeyMissingError } from "../../domain/errors/platform-agent.errors";
+import { BolnaDiscoveryMapper } from "../mappers/bolna-discovery.mapper";
 
 export class PreviewBolnaAgentUseCase {
-  constructor(private readonly templateProvider: BolnaTemplateProvider) {}
+  constructor(
+    private readonly apiKeyRepository: BolnaApiKeyRepository,
+    private readonly platformAgentRepository: PlatformAgentRepository,
+    private readonly extractionRepository: ExtractionRepository,
+  ) {}
 
-  async execute(bolnaId: string) {
-    // 1. Fetch agent blueprint from Bolna
-    const template = await this.templateProvider.fetchTemplate(bolnaId);
+  async execute(
+    bolnaId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaAgentBlueprintPreview> {
+    // eslint-disable-next-line no-useless-assignment
+    let keyRecord = null;
 
-    // 2. Fetch extraction categories + dispositions from Bolna
-    let extractions: any[] = [];
-    try {
-      const categoryData = await this.templateProvider.listCategories(bolnaId);
-      extractions = categoryData?.categories ?? [];
-    } catch {
-      // Agent may have no extractions on Bolna — that's fine
+    if (bolnaApiKeyId) {
+      keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    } else {
+      const keys = await this.apiKeyRepository.list();
+      keyRecord = keys.find((k) => k.isPlatformDefault && k.isActive);
     }
 
-    // 3. Check if platform agent is already registered locally
-    const existingAgent = await prisma.platformAgent.findUnique({
-      where: { bolnaId },
-      select: { id: true, slug: true },
-    });
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
 
-    // 4. Load local catalog names to detect duplicates
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const bolnaClient = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
+
+    // 1. Fetch remote agent details
+    const agent = await bolnaClient.agents.verify(bolnaId);
+
+    // 2. Check if already imported locally
+    const existingPA = await this.platformAgentRepository.findByBolnaId(bolnaId);
+
+    // 3. Fetch remote extractions for this agent (if any)
+    // eslint-disable-next-line no-useless-assignment
+    let rawCategories: any[] = [];
+    try {
+      const extRes = await bolnaClient.extractions.listCategories(bolnaId);
+      rawCategories = extRes.categories ?? [];
+    } catch {
+      rawCategories = [];
+    }
+
+    // 4. Fetch local categories and dispositions to detect already imported status
     const [localCategories, localDispositions] = await Promise.all([
-      prisma.extractionCategory.findMany({ select: { name: true } }),
-      prisma.extractionDisposition.findMany({ select: { name: true } }),
+      this.extractionRepository.listCategories({}),
+      this.extractionRepository.listDispositions({}),
     ]);
 
-    const localCategoryNames = new Set(
-      localCategories.map((c) => c.name.toLowerCase()),
-    );
-    const localDispositionNames = new Set(
-      localDispositions.map((d) => d.name.toLowerCase()),
+    const existingCategorySlugs = new Set(localCategories.map((c) => c.slug));
+    const existingDispositionSlugs = new Set(
+      localDispositions.map((d) => d.slug),
     );
 
-    // 5. Check existing Bolna bindings for this agent if registered
-    let boundDispositionBolnaIds = new Set<string>();
-    if (existingAgent) {
-      const bindings = await prisma.agentBolnaExtractionBinding.findMany({
-        where: { platformAgentId: existingAgent.id },
-        select: { bolnaDispositionId: true },
-      });
-      boundDispositionBolnaIds = new Set(
-        bindings.map((b) => b.bolnaDispositionId),
-      );
-    }
-
-    // 6. Enrich extraction tree with catalog and binding status
-    const enrichedExtractions = extractions.map((cat: any) => {
-      const categoryExists = localCategoryNames.has(cat.name.toLowerCase());
-
-      return {
-        bolnaId: cat.id,
-        name: cat.name,
-        model: cat.model,
-        alreadyImported: categoryExists,
-        dispositions: (cat.dispositions ?? []).map((disp: any) => {
-          const dispositionExists = localDispositionNames.has(
-            disp.name.toLowerCase(),
-          );
-          const isBound = boundDispositionBolnaIds.has(disp.id);
-
-          return {
-            bolnaId: disp.id,
-            name: disp.name,
-            question: disp.question,
-            isSubjective: disp.is_subjective,
-            isObjective: disp.is_objective,
-            alreadyImported: dispositionExists,
-            isBoundToAgent: isBound,
-          };
-        }),
-      };
+    return BolnaDiscoveryMapper.toBlueprintPreview({
+      agent,
+      existingPlatformAgent: existingPA
+        ? { id: existingPA.id, slug: existingPA.slug }
+        : null,
+      rawCategories,
+      existingCategorySlugs,
+      existingDispositionSlugs,
     });
-
-    return {
-      agent: {
-        bolnaId: template.bolnaId,
-        agentName: template.agentName,
-        systemPrompt: template.systemPrompt,
-        defaultConfig: template.defaultConfig,
-        alreadyImported: !!existingAgent,
-        kooiPlatformAgentId: existingAgent?.id ?? null,
-      },
-      extractions: enrichedExtractions,
-      extractionSummary: {
-        totalCategories: enrichedExtractions.length,
-        totalDispositions: enrichedExtractions.reduce(
-          (sum: number, cat: any) => sum + cat.dispositions.length,
-          0,
-        ),
-        newCategories: enrichedExtractions.filter(
-          (c: any) => !c.alreadyImported,
-        ).length,
-        newDispositions: enrichedExtractions.reduce(
-          (sum: number, cat: any) =>
-            sum +
-            cat.dispositions.filter((d: any) => !d.alreadyImported).length,
-          0,
-        ),
-      },
-    };
   }
 }

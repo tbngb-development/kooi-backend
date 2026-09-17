@@ -1,78 +1,96 @@
-import { BolnaClient } from "../../../../shared/config/external/bolna/bolna.client";
 import { decryptKey } from "../../../../shared/utils/encryption";
+import { BolnaClient } from "../../../../shared/config/external/bolna/bolna.client";
 import { env } from "../../../../shared/config/env";
-import prisma from "../../../../shared/config/database/prisma";
+import type { BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
+import type { BolnaExtractionProvider } from "../../application/interfaces/bolna-extraction-provider.interface";
 import type {
-  BolnaExtractionProvider,
-} from "../../application/interfaces/bolna-extraction-provider.interface";
-import type {
+  BolnaCategoryCreatePayload,
+  BolnaDispositionCreatePayload,
+  BolnaDispositionCreateResponse,
   BolnaExtractionCategoryListResponse,
   BolnaExtractionCategoryResponse,
   BolnaDispositionResponse,
-  BolnaDispositionCreatePayload,
-  BolnaDispositionCreateResponse,
-  BolnaCategoryCreatePayload,
 } from "../../../../shared/types/bolna.types";
 import { PlatformApiKeyMissingError } from "../../../platform-agents/domain/errors/platform-agent.errors";
-import { ExtractionSyncError } from "../../domain/errors/extraction.errors";
 
 export class BolnaExtractionProviderImpl implements BolnaExtractionProvider {
-  private async getPlatformClient(): Promise<BolnaClient> {
-    const keyRecord = await prisma.bolnaApiKey.findFirst({
-      where: { isPlatformDefault: true, isActive: true },
-    });
-    if (!keyRecord) throw new PlatformApiKeyMissingError();
+  constructor(private readonly apiKeyRepository: BolnaApiKeyRepository) {}
 
-    const decryptedKey = decryptKey(keyRecord.encryptedKey);
-    return new BolnaClient(decryptedKey, env.bolna.apiUrl);
-  }
+  private async getClient(bolnaApiKeyId?: string): Promise<BolnaClient> {
+    // eslint-disable-next-line no-useless-assignment
+    let keyRecord = null;
 
-  private async safeCall<T>(operation: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (err: any) {
-      const reason = err?.response?.data?.message ?? err?.message ?? "Unknown error";
-      throw new ExtractionSyncError(`${operation}: ${reason}`);
+    if (bolnaApiKeyId) {
+      keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    } else {
+      const keys = await this.apiKeyRepository.list();
+      keyRecord = keys.find((k) => k.isPlatformDefault && k.isActive);
     }
+
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
+
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    return new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
   }
 
-  async listCategories(agentBolnaId: string): Promise<BolnaExtractionCategoryListResponse> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("listCategories", () => client.extractions.listCategories(agentBolnaId));
+  async listCategories(
+    agentId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaExtractionCategoryListResponse> {
+    const client = await this.getClient(bolnaApiKeyId);
+    return client.extractions.listCategories(agentId);
   }
 
-  async createCategory(agentBolnaId: string, payload: BolnaCategoryCreatePayload): Promise<BolnaExtractionCategoryResponse> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("createCategory", () => client.extractions.createCategory(agentBolnaId, payload));
+  async listDispositions(
+    agentId?: string,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaDispositionResponse[]> {
+    const client = await this.getClient(bolnaApiKeyId);
+    return client.extractions.listDispositions(agentId);
   }
 
-  async updateCategory(bolnaCategoryId: string, payload: Partial<BolnaCategoryCreatePayload>): Promise<BolnaExtractionCategoryResponse> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("updateCategory", () => client.extractions.updateCategory(bolnaCategoryId, payload));
+  async createCategory(
+    agentId: string,
+    payload: BolnaCategoryCreatePayload,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaExtractionCategoryResponse> {
+    const client = await this.getClient(bolnaApiKeyId);
+    return client.extractions.createCategory(agentId, payload);
   }
 
-  async deleteCategory(bolnaCategoryId: string): Promise<void> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("deleteCategory", () => client.extractions.deleteCategory(bolnaCategoryId));
+  async createDisposition(
+    payload: BolnaDispositionCreatePayload,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaDispositionCreateResponse> {
+    const client = await this.getClient(bolnaApiKeyId);
+    return client.extractions.createDisposition(payload);
   }
 
-  async listDispositions(agentBolnaId?: string): Promise<BolnaDispositionResponse[]> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("listDispositions", () => client.extractions.listDispositions(agentBolnaId));
+  async updateDisposition(
+    dispositionId: string,
+    payload: Partial<BolnaDispositionCreatePayload>,
+    bolnaApiKeyId?: string,
+  ): Promise<void> {
+    const client = await this.getClient(bolnaApiKeyId);
+    // Explicitly consume the result and return void to satisfy type contracts
+    await client.extractions.updateDisposition(dispositionId, payload);
   }
 
-  async createDisposition(payload: BolnaDispositionCreatePayload): Promise<BolnaDispositionCreateResponse> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("createDisposition", () => client.extractions.createDisposition(payload));
+  async deleteDisposition(
+    dispositionId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<void> {
+    const client = await this.getClient(bolnaApiKeyId);
+    await client.extractions.deleteDisposition(dispositionId);
   }
 
-  async updateDisposition(bolnaDispositionId: string, payload: Partial<BolnaDispositionCreatePayload>): Promise<BolnaDispositionCreateResponse> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("updateDisposition", () => client.extractions.updateDisposition(bolnaDispositionId, payload));
-  }
-
-  async deleteDisposition(bolnaDispositionId: string): Promise<void> {
-    const client = await this.getPlatformClient();
-    return this.safeCall("deleteDisposition", () => client.extractions.deleteDisposition(bolnaDispositionId));
+  async deleteCategory(
+    categoryId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<void> {
+    const client = await this.getClient(bolnaApiKeyId);
+    await client.extractions.deleteCategory(categoryId);
   }
 }

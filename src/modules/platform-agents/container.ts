@@ -1,6 +1,7 @@
 import { PrismaPlatformAgentRepository } from "./infrastructure/repositories/prisma-platform-agent.repository";
 import { BolnaTemplateProviderImpl } from "./infrastructure/services/bolna-template.provider";
 import { PrismaExtractionRepository } from "../extractions/infrastructure/repositories/prisma-extraction.repository";
+import { PrismaBolnaApiKeyRepository } from "../bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
 import { BolnaExtractionProviderImpl } from "../extractions/infrastructure/services/bolna-extraction.provider";
 import { BolnaExtractionSyncServiceImpl } from "./infrastructure/services/bolna-extraction-sync.service";
 
@@ -16,7 +17,6 @@ import { PreviewBolnaAgentUseCase } from "./application/use-cases/preview-bolna-
 import { ImportFromBolnaUseCase } from "./application/use-cases/import-from-bolna.use-case";
 import { SyncBlueprintUseCase } from "./application/use-cases/sync-blueprint.use-case";
 
-// [NEW] Use Case Imports
 import { AssignCategoryToAgentUseCase } from "./application/use-cases/assign-category-to-agent.use-case";
 import { RemoveCategoryFromAgentUseCase } from "./application/use-cases/remove-category-from-agent.use-case";
 import { AssignDispositionToAgentUseCase } from "./application/use-cases/assign-disposition-to-agent.use-case";
@@ -29,14 +29,17 @@ import { AdminPlatformAgentController } from "./presentation/admin-platform-agen
 export interface PlatformAgentModule {
   adminController: AdminPlatformAgentController;
 }
-
 export function buildPlatformAgentModule(): PlatformAgentModule {
   const repository = new PrismaPlatformAgentRepository();
   const extractionRepository = new PrismaExtractionRepository();
-  const templateProvider = new BolnaTemplateProviderImpl();
+  const apiKeyRepository = new PrismaBolnaApiKeyRepository();
 
-  // Bolna sync service components
-  const bolnaExtractionProvider = new BolnaExtractionProviderImpl();
+  const templateProvider = new BolnaTemplateProviderImpl(apiKeyRepository);
+
+  // Injected with apiKeyRepository for workspace isolation
+  const bolnaExtractionProvider = new BolnaExtractionProviderImpl(
+    apiKeyRepository,
+  );
   const bolnaExtractionSyncService = new BolnaExtractionSyncServiceImpl(
     bolnaExtractionProvider,
   );
@@ -49,19 +52,23 @@ export function buildPlatformAgentModule(): PlatformAgentModule {
       new GetPlatformAgentUseCase(repository),
       new ListPlatformAgentsUseCase(repository),
       new DeletePlatformAgentUseCase(repository),
-      new ListBolnaAgentsUseCase(templateProvider),
-      new PreviewBolnaAgentUseCase(templateProvider),
+      new ListBolnaAgentsUseCase(apiKeyRepository, repository),
+      new PreviewBolnaAgentUseCase(
+        apiKeyRepository,
+        repository,
+        extractionRepository,
+      ),
       new ImportFromBolnaUseCase(
         repository,
         extractionRepository,
         templateProvider,
+        apiKeyRepository,
       ),
       new SyncBlueprintUseCase(
         repository,
         extractionRepository,
         templateProvider,
       ),
-      // [NEW] Extraction Assignment and Sync Use Cases
       new AssignCategoryToAgentUseCase(repository, extractionRepository),
       new RemoveCategoryFromAgentUseCase(repository),
       new AssignDispositionToAgentUseCase(repository, extractionRepository),

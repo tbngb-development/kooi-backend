@@ -1,38 +1,89 @@
 import prisma from "../../../../shared/config/database/prisma";
-import {
-  type CallStatus,
-  type LeadStatus,
-  type BatchStatus,
-  type CampaignStatus,
-  type Disposition,
-  type LeadTemperature,
-  type PurchaseTimeline,
-  type PurchasePurpose,
-  type LocationMatch,
-  type PreferredNextAction,
-  type ContactChannel,
-  type ExtractionFlag,
-  type Prisma,
-} from "@prisma/client";
 import type {
   WebhookRepository,
   ResolvedCallContext,
-  AgentDispositionMap,
 } from "../../application/interfaces/webhook-repository.interface";
 import type {
-  CallHistoryItem,
+  CallStatus,
+  BatchStatus,
+  LeadStatus,
+  CampaignStatus,
+} from "@prisma/client";
+import type {
   ParsedCallAnalysis,
+  CallHistoryItem,
 } from "../../../../shared/types/bolna.types";
-import type { InputJsonValue } from "@prisma/client/runtime/library";
+
+const callSelectFields = {
+  id: true,
+  bolnaCallId: true,
+  tenantId: true,
+  campaignId: true,
+  leadId: true,
+  batchId: true,
+  status: true,
+  duration: true,
+  cost: true,
+  recording: true,
+  transcript: true,
+  summary: true,
+  callHistory: true,
+  updatedAt: true,
+} as const;
 
 export class PrismaWebhookRepository implements WebhookRepository {
+  private toResolvedContext(raw: {
+    id: string;
+    bolnaCallId: string | null;
+    tenantId: string;
+    campaignId: string;
+    leadId: string;
+    batchId: string | null;
+    status: CallStatus;
+    duration: number | null;
+    cost: number | null;
+    recording: string | null;
+    transcript: string | null;
+    summary: string | null;
+    callHistory: unknown;
+    updatedAt: Date;
+  }): ResolvedCallContext {
+    return {
+      ...raw,
+      callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
+    };
+  }
+
   async findCallByBolnaCallId(
     bolnaCallId: string,
   ): Promise<ResolvedCallContext | null> {
     const call = await prisma.call.findUnique({
       where: { bolnaCallId },
+      select: callSelectFields,
     });
-    return call ? this.toMapContext(call) : null;
+    if (!call) return null;
+    return this.toResolvedContext(call);
+  }
+
+  async findBatchIdByBolnaBatchId(bolnaBatchId: string) {
+    return prisma.leadBatch.findUnique({
+      where: { bolnaBatchId },
+      select: { id: true, campaignId: true, tenantId: true, status: true },
+    });
+  }
+
+  async findLeadByPhoneAndBatch(phone: string, batchId: string) {
+    return prisma.lead.findFirst({
+      where: { phone, batchId },
+      select: { id: true, phone: true },
+    });
+  }
+
+  async findLeadByPhoneAndCampaign(phone: string, campaignId: string) {
+    return prisma.lead.findFirst({
+      where: { phone, campaignId },
+      select: { id: true, phone: true },
+    });
   }
 
   async findCallByLeadAndBatch(
@@ -41,48 +92,10 @@ export class PrismaWebhookRepository implements WebhookRepository {
   ): Promise<ResolvedCallContext | null> {
     const call = await prisma.call.findFirst({
       where: { leadId, batchId },
-      orderBy: { createdAt: "desc" },
+      select: callSelectFields,
     });
-    return call ? this.toMapContext(call) : null;
-  }
-
-  async findBatchIdByBolnaBatchId(bolnaBatchId: string): Promise<{
-    id: string;
-    tenantId: string;
-    campaignId: string;
-    status: BatchStatus;
-  } | null> {
-    const batch = await prisma.leadBatch.findUnique({
-      where: { bolnaBatchId },
-      select: { id: true, tenantId: true, campaignId: true, status: true },
-    });
-    if (!batch) return null;
-    return {
-      id: batch.id,
-      tenantId: batch.tenantId,
-      campaignId: batch.campaignId,
-      status: batch.status as BatchStatus,
-    };
-  }
-
-  async findLeadByPhoneAndBatch(
-    phone: string,
-    batchId: string,
-  ): Promise<{ id: string } | null> {
-    return prisma.lead.findFirst({
-      where: { phone, batchId },
-      select: { id: true },
-    });
-  }
-
-  async findLeadByPhoneAndCampaign(
-    phone: string,
-    campaignId: string,
-  ): Promise<{ id: string } | null> {
-    return prisma.lead.findFirst({
-      where: { phone, campaignId },
-      select: { id: true },
-    });
+    if (!call) return null;
+    return this.toResolvedContext(call);
   }
 
   async createCall(data: {
@@ -91,7 +104,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
     campaignId: string;
     leadId: string;
     batchId: string | null;
-    status: CallStatus;
+    status: string;
     startedAt: Date;
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
@@ -101,56 +114,57 @@ export class PrismaWebhookRepository implements WebhookRepository {
         campaignId: data.campaignId,
         leadId: data.leadId,
         batchId: data.batchId,
-        status: data.status,
+        status: data.status as CallStatus,
         startedAt: data.startedAt,
       },
+      select: callSelectFields,
     });
-    return this.toMapContext(call);
+    return this.toResolvedContext(call);
   }
 
   async updateCallStatusAndHistory(
     callId: string,
     bolnaCallId: string,
     status: CallStatus,
-    history: CallHistoryItem[],
+    callHistory: unknown[],
   ): Promise<ResolvedCallContext> {
     const call = await prisma.call.update({
       where: { id: callId },
       data: {
         bolnaCallId,
         status,
-        callHistory: history as unknown as Prisma.InputJsonValue,
+        callHistory: callHistory as any,
       },
+      select: callSelectFields,
     });
-    return this.toMapContext(call);
+    return this.toResolvedContext(call);
   }
 
   async updateCallTerminalState(
     callId: string,
     data: {
-      status: CallStatus;
+      status: string;
       summary?: string | null;
       transcript?: string | null;
-      transcriptMessages?: unknown | null;
+      transcriptMessages?: unknown;
       duration?: number | null;
       recording?: string | null;
       cost?: number | null;
-      extracted_data?: Record<string, any> | null;
-      endedAt: Date;
+      extracted_data?: unknown;
+      endedAt?: Date;
     },
   ): Promise<void> {
     await prisma.call.update({
       where: { id: callId },
       data: {
-        status: data.status,
+        status: data.status as CallStatus,
         summary: data.summary,
         transcript: data.transcript,
-        transcriptMessages:
-          data.transcriptMessages as unknown as Prisma.InputJsonValue,
+        transcriptMessages: data.transcriptMessages as any,
         duration: data.duration,
         recording: data.recording,
-        extractionResult: data.extracted_data as InputJsonValue,
         cost: data.cost,
+        extractionResult: data.extracted_data as any,
         endedAt: data.endedAt,
       },
     });
@@ -170,98 +184,6 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
-  async upsertCallAnalysis(
-    callId: string,
-    tenantId: string,
-    analysis: ParsedCallAnalysis,
-  ): Promise<void> {
-    const data = {
-      disposition: (analysis.disposition as Disposition) ?? null,
-      leadTemperature: (analysis.leadTemperature as LeadTemperature) ?? null,
-      preferredConfiguration: analysis.preferredConfiguration ?? null,
-      budgetRange: analysis.budgetRange ?? null,
-      purchaseTimeline: (analysis.purchaseTimeline as PurchaseTimeline) ?? null,
-      purchasePurpose: (analysis.purchasePurpose as PurchasePurpose) ?? null,
-      locationMatch: (analysis.locationMatch as LocationMatch) ?? null,
-      customerLocationPref: analysis.customerLocationPref ?? null,
-      preferredNextAction:
-        (analysis.preferredNextAction as PreferredNextAction) ?? null,
-      preferredContactChannel:
-        (analysis.preferredContactChannel as ContactChannel) ?? null,
-      followupSchedule: analysis.followupSchedule ?? null,
-      doNotCall: (analysis.doNotCall as ExtractionFlag) ?? null,
-      languageSupportRequired:
-        (analysis.languageSupportRequired as ExtractionFlag) ?? null,
-    };
-
-    await prisma.callAnalysis.upsert({
-      where: { callId },
-      create: {
-        callId,
-        tenantId,
-        ...data,
-      },
-      update: data,
-    });
-  }
-
-  async incrementTerminalStats(
-    campaignId: string,
-    batchId: string | null,
-    status: CallStatus,
-  ): Promise<void> {
-    const isCompleted = status === "COMPLETED";
-    const isFailed = status === "FAILED";
-
-    await prisma.$transaction(async (tx) => {
-      await tx.campaign.update({
-        where: { id: campaignId },
-        data: {
-          calledLeads: { increment: 1 },
-          ...(isCompleted && { completedLeads: { increment: 1 } }),
-          ...(isFailed && { failedLeads: { increment: 1 } }),
-        },
-      });
-
-      if (batchId) {
-        await tx.leadBatch.update({
-          where: { id: batchId },
-          data: {
-            calledLeads: { increment: 1 },
-            ...(isCompleted && { completedLeads: { increment: 1 } }),
-            ...(isFailed && { failedLeads: { increment: 1 } }),
-          },
-        });
-      }
-    });
-  }
-
-  async countActiveLeadsInBatch(batchId: string): Promise<number> {
-    return prisma.lead.count({
-      where: {
-        batchId,
-        status: { in: ["PENDING", "CALLING"] },
-      },
-    });
-  }
-
-  async countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number> {
-    return prisma.lead.count({
-      where: {
-        campaignId,
-        status: { in: ["PENDING", "CALLING"] },
-      },
-    });
-  }
-
-  async getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]> {
-    const batches = await prisma.leadBatch.findMany({
-      where: { campaignId },
-      select: { status: true },
-    });
-    return batches.map((b) => b.status as BatchStatus);
-  }
-
   async updateBatchStatus(
     batchId: string,
     status: BatchStatus,
@@ -279,15 +201,44 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async updateCampaignStatus(
     campaignId: string,
     status: CampaignStatus,
-    completedAt?: Date,
+    timestamp?: Date,
   ): Promise<void> {
     await prisma.campaign.update({
       where: { id: campaignId },
       data: {
         status,
-        ...(completedAt && { completedAt }),
+        ...(status === "RUNNING" && timestamp && { startedAt: timestamp }),
+        ...(status === "COMPLETED" && timestamp && { completedAt: timestamp }),
+        ...(status === "FAILED" && timestamp && { completedAt: timestamp }),
       },
     });
+  }
+
+  async incrementTerminalStats(
+    campaignId: string,
+    batchId: string | null,
+    status: "COMPLETED" | "NO_ANSWER" | "BUSY" | "FAILED",
+  ): Promise<void> {
+    const isSuccess = status === "COMPLETED";
+    const field = isSuccess ? "completedLeads" : "failedLeads";
+
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        calledLeads: { increment: 1 },
+        [field]: { increment: 1 },
+      },
+    });
+
+    if (batchId) {
+      await prisma.leadBatch.update({
+        where: { id: batchId },
+        data: {
+          calledLeads: { increment: 1 },
+          [field]: { increment: 1 },
+        },
+      });
+    }
   }
 
   async updateCallCostBreakdown(
@@ -316,11 +267,78 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
-  // ── [NEW] Agent Disposition Resolution ──────────────────────────────────
+  async countActiveLeadsInBatch(batchId: string): Promise<number> {
+    return prisma.lead.count({
+      where: {
+        batchId,
+        status: { in: ["PENDING", "CALLING"] },
+      },
+    });
+  }
 
-  async getAgentDispositionsForCall(
+  async countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number> {
+    return prisma.lead.count({
+      where: {
+        campaignId,
+        status: { in: ["PENDING", "CALLING"] },
+      },
+    });
+  }
+
+  async getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]> {
+    const batches = await prisma.leadBatch.findMany({
+      where: { campaignId },
+      select: { status: true },
+    });
+    return batches.map((b) => b.status);
+  }
+
+  async upsertCallAnalysis(
     callId: string,
-  ): Promise<AgentDispositionMap> {
+    tenantId: string,
+    parsed: ParsedCallAnalysis,
+  ): Promise<void> {
+    await prisma.callAnalysis.upsert({
+      where: { callId },
+      create: {
+        callId,
+        tenantId,
+        disposition: parsed.disposition,
+        leadTemperature: parsed.leadTemperature,
+        preferredConfiguration: parsed.preferredConfiguration,
+        budgetRange: parsed.budgetRange,
+        purchaseTimeline: parsed.purchaseTimeline,
+        purchasePurpose: parsed.purchasePurpose,
+        locationMatch: parsed.locationMatch,
+        customerLocationPref: parsed.customerLocationPref,
+        preferredNextAction: parsed.preferredNextAction,
+        preferredContactChannel: parsed.preferredContactChannel,
+        followupSchedule: parsed.followupSchedule,
+        doNotCall: parsed.doNotCall,
+        languageSupportRequired: parsed.languageSupportRequired,
+      },
+      update: {
+        disposition: parsed.disposition,
+        leadTemperature: parsed.leadTemperature,
+        preferredConfiguration: parsed.preferredConfiguration,
+        budgetRange: parsed.budgetRange,
+        purchaseTimeline: parsed.purchaseTimeline,
+        purchasePurpose: parsed.purchasePurpose,
+        locationMatch: parsed.locationMatch,
+        customerLocationPref: parsed.customerLocationPref,
+        preferredNextAction: parsed.preferredNextAction,
+        preferredContactChannel: parsed.preferredContactChannel,
+        followupSchedule: parsed.followupSchedule,
+        doNotCall: parsed.doNotCall,
+        languageSupportRequired: parsed.languageSupportRequired,
+      },
+    });
+  }
+
+  async getAgentDispositionsForCall(callId: string): Promise<{
+    platformAgentId: string | null;
+    dispositions: Array<{ id: string; name: string; slug: string }>;
+  }> {
     const call = await prisma.call.findUnique({
       where: { id: callId },
       select: {
@@ -328,7 +346,6 @@ export class PrismaWebhookRepository implements WebhookRepository {
           select: {
             assistant: {
               select: {
-                platformAgentId: true,
                 platformAgent: {
                   select: {
                     id: true,
@@ -360,62 +377,24 @@ export class PrismaWebhookRepository implements WebhookRepository {
       },
     });
 
-    const platformAgent = call?.campaign?.assistant?.platformAgent ?? null;
-    const platformAgentId = call?.campaign?.assistant?.platformAgentId ?? null;
-
+    const platformAgent = call?.campaign?.assistant?.platformAgent;
     if (!platformAgent) {
-      return { platformAgentId, dispositions: [] };
+      return { platformAgentId: null, dispositions: [] };
     }
 
-    const seen = new Set<string>();
-    const dispositions: { id: string; name: string; slug: string }[] = [];
-
-    // All dispositions come through categories (including "General")
-    for (const cat of platformAgent.categories) {
-      for (const cd of cat.category.dispositions) {
-        if (!seen.has(cd.disposition.id)) {
-          seen.add(cd.disposition.id);
-          dispositions.push(cd.disposition);
-        }
+    const dispositionMap = new Map<
+      string,
+      { id: string; name: string; slug: string }
+    >();
+    for (const catRel of platformAgent.categories) {
+      for (const dispRel of catRel.category.dispositions) {
+        dispositionMap.set(dispRel.disposition.id, dispRel.disposition);
       }
     }
 
-    return { platformAgentId, dispositions };
-  }
-
-  private toMapContext(c: {
-    id: string;
-    bolnaCallId: string | null;
-    tenantId: string;
-    campaignId: string;
-    leadId: string;
-    batchId: string | null;
-    status: string;
-    duration: number | null;
-    cost: number | null;
-    recording: string | null;
-    transcript: string | null;
-    summary: string | null;
-    callHistory?: Prisma.JsonValue;
-    updatedAt: Date;
-  }): ResolvedCallContext {
     return {
-      id: c.id,
-      bolnaCallId: c.bolnaCallId,
-      tenantId: c.tenantId,
-      campaignId: c.campaignId,
-      leadId: c.leadId,
-      batchId: c.batchId,
-      status: c.status as CallStatus,
-      duration: c.duration,
-      cost: c.cost,
-      recording: c.recording,
-      transcript: c.transcript,
-      summary: c.summary,
-      callHistory: Array.isArray(c.callHistory)
-        ? (c.callHistory as unknown as CallHistoryItem[])
-        : [],
-      updatedAt: c.updatedAt,
+      platformAgentId: platformAgent.id,
+      dispositions: Array.from(dispositionMap.values()),
     };
   }
 }

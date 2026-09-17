@@ -16,7 +16,10 @@ export class SyncBlueprintUseCase {
     if (!agent) throw new PlatformAgentNotFoundError(id);
 
     // 2. Sync agent blueprint config & prompts from Bolna
-    const template = await this.templateProvider.fetchTemplate(agent.bolnaId);
+    const template = await this.templateProvider.fetchTemplate(
+      agent.bolnaId,
+      agent.bolnaApiKeyId,
+    );
     const updatedAgent = await this.agentRepository.update(id, {
       defaultConfig: template.defaultConfig,
       systemPrompt: template.systemPrompt,

@@ -326,6 +326,7 @@ export class AdminExtractionController {
   ): Promise<void> => {
     try {
       const data = await this.previewBolnaDispositions.execute(
+        req.query.bolnaApiKeyId as string,
         req.query.agentBolnaId as string | undefined,
       );
       sendSuccess(res, data);

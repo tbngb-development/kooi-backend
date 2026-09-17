@@ -1,31 +1,46 @@
-import type { BolnaTemplateProvider } from "../interfaces/bolna-template-provider.interface";
-import prisma from "../../../../shared/config/database/prisma";
+import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
+import { type PlatformAgentRepository } from "../interfaces/platform-agent-repository.interface";
+import { decryptKey } from "../../../../shared/utils/encryption";
+import { BolnaClient } from "../../../../shared/config/external/bolna/bolna.client";
+import { env } from "../../../../shared/config/env";
+import { type BolnaDiscoveredAgent } from "../dto/platform-agent.dto";
+import { PlatformApiKeyMissingError } from "../../domain/errors/platform-agent.errors";
+import { BolnaDiscoveryMapper } from "../mappers/bolna-discovery.mapper";
 
 export class ListBolnaAgentsUseCase {
-  constructor(private readonly templateProvider: BolnaTemplateProvider) {}
+  constructor(
+    private readonly apiKeyRepository: BolnaApiKeyRepository,
+    private readonly platformAgentRepository: PlatformAgentRepository,
+  ) {}
 
-  async execute() {
-    const agents = await this.templateProvider.listAllAgents();
+  async execute(bolnaApiKeyId?: string): Promise<BolnaDiscoveredAgent[]> {
+    // eslint-disable-next-line no-useless-assignment
+    let keyRecord = null;
 
-    const importedAgents = await prisma.platformAgent.findMany({
-      select: { bolnaId: true, id: true, slug: true, name: true },
-    });
+    if (bolnaApiKeyId) {
+      keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    } else {
+      const keys = await this.apiKeyRepository.list();
+      keyRecord = keys.find((k) => k.isPlatformDefault && k.isActive);
+    }
 
-    const importedMap = new Map(importedAgents.map((a) => [a.bolnaId, a]));
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
 
-    return agents.map((agent) => {
-      const existing = importedMap.get(agent.id);
-      return {
-        bolnaId: agent.id,
-        agentName: agent.agent_name,
-        agentType: agent.agent_type,
-        agentStatus: agent.agent_status,
-        createdAt: agent.created_at,
-        updatedAt: agent.updated_at,
-        alreadyImported: !!existing,
-        kooiPlatformAgentId: existing?.id ?? null,
-        kooiSlug: existing?.slug ?? null,
-      };
-    });
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const bolnaClient = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
+
+    // 1. Fetch live Bolna agents
+    const bolnaAgents = await bolnaClient.agents.list();
+
+    // 2. Fetch existing platform agents to cross-reference import status
+    const existingPlatformAgents = await this.platformAgentRepository.list({});
+
+    // 3. Return mapped structure
+    return BolnaDiscoveryMapper.toDiscoveredAgents(
+      bolnaAgents,
+      existingPlatformAgents,
+    );
   }
 }

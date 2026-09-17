@@ -1,9 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type {
-  AgentBolnaExtractionBinding,
-  Prisma,
-  PlatformAgent,
-} from "@prisma/client";
+import type { Prisma, PlatformAgent } from "@prisma/client";
 import type {
   AgentExtractionConfig,
   PlatformAgentRepository,
@@ -33,6 +29,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       isFeatured: data.isFeatured ?? false,
       sortOrder: data.sortOrder ?? 0,
       isActive: true,
+      bolnaApiKey: { connect: { id: data.bolnaApiKeyId } },
     };
 
     if (data.industryPackId) {
@@ -72,6 +69,10 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.isFeatured !== undefined) updateData.isFeatured = data.isFeatured;
     if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+
+    if (data.bolnaApiKeyId !== undefined) {
+      updateData.bolnaApiKey = { connect: { id: data.bolnaApiKeyId } };
+    }
 
     if (data.industryPackId !== undefined) {
       if (data.industryPackId === null) {
@@ -149,8 +150,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     await prisma.platformAgent.delete({ where: { id } });
   }
 
-  // ── Extraction: Category Assignment ───────────────────────────────────────
-
   async assignCategoriesToAgent(
     platformAgentId: string,
     categoryIds: string[],
@@ -182,8 +181,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     });
   }
 
-  // ── Extraction: Full Config ───────────────────────────────────────────────
-
   async getAgentExtractionConfig(
     platformAgentId: string,
   ): Promise<AgentExtractionConfig | null> {
@@ -192,6 +189,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       select: {
         id: true,
         bolnaId: true,
+        bolnaApiKeyId: true,
         categories: {
           orderBy: { sortOrder: "asc" },
           select: {
@@ -230,6 +228,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     return {
       platformAgentId: agent.id,
       bolnaId: agent.bolnaId,
+      bolnaApiKeyId: agent.bolnaApiKeyId,
       categories: agent.categories.map((c) => ({
         categoryId: c.categoryId,
         categoryName: c.category.name,
@@ -247,15 +246,13 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     };
   }
 
-  // ── Bolna Bindings ────────────────────────────────────────────────────────
-
   async upsertBolnaBinding(data: {
     platformAgentId: string;
     dispositionId: string;
     bolnaAgentId: string;
     bolnaCategoryId: string;
     bolnaDispositionId: string;
-  }): Promise<AgentBolnaExtractionBinding> {
+  }): Promise<any> {
     return prisma.agentBolnaExtractionBinding.upsert({
       where: {
         platformAgentId_dispositionId: {
@@ -298,9 +295,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     });
   }
 
-  async getBolnaBindings(
-    platformAgentId: string,
-  ): Promise<AgentBolnaExtractionBinding[]> {
+  async getBolnaBindings(platformAgentId: string): Promise<any[]> {
     return prisma.agentBolnaExtractionBinding.findMany({
       where: { platformAgentId },
     });

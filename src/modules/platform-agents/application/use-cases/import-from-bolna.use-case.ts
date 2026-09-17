@@ -1,13 +1,17 @@
 import type { PlatformAgentRepository } from "../interfaces/platform-agent-repository.interface";
-import type { BolnaTemplateProvider } from "../interfaces/bolna-template-provider.interface";
 import type { ExtractionRepository } from "../../../extractions/application/interfaces/extraction-repository.interface";
+import type { BolnaTemplateProvider } from "../interfaces/bolna-template-provider.interface";
+import type { BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
 import {
-  DuplicatePlatformAgentBolnaIdError,
   DuplicatePlatformAgentSlugError,
+  DuplicatePlatformAgentBolnaIdError,
+  PlatformApiKeyMissingError,
 } from "../../domain/errors/platform-agent.errors";
+import { generateSlug } from "../../../extractions/domain/rules/slug-generator";
 
 export interface ImportFromBolnaDTO {
   bolnaId: string;
+  bolnaApiKeyId: string;
   slug?: string;
   name?: string;
   industryPackId?: string;
@@ -20,140 +24,57 @@ export interface ImportFromBolnaDTO {
 
 export class ImportFromBolnaUseCase {
   constructor(
-    private readonly agentRepository: PlatformAgentRepository,
+    private readonly repository: PlatformAgentRepository,
     private readonly extractionRepository: ExtractionRepository,
     private readonly templateProvider: BolnaTemplateProvider,
+    private readonly apiKeyRepository: BolnaApiKeyRepository,
   ) {}
 
   async execute(dto: ImportFromBolnaDTO) {
-    // 1. Check duplicate Bolna ID
-    const existing = await this.agentRepository.findByBolnaId(dto.bolnaId);
-    if (existing) throw new DuplicatePlatformAgentBolnaIdError(dto.bolnaId);
+    // 1. Resolve Bolna API Key: Use provided key or fall back to platform default key
+    let apiKeyId = dto.bolnaApiKeyId;
+    if (!apiKeyId) {
+      const keys = await this.apiKeyRepository.list();
+      const defaultKey = keys.find((k) => k.isPlatformDefault && k.isActive);
+      if (!defaultKey) {
+        throw new PlatformApiKeyMissingError();
+      }
+      apiKeyId = defaultKey.id;
+    }
 
-    // 2. Fetch blueprint template from Bolna
-    const template = await this.templateProvider.fetchTemplate(dto.bolnaId);
+    // 2. Prevent duplicate Bolna ID
+    const existingBolna = await this.repository.findByBolnaId(dto.bolnaId);
+    if (existingBolna) {
+      throw new DuplicatePlatformAgentBolnaIdError(dto.bolnaId);
+    }
 
-    // 3. Auto-generate slug if not provided
-    const slug =
-      dto.slug ??
-      template.agentName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 55) + `-${dto.bolnaId.slice(0, 4)}`;
+    // 3. Fetch remote agent configuration from Bolna
+    const template = await this.templateProvider.fetchTemplate(dto.bolnaId, dto.bolnaApiKeyId);
 
-    const slugCollision = await this.agentRepository.findBySlug(slug);
-    if (slugCollision) throw new DuplicatePlatformAgentSlugError(slug);
+    const name = dto.name || template.agentName || "Imported Agent";
+    const slug = dto.slug || generateSlug(name);
 
-    // 4. Create PlatformAgent template record
-    const platformAgent = await this.agentRepository.create({
+    // 4. Prevent duplicate slug
+    const existingSlug = await this.repository.findBySlug(slug);
+    if (existingSlug) {
+      throw new DuplicatePlatformAgentSlugError(slug);
+    }
+
+    // 5. Create PlatformAgent
+    const platformAgent = await this.repository.create({
       bolnaId: dto.bolnaId,
+      bolnaApiKeyId: apiKeyId,
       slug,
-      name: dto.name ?? template.agentName,
+      name,
       industryPackId: dto.industryPackId,
       category: dto.category,
       description: dto.description,
-      isFeatured: dto.isFeatured,
-      sortOrder: dto.sortOrder,
+      isFeatured: dto.isFeatured ?? false,
+      sortOrder: dto.sortOrder ?? 0,
       defaultConfig: template.defaultConfig,
       systemPrompt: template.systemPrompt,
     });
 
-    // 5. Auto-sync extractions into local M2M catalog if requested (default: true)
-    const extractionSync = { categories: 0, dispositions: 0 };
-
-    if (dto.includeExtractions !== false) {
-      try {
-        const categoryData = await this.templateProvider.listCategories(
-          dto.bolnaId,
-        );
-        const categories = categoryData?.categories ?? [];
-
-        for (const cat of categories) {
-          // Find existing catalog category or create a new entry
-          let localCat =
-            await this.extractionRepository.findCategoryByNameInsensitive(
-              cat.name,
-            );
-
-          if (!localCat) {
-            localCat = await this.extractionRepository.createCategory({
-              name: cat.name,
-              model: cat.model ?? "gpt-4.1-mini",
-              industryPackIds: dto.industryPackId
-                ? [dto.industryPackId]
-                : undefined,
-            });
-          }
-
-          // Assign category to the newly created agent (idempotent)
-          await this.agentRepository.assignCategoriesToAgent(platformAgent.id, [
-            localCat.id,
-          ]);
-          extractionSync.categories++;
-
-          // Process dispositions in this category
-          for (const disp of cat.dispositions ?? []) {
-            let localDisp =
-              await this.extractionRepository.findDispositionByNameInsensitive(
-                disp.name,
-              );
-
-            if (!localDisp) {
-              localDisp = await this.extractionRepository.createDisposition({
-                name: disp.name,
-                question: disp.question,
-                systemPrompt: disp.system_prompt ?? undefined,
-                model: disp.model ?? "gpt-4.1-mini",
-                isSubjective: disp.is_subjective ?? false,
-                isObjective: disp.is_objective ?? false,
-                subjectiveType: disp.subjective_type ?? "text",
-                subjectiveTypeConfig:
-                  (disp.subjective_type_config as unknown as Record<
-                    string,
-                    unknown
-                  >) ?? undefined,
-                objectiveOptions:
-                  (disp.objective_options as unknown as Record<
-                    string,
-                    unknown
-                  >[]) ?? undefined,
-                industryPackIds: dto.industryPackId
-                  ? [dto.industryPackId]
-                  : undefined,
-              });
-            }
-
-            // Link disposition to category (idempotent)
-            await this.extractionRepository.attachDispositionsToCategory(
-              localCat.id,
-              [localDisp.id],
-            );
-
-            // Record Bolna binding for sync parity
-            await this.agentRepository.upsertBolnaBinding({
-              platformAgentId: platformAgent.id,
-              dispositionId: localDisp.id,
-              bolnaAgentId: dto.bolnaId,
-              bolnaCategoryId: cat.id,
-              bolnaDispositionId: disp.id,
-            });
-
-            extractionSync.dispositions++;
-          }
-        }
-      } catch (err) {
-        // Extractions import is best-effort; agent registration remains successful
-        console.error(
-          "[ImportFromBolnaUseCase] Extractions import error:",
-          err,
-        );
-      }
-    }
-
-    return {
-      platformAgent,
-      extractionSync,
-    };
+    return platformAgent;
   }
 }

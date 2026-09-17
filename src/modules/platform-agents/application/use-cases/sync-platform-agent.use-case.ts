@@ -9,12 +9,15 @@ export class SyncPlatformAgentUseCase {
   ) {}
 
   async execute(id: string) {
-    const existing = await this.repository.findById(id);
-    if (!existing) {
+    const agent = await this.repository.findById(id);
+    if (!agent) {
       throw new PlatformAgentNotFoundError(id);
     }
 
-    const template = await this.templateProvider.fetchTemplate(existing.bolnaId);
+    const template = await this.templateProvider.fetchTemplate(
+      agent.bolnaId,
+      agent.bolnaApiKeyId,
+    );
 
     return this.repository.update(id, {
       defaultConfig: template.defaultConfig,

@@ -3,7 +3,6 @@ import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
 
-// Existing Use Cases
 import type { RegisterPlatformAgentUseCase } from "../application/use-cases/register-platform-agent.use-case";
 import type { SyncPlatformAgentUseCase } from "../application/use-cases/sync-platform-agent.use-case";
 import type { UpdatePlatformAgentUseCase } from "../application/use-cases/update-platform-agent.use-case";
@@ -15,13 +14,14 @@ import type { PreviewBolnaAgentUseCase } from "../application/use-cases/preview-
 import type { ImportFromBolnaUseCase } from "../application/use-cases/import-from-bolna.use-case";
 import type { SyncBlueprintUseCase } from "../application/use-cases/sync-blueprint.use-case";
 
-// [NEW] Extraction Assignment Use Cases
+// Extraction assignment Use Cases
 import type { AssignCategoryToAgentUseCase } from "../application/use-cases/assign-category-to-agent.use-case";
 import type { RemoveCategoryFromAgentUseCase } from "../application/use-cases/remove-category-from-agent.use-case";
 import type { AssignDispositionToAgentUseCase } from "../application/use-cases/assign-disposition-to-agent.use-case";
 import type { RemoveDispositionFromAgentUseCase } from "../application/use-cases/remove-disposition-from-agent.use-case";
 import type { GetAgentExtractionsUseCase } from "../application/use-cases/get-agent-extractions.use-case";
 import type { SyncExtractionsToBolnaUseCase } from "../application/use-cases/sync-extractions-to-bolna.use-case";
+import { listPlatformAgentsQuerySchema } from "./platform-agent.schema";
 
 export class AdminPlatformAgentController {
   constructor(
@@ -35,7 +35,6 @@ export class AdminPlatformAgentController {
     private readonly previewBolnaAgentUseCase: PreviewBolnaAgentUseCase,
     private readonly importFromBolnaUseCase: ImportFromBolnaUseCase,
     private readonly syncBlueprintUseCase: SyncBlueprintUseCase,
-    // [NEW] Extraction Assignment & Sync
     private readonly assignCategory: AssignCategoryToAgentUseCase,
     private readonly removeCategory: RemoveCategoryFromAgentUseCase,
     private readonly assignDisposition: AssignDispositionToAgentUseCase,
@@ -102,7 +101,8 @@ export class AdminPlatformAgentController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.listUseCase.execute(req.query as any);
+      const query = listPlatformAgentsQuerySchema.parse(req.query);
+      const data = await this.listUseCase.execute(query);
       sendSuccess(res, data);
     } catch (err) {
       next(err);
@@ -122,7 +122,7 @@ export class AdminPlatformAgentController {
     }
   };
 
-  // ── Bolna Discovery ────────────────────────────────────────────────────────
+  // ── Bolna Dynamic Discovery ────────────────────────────────────────────────
 
   listBolnaAgents = async (
     req: Request,
@@ -130,7 +130,8 @@ export class AdminPlatformAgentController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.listBolnaAgentsUseCase.execute();
+      const bolnaApiKeyId = req.query.bolnaApiKeyId as string | undefined;
+      const data = await this.listBolnaAgentsUseCase.execute(bolnaApiKeyId);
       sendSuccess(res, data);
     } catch (err) {
       next(err);
@@ -143,8 +144,10 @@ export class AdminPlatformAgentController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const bolnaApiKeyId = req.query.bolnaApiKeyId as string | undefined;
       const data = await this.previewBolnaAgentUseCase.execute(
         param(req, "bolnaId"),
+        bolnaApiKeyId,
       );
       sendSuccess(res, data);
     } catch (err) {
@@ -178,7 +181,7 @@ export class AdminPlatformAgentController {
     }
   };
 
-  // ── [NEW] Extraction Assignment & Sync ─────────────────────────────────────
+  // ── Extractions Assignment Handlers ────────────────────────────────────────
 
   getAgentExtractionsHandler = async (
     req: Request,

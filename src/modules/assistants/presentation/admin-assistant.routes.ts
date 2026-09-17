@@ -17,7 +17,6 @@ export function buildAdminAssistantRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  router.get("/bolna-agents", controller.listBolnaAgents);
   router.get("/", controller.list);
   router.get("/:id", controller.get);
   router.post(
@@ -26,7 +25,6 @@ export function buildAdminAssistantRoutes(
     controller.register,
   );
   router.patch("/:id", validate(updateAssistantSchema), controller.update);
-  router.post("/:id/sync", controller.sync);
   router.delete("/:id", controller.remove);
 
   return router;

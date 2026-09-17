@@ -2,11 +2,10 @@ import { Router } from "express";
 import type { AdminPlatformAgentController } from "./admin-platform-agent.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validate, validateQuery } from "../../../shared/middleware/validate";
+import { validate } from "../../../shared/middleware/validate";
 import {
   registerPlatformAgentSchema,
   updatePlatformAgentSchema,
-  listPlatformAgentsQuerySchema,
   importFromBolnaSchema,
   assignCategoriesSchema,
   assignDispositionsSchema,
@@ -18,35 +17,29 @@ export function buildAdminPlatformAgentRoutes(
   authorize: AuthorizeMiddleware,
 ): Router {
   const router = Router();
-
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  // ── Bolna Discovery ────────────────────────────────────────────────────────
-  router.get("/bolna/agents", controller.listBolnaAgents);
-  router.get("/bolna/agents/:bolnaId/preview", controller.previewBolnaAgent);
+  // ── discovery endpoints (must precede /:id routes) ─────────────────────────
+  router.get("/discover-bolna-agents", controller.listBolnaAgents);
+  router.get("/preview-bolna-agent/:bolnaId", controller.previewBolnaAgent);
   router.post(
     "/import-from-bolna",
     validate(importFromBolnaSchema),
     controller.importFromBolna,
   );
 
-  // ── Agent CRUD ─────────────────────────────────────────────────────────────
-  router.post("/", validate(registerPlatformAgentSchema), controller.register);
-  router.get(
-    "/",
-    validateQuery(listPlatformAgentsQuerySchema),
-    controller.list,
-  );
+  // ── standard platform agent routes ─────────────────────────────────────────
+  router.get("/", controller.list);
   router.get("/:id", controller.get);
+  router.post("/", validate(registerPlatformAgentSchema), controller.register);
   router.patch("/:id", validate(updatePlatformAgentSchema), controller.update);
   router.post("/:id/sync", controller.sync);
-  router.post("/:id/sync-blueprint", controller.syncBlueprint);
   router.delete("/:id", controller.remove);
+  router.post("/:id/sync-blueprint", controller.syncBlueprint);
 
-  // ── [NEW] Extraction Assignment & Sync ─────────────────────────────────────
+  // ── dynamic extractions assignment ─────────────────────────────────────────
   router.get("/:id/extractions", controller.getAgentExtractionsHandler);
-
   router.post(
     "/:id/categories",
     validate(assignCategoriesSchema),
@@ -56,7 +49,6 @@ export function buildAdminPlatformAgentRoutes(
     "/:id/categories/:categoryId",
     controller.removeCategoryHandler,
   );
-
   router.post(
     "/:id/dispositions",
     validate(assignDispositionsSchema),
@@ -66,9 +58,8 @@ export function buildAdminPlatformAgentRoutes(
     "/:id/dispositions/:dispositionId",
     controller.removeDispositionHandler,
   );
-
   router.post(
-    "/:id/sync-extractions",
+    "/:id/extractions/sync",
     controller.syncExtractionsToBolnaHandler,
   );
 

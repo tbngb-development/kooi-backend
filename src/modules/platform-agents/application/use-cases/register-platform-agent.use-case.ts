@@ -13,6 +13,7 @@ export class RegisterPlatformAgentUseCase {
   ) {}
 
   async execute(dto: RegisterPlatformAgentDTO) {
+ 
     const existingSlug = await this.repository.findBySlug(dto.slug);
     if (existingSlug) {
       throw new DuplicatePlatformAgentSlugError(dto.slug);
@@ -23,7 +24,7 @@ export class RegisterPlatformAgentUseCase {
       throw new DuplicatePlatformAgentBolnaIdError(dto.bolnaId);
     }
 
-    const template = await this.templateProvider.fetchTemplate(dto.bolnaId);
+    const template = await this.templateProvider.fetchTemplate(dto.bolnaId, dto.bolnaApiKeyId);
 
     return this.repository.create({
       ...dto,

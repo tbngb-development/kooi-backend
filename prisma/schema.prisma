@@ -95,19 +95,17 @@ model RefreshToken {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Assistant {
-  id        String   @id @default(uuid())
-  bolnaId   String
-  name      String
-  tenantId  String
-  config    Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  platformAgentId String?
+  id              String   @id @default(uuid())
+  name            String
+  tenantId        String
+  config          Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  platformAgentId String
 
-  platformAgent   PlatformAgent? @relation(fields: [platformAgentId], references: [id], onDelete: SetNull)
-  
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  campaigns Campaign[]
+  platformAgent PlatformAgent @relation(fields: [platformAgentId], references: [id], onDelete: Restrict)
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  campaigns     Campaign[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,10 +333,10 @@ model Call {
   callHistory         Json?
   extractionResult    Json?
 
-  startedAt           DateTime?
-  endedAt             DateTime?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   campaign     Campaign      @relation(fields: [campaignId], references: [id])
@@ -402,7 +400,7 @@ model CallAnalysis {
   @@index([callId])
   @@index([disposition])
   @@index([leadTemperature])
-  @@index([extractionDispositionId])  // [NEW]
+  @@index([extractionDispositionId]) // [NEW]
 }
 
 // [KEPT] All existing enums for backward compatibility (Q1=B, Q2=B)
@@ -778,7 +776,8 @@ model BolnaApiKey {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  tenants Tenant[]
+  tenants        Tenant[]
+  platformAgents PlatformAgent[]
 }
 
 enum BolnaApiKeyType {
@@ -823,34 +822,38 @@ enum InviteStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PlatformAgent {
-  id            String   @id @default(uuid())
-  bolnaId       String   @unique
-  slug          String   @unique
-  name          String
-  category      String?
-  description   String?
+  id          String  @id @default(uuid())
+  bolnaId     String  @unique
+  slug        String  @unique
+  name        String
+  category    String?
+  description String?
 
   defaultConfig Json
   systemPrompt  String?
 
-  isActive      Boolean  @default(true)
-  isFeatured    Boolean  @default(false)
-  sortOrder     Int      @default(0)
+  isActive   Boolean @default(true)
+  isFeatured Boolean @default(false)
+  sortOrder  Int     @default(0)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bolnaApiKeyId String
+  bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
 
   industryPackId String?
   industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
-  assistants    Assistant[]
+  assistants Assistant[]
 
-  // [NEW] M2M relations
-  categories      PlatformAgentCategory[]
-  bolnaBindings   AgentBolnaExtractionBinding[]
+  // M2M relations
+  categories    PlatformAgentCategory[]
+  bolnaBindings AgentBolnaExtractionBinding[]
 
   @@index([industryPackId])
   @@index([category])
+  @@index([bolnaApiKeyId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -858,19 +861,18 @@ model PlatformAgent {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionCategory {
-  id          String   @id @default(uuid())
-  slug        String   @unique
-  name        String   // [NEW] case-insensitive unique via raw SQL index
-  model       String   @default("gpt-4.1-mini")
+  id    String @id @default(uuid())
+  slug  String @unique
+  name  String // [NEW] case-insensitive unique via raw SQL index
+  model String @default("gpt-4.1-mini")
 
   description String?
-  isActive    Boolean  @default(true)
- 
+  isActive    Boolean @default(true)
 
   // [NEW] M2M relations
-  industries      ExtractionCategoryIndustry[]
-  dispositions    ExtractionCategoryDisposition[]
-  platformAgents  PlatformAgentCategory[]
+  industries     ExtractionCategoryIndustry[]
+  dispositions   ExtractionCategoryDisposition[]
+  platformAgents PlatformAgentCategory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -883,12 +885,12 @@ model ExtractionCategory {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionDisposition {
-  id          String   @id @default(uuid())
-  slug        String   @unique
-  name        String   // [NEW] case-insensitive unique via raw SQL index
-  question    String
+  id           String  @id @default(uuid())
+  slug         String  @unique
+  name         String // [NEW] case-insensitive unique via raw SQL index
+  question     String
   systemPrompt String?
-  model       String   @default("gpt-4.1-mini")
+  model        String  @default("gpt-4.1-mini")
 
   isSubjective         Boolean @default(false)
   isObjective          Boolean @default(false)
@@ -898,13 +900,13 @@ model ExtractionDisposition {
 
   // [REMOVED] industry    Industry @default(GENERIC)
   description String?
-  isActive    Boolean  @default(true)
+  isActive    Boolean @default(true)
 
   // [NEW] M2M relations
-  industries      ExtractionDispositionIndustry[]
-  categories      ExtractionCategoryDisposition[]
-  bolnaBindings   AgentBolnaExtractionBinding[]
-  callAnalyses    CallAnalysis[]  // [NEW] reverse from CallAnalysis.extractionDispositionId
+  industries    ExtractionDispositionIndustry[]
+  categories    ExtractionCategoryDisposition[]
+  bolnaBindings AgentBolnaExtractionBinding[]
+  callAnalyses  CallAnalysis[] // [NEW] reverse from CallAnalysis.extractionDispositionId
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -917,9 +919,9 @@ model ExtractionDisposition {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model IndustryPack {
-  id          String   @id @default(uuid())
-  slug        String   @unique
-  name        String   // [NEW] case-insensitive unique via raw SQL index
+  id          String  @id @default(uuid())
+  slug        String  @unique
+  name        String // [NEW] case-insensitive unique via raw SQL index
   description String?
   icon        String?
 
@@ -971,7 +973,7 @@ model ExtractionDispositionIndustry {
 model ExtractionCategoryDisposition {
   categoryId    String
   dispositionId String
-  sortOrder     Int      @default(0)
+  sortOrder     Int    @default(0)
 
   category    ExtractionCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   disposition ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
@@ -984,7 +986,7 @@ model ExtractionCategoryDisposition {
 model PlatformAgentCategory {
   platformAgentId String
   categoryId      String
-  sortOrder       Int      @default(0)
+  sortOrder       Int    @default(0)
 
   platformAgent PlatformAgent      @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
   category      ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -998,9 +1000,9 @@ model AgentBolnaExtractionBinding {
   id                 String   @id @default(uuid())
   platformAgentId    String
   dispositionId      String
-  bolnaAgentId       String   // PlatformAgent.bolnaId snapshot
-  bolnaCategoryId    String   // Bolna's category ID (may be per-agent "General")
-  bolnaDispositionId String   // Bolna's disposition ID (copy-on-write)
+  bolnaAgentId       String // PlatformAgent.bolnaId snapshot
+  bolnaCategoryId    String // Bolna's category ID (may be per-agent "General")
+  bolnaDispositionId String // Bolna's disposition ID (copy-on-write)
   lastSyncedAt       DateTime @default(now())
 
   platformAgent PlatformAgent         @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)

@@ -1,8 +1,6 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 
-// ── Input DTOs ───────────────────────────────────────────────────────────────
-
 export interface CreateCampaignData {
   name: string;
   description?: string;
@@ -12,11 +10,13 @@ export interface CreateCampaignData {
   defaultRetryConfig?: Record<string, unknown>;
 }
 
-// ── Aggregated Stats ─────────────────────────────────────────────────────────
-
 export interface CampaignStatsResult {
   campaign: CampaignEntityData & {
-    assistant: { id: string; name: string; bolnaId: string } | null;
+    assistant: {
+      id: string;
+      name: string;
+      platformAgent: { bolnaId: string };
+    } | null;
     brochure: {
       id: string;
       projectName: string | null;
@@ -52,8 +52,6 @@ export interface CampaignPerformanceResult {
   topConfiguration: string;
 }
 
-// ── List Item Shape ──────────────────────────────────────────────────────────
-
 export interface CampaignListItem {
   id: string;
   name: string;
@@ -65,7 +63,7 @@ export interface CampaignListItem {
   failedLeads: number;
   createdAt: Date;
   updatedAt: Date;
-  assistant: { id: string; name: string; bolnaId: string } | null;
+  assistant: { id: string; name: string } | null;
   brochure: {
     id: string;
     projectName: string | null;
@@ -80,8 +78,6 @@ export interface CampaignListItem {
   }>;
 }
 
-// ── Repository Interface ─────────────────────────────────────────────────────
-
 export interface CampaignRepository {
   list(tenantId: string): Promise<CampaignListItem[]>;
 
@@ -95,7 +91,11 @@ export interface CampaignRepository {
     campaignId: string,
   ): Promise<
     | (CampaignEntityData & {
-        assistant: { id: string; name: string; bolnaId: string } | null;
+        assistant: {
+          id: string;
+          name: string;
+          platformAgent: { bolnaId: string };
+        } | null;
         brochure: { id: string; isConfirmed: boolean } | null;
         batches: Array<{ id: string; status: string }>;
       })

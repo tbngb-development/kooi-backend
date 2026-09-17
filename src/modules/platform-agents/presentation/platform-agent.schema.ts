@@ -8,6 +8,7 @@ export const registerPlatformAgentSchema = z.object({
     .max(60)
     .regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(100),
+  bolnaApiKeyId: z.string().uuid("Bolna API Key ID must be a valid UUID"),
   industryPackId: z.string().uuid().optional(),
   category: z.string().max(50).optional(),
   description: z.string().max(500).optional(),
@@ -23,6 +24,7 @@ export const updatePlatformAgentSchema = z.object({
     .regex(/^[a-z0-9-]+$/)
     .optional(),
   name: z.string().min(1).max(100).optional(),
+  bolnaApiKeyId: z.string().uuid().optional(),
   industryPackId: z.string().uuid().nullable().optional(),
   category: z.string().max(50).optional(),
   description: z.string().max(500).optional(),
@@ -55,8 +57,6 @@ export const importFromBolnaSchema = z.object({
   sortOrder: z.number().int().optional(),
   includeExtractions: z.boolean().optional(),
 });
-
-// ── [NEW] Extraction Assignment Schemas ─────────────────────────────────────
 
 export const assignCategoriesSchema = z.object({
   categoryIds: z.array(z.string().uuid()).min(1),

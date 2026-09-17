@@ -76,6 +76,7 @@ import {
   buildIndustryPackModule,
   type IndustryPackModule,
 } from "../modules/industry-packs/container";
+import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
 
 export interface AppContainer {
   auth: AuthModule;
@@ -98,6 +99,9 @@ export interface AppContainer {
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
+  assistantModule: AssistantModule;
+  platformAgentModule: PlatformAgentModule;
+  bolnaApiKeyModule: BolnaApiKeyModule;
 
   authenticate: AuthenticateMiddleware;
   authorize: AuthorizeMiddleware;
@@ -115,6 +119,15 @@ export function buildContainer(): AppContainer {
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
 
+  const apiKeyRepository = new PrismaBolnaApiKeyRepository();
+  const bolnaClientFactory = new BolnaClientFactory(apiKeyRepository);
+
+  const assistantModule = buildAssistantModule({
+    bolnaClientFactory,
+  });
+
+  const platformAgentModule = buildPlatformAgentModule();
+
   // shared repository
   const rechargeRepository = new PrismaRechargeRepository();
 
@@ -130,7 +143,6 @@ export function buildContainer(): AppContainer {
   // ── Core Commercial Foundation ──────────────────────────────────────
   const plans = buildPlanModule();
   const bolnaApiKeys = buildBolnaApiKeyModule();
-  const bolnaClientFactory = new BolnaClientFactory(bolnaApiKeys.repository);
   const enforcePlan = new EnforcePlanMiddleware(plans.repository);
 
   // ── Wallet (depends on plans + bolna + email) ───────────────────────
@@ -187,6 +199,10 @@ export function buildContainer(): AppContainer {
     wallet,
     payments,
     invites,
+
+    assistantModule,
+    platformAgentModule,
+    bolnaApiKeyModule: buildBolnaApiKeyModule(),
 
     authenticate: new AuthenticateMiddleware(tokenService, authRepository),
     authorize: new AuthorizeMiddleware(),

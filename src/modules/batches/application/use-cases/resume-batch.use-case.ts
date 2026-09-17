@@ -88,7 +88,7 @@ export class ResumeBatchUseCase {
     let bolnaBatchId: string;
     try {
       const result = await this.bolnaProvider.createBatch(tenantId, {
-        agentId: campaign.assistant.bolnaId,
+       agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `resume-${newBatch.id}.csv`,
         retryConfig: retryConfig as unknown as RetryConfig,

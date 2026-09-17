@@ -14,8 +14,11 @@ import type {
   BolnaAgentResponse,
   BolnaExtractionCategoryListResponse,
 } from "../../../../shared/types/bolna.types";
+import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
 
 export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
+  constructor(private readonly apiKeyRepository: BolnaApiKeyRepository) {}
+
   private async getPlatformClient(): Promise<BolnaClient> {
     const keyRecord = await prisma.bolnaApiKey.findFirst({
       where: { isPlatformDefault: true, isActive: true },
@@ -29,35 +32,43 @@ export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
     return new BolnaClient(decryptedKey, env.bolna.apiUrl);
   }
 
-  async fetchTemplate(bolnaId: string): Promise<BolnaTemplateData> {
-    const client = await this.getPlatformClient();
+  async fetchTemplate(
+    bolnaId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<BolnaTemplateData> {
+    // eslint-disable-next-line no-useless-assignment
+    let keyRecord = null;
 
-    let agentData;
-    try {
-      agentData = await client.agents.verify(bolnaId);
-    } catch (err: any) {
-      const reason =
-        err?.response?.data?.message ??
-        err?.response?.data?.error ??
-        err?.message ??
-        "Unknown error";
-      throw new BolnaTemplateFetchError(reason);
+    if (bolnaApiKeyId) {
+      keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    } else {
+      const keys = await this.apiKeyRepository.list();
+      keyRecord = keys.find((k) => k.isPlatformDefault && k.isActive);
     }
 
-    const systemPrompt = agentData.agent_prompts?.task_1?.system_prompt ?? null;
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
 
-    const defaultConfig = {
-      agent_type: agentData.agent_type,
-      agent_welcome_message: agentData.agent_welcome_message,
-      tasks: agentData.tasks,
-    };
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const client = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
 
-    return {
-      bolnaId: agentData.id,
-      agentName: agentData.agent_name,
-      defaultConfig,
-      systemPrompt,
-    };
+    try {
+      const agent = await client.agents.verify(bolnaId);
+      const systemPrompt =
+        agent.agent_prompts?.task_1?.system_prompt?.trim() ?? null;
+
+      return {
+        bolnaId: agent.id,
+        agentName: agent.agent_name,
+        systemPrompt,
+        defaultConfig: agent as unknown as Record<string, unknown>,
+      };
+    } catch (err: any) {
+      throw new BolnaTemplateFetchError(
+        err?.message || "Agent not found in the selected Bolna workspace",
+      );
+    }
   }
 
   async listAllAgents(): Promise<BolnaAgentResponse[]> {

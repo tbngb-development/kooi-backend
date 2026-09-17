@@ -1,33 +1,48 @@
+export interface RegisterAssistantInput {
+  tenantId: string;
+  name: string;
+  platformAgentId: string;
+}
+
+export interface UpdateAssistantInput {
+  tenantId: string;
+  id: string;
+  name: string;
+}
+
+export interface GetAssistantOutput {
+  assistant: {
+    id: string;
+    name: string;
+    tenantId: string;
+    platformAgentId: string;
+    config: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+    platformAgent: {
+      id: string;
+      bolnaId: string;
+      name: string;
+      slug: string;
+      description: string | null;
+      category: string | null;
+      isFeatured: boolean;
+      industryPack: {
+        id: string;
+        name: string;
+        slug: string;
+      } | null;
+    };
+  };
+  variables: { key: string; label: string }[];
+}
+
 export interface AssistantEntityData {
   id: string;
-  bolnaId: string;
   name: string;
   tenantId: string;
+  platformAgentId: string;
   config: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export class AssistantEntity {
-  constructor(private readonly data: AssistantEntityData) {}
-
-  get id(): string {
-    return this.data.id;
-  }
-  get bolnaId(): string {
-    return this.data.bolnaId;
-  }
-  get name(): string {
-    return this.data.name;
-  }
-  get tenantId(): string {
-    return this.data.tenantId;
-  }
-  get config(): Record<string, unknown> {
-    return this.data.config;
-  }
-
-  toPrimitives(): AssistantEntityData {
-    return { ...this.data };
-  }
 }

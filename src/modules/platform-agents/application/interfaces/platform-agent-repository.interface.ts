@@ -20,7 +20,7 @@ export type PlatformAgentWithCount = PlatformAgent & {
 export interface AgentExtractionConfig {
   platformAgentId: string;
   bolnaId: string;
-  /** All categories assigned to this agent, each with their dispositions */
+  bolnaApiKeyId: string;
   categories: {
     categoryId: string;
     categoryName: string;
@@ -34,7 +34,6 @@ export interface AgentExtractionConfig {
       sortOrder: number;
     }[];
   }[];
-  // [REMOVED] directDispositions — all dispositions now live in categories
   bolnaBindings: AgentBolnaExtractionBinding[];
 }
 
