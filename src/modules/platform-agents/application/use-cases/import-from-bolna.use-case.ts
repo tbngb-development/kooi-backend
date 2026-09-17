@@ -51,7 +51,7 @@ export class ImportFromBolnaUseCase {
     }
 
     // 3. Fetch remote agent configuration from Bolna
-    console.log("dto bolnaapi key id: ", dto.bolnaApiKeyId)
+    console.log("dto bolnaapi key id: ", dto.bolnaApiKeyId);
     const template = await this.templateProvider.fetchTemplate(
       dto.bolnaId,
       dto.bolnaApiKeyId,
@@ -105,6 +105,7 @@ export class ImportFromBolnaUseCase {
       name: field.key,
       label: field.label,
       required: true,
+      isEditable: false,
     }));
   }
 }

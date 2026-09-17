@@ -57,6 +57,7 @@ export class RegisterPlatformAgentUseCase {
       name: field.key,
       label: field.label,
       required: true,
+      isEditable: false,
     }));
   }
 }

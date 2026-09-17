@@ -434,6 +434,7 @@ export interface RequiredVariable {
   name: string;
   label: string;
   required: boolean;
+  isEditable: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
