@@ -23,6 +23,7 @@ import { AttachDispositionsToCategoryUseCase } from "./application/use-cases/att
 import { DetachDispositionFromCategoryUseCase } from "./application/use-cases/detach-disposition-from-category.use-case";
 
 import { AdminExtractionController } from "./presentation/admin-extraction.controller";
+import { PrismaPlatformAgentRepository } from "../platform-agents/infrastructure/repositories/prisma-platform-agent.repository";
 
 export interface ExtractionModule {
   adminController: AdminExtractionController;
@@ -32,7 +33,7 @@ export function buildExtractionModule(): ExtractionModule {
   const repository = new PrismaExtractionRepository();
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
   const bolnaProvider = new BolnaExtractionProviderImpl(apiKeyRepository);
-
+  const platformAgentRepository = new PrismaPlatformAgentRepository();
   return {
     adminController: new AdminExtractionController(
       new CreateCategoryUseCase(repository),
@@ -51,8 +52,11 @@ export function buildExtractionModule(): ExtractionModule {
       new DetachDispositionFromCategoryUseCase(repository),
       new AttachIndustriesToDispositionUseCase(repository),
       new DetachIndustryFromDispositionUseCase(repository),
-      new PreviewBolnaCategoriesUseCase(bolnaProvider),
-      new PreviewBolnaDispositionsUseCase(bolnaProvider),
+      new PreviewBolnaCategoriesUseCase(bolnaProvider, platformAgentRepository),
+      new PreviewBolnaDispositionsUseCase(
+        bolnaProvider,
+        platformAgentRepository,
+      ),
     ),
   };
 }

@@ -310,9 +310,8 @@ export class AdminExtractionController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.previewBolnaCategories.execute(
-        req.query.agentBolnaId as string,
-      );
+      const agentBolnaId = req.query.agentBolnaId as string;
+      const data = await this.previewBolnaCategories.execute(agentBolnaId);
       sendSuccess(res, data);
     } catch (err) {
       next(err);
@@ -325,10 +324,8 @@ export class AdminExtractionController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.previewBolnaDispositions.execute(
-        req.query.bolnaApiKeyId as string,
-        req.query.agentBolnaId as string | undefined,
-      );
+      const agentBolnaId = req.query.agentBolnaId as string;
+      const data = await this.previewBolnaDispositions.execute(agentBolnaId);
       sendSuccess(res, data);
     } catch (err) {
       next(err);
