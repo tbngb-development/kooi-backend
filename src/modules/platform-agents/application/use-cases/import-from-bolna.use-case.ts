@@ -8,6 +8,8 @@ import {
   PlatformApiKeyMissingError,
 } from "../../domain/errors/platform-agent.errors";
 import { generateSlug } from "../../../extractions/domain/rules/slug-generator";
+import { extractPromptInputFields } from "../../../assistants/infrastructure/promptVariableExtractor";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
 export interface ImportFromBolnaDTO {
   bolnaId: string;
@@ -49,7 +51,11 @@ export class ImportFromBolnaUseCase {
     }
 
     // 3. Fetch remote agent configuration from Bolna
-    const template = await this.templateProvider.fetchTemplate(dto.bolnaId, dto.bolnaApiKeyId);
+    console.log("dto bolnaapi key id: ", dto.bolnaApiKeyId)
+    const template = await this.templateProvider.fetchTemplate(
+      dto.bolnaId,
+      dto.bolnaApiKeyId,
+    );
 
     const name = dto.name || template.agentName || "Imported Agent";
     const slug = dto.slug || generateSlug(name);
@@ -60,7 +66,13 @@ export class ImportFromBolnaUseCase {
       throw new DuplicatePlatformAgentSlugError(slug);
     }
 
-    // 5. Create PlatformAgent
+    // 5. Auto-extract prompt variables
+    const requiredVariables = this.buildRequiredVariables(
+      template.systemPrompt,
+      template.welcomeMessage,
+    );
+
+    // 6. Create PlatformAgent
     const platformAgent = await this.repository.create({
       bolnaId: dto.bolnaId,
       bolnaApiKeyId: apiKeyId,
@@ -73,8 +85,26 @@ export class ImportFromBolnaUseCase {
       sortOrder: dto.sortOrder ?? 0,
       defaultConfig: template.defaultConfig,
       systemPrompt: template.systemPrompt,
+      welcomeMessage: template.welcomeMessage,
+      requiredVariables,
     });
 
     return platformAgent;
+  }
+
+  private buildRequiredVariables(
+    systemPrompt: string | null,
+    welcomeMessage: string | null,
+  ): RequiredVariable[] {
+    const fields = extractPromptInputFields(
+      systemPrompt ?? "",
+      welcomeMessage ?? "",
+    );
+
+    return fields.map((field) => ({
+      name: field.key,
+      label: field.label,
+      required: true,
+    }));
   }
 }

@@ -4,6 +4,7 @@ import {
   type LocationMatch,
 } from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
+import { type ExtractionResponse } from "../../../../shared/types/bolna.types";
 
 export interface ListCallsFilters {
   campaignId?: string;
@@ -81,6 +82,7 @@ export interface DetailedCallResult extends CallEntityData {
     languageSupportRequired: string | null;
     dynamicExtractions: string | null;
     extractionResult: string | null;
+    extractionResponse: string | null;
   } | null;
 }
 
@@ -129,4 +131,13 @@ export interface CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult>;
+
+  /**
+   * Fetches the computed dynamic extraction response for a call.
+   * Returns null if the call or its analysis does not exist.
+   */
+  getExtractionResponse(
+    tenantId: string,
+    callId: string,
+  ): Promise<ExtractionResponse | null>;
 }

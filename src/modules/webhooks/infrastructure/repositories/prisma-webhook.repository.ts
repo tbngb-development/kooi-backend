@@ -397,4 +397,57 @@ export class PrismaWebhookRepository implements WebhookRepository {
       dispositions: Array.from(dispositionMap.values()),
     };
   }
+
+  // ── [NEW] Dynamic Extraction Response ───────────────────────────────────
+
+  async getExtractionConfigForCall(callId: string): Promise<{
+    platformAgentId: string;
+    extractionConfig: unknown;
+  } | null> {
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: {
+        campaign: {
+          select: {
+            assistant: {
+              select: {
+                platformAgent: {
+                  select: {
+                    id: true,
+                    extractionConfig: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const agent = call?.campaign?.assistant?.platformAgent;
+    if (!agent || !agent.extractionConfig) return null;
+
+    return {
+      platformAgentId: agent.id,
+      extractionConfig: agent.extractionConfig,
+    };
+  }
+
+  async updateExtractionResponse(
+    callId: string,
+    tenantId: string,
+    response: unknown,
+  ): Promise<void> {
+    await prisma.callAnalysis.upsert({
+      where: { callId },
+      create: {
+        callId,
+        tenantId,
+        extractionResponse: response as any,
+      },
+      update: {
+        extractionResponse: response as any,
+      },
+    });
+  }
 }

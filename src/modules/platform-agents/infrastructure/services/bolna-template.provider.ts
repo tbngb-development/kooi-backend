@@ -15,6 +15,10 @@ import type {
   BolnaExtractionCategoryListResponse,
 } from "../../../../shared/types/bolna.types";
 import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
+import {
+  getAgentSystemPrompt,
+  getAgentFirstMessage,
+} from "../../../assistants/infrastructure/promptVariableExtractor";
 
 export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
   constructor(private readonly apiKeyRepository: BolnaApiKeyRepository) {}
@@ -57,11 +61,13 @@ export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
       const agent = await client.agents.verify(bolnaId);
       const systemPrompt =
         agent.agent_prompts?.task_1?.system_prompt?.trim() ?? null;
+      const welcomeMessage = getAgentFirstMessage(agent) || null;
 
       return {
         bolnaId: agent.id,
         agentName: agent.agent_name,
         systemPrompt,
+        welcomeMessage,
         defaultConfig: agent as unknown as Record<string, unknown>,
       };
     } catch (err: any) {

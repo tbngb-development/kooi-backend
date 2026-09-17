@@ -26,6 +26,7 @@ export function buildAdminCallRoutes(
   );
   router.get("/", validateQuery(adminListCallsQuerySchema), controller.list);
   router.get("/:id/transcript", controller.getTranscript);
+  router.get("/:id/extraction-response", controller.getExtractionResponse);
   router.get("/:id", controller.get);
 
   return router;

@@ -12,7 +12,6 @@ export function buildTenantCallRoutes(
 
   router.use(authenticate.tenant());
 
-  // Specific routes must come before general /:id
   router.get(
     "/stats",
     validateQuery(getCallStatsQuerySchema),
@@ -20,8 +19,9 @@ export function buildTenantCallRoutes(
   );
 
   router.get("/", validateQuery(listCallsQuerySchema), controller.list);
-
+  
   router.get("/:id/transcript", controller.getTranscriptHandler);
+  router.get("/:id/extraction-response", controller.getExtractionResponseHandler);
   router.get("/:id", controller.get);
 
   return router;

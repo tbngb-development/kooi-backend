@@ -1,5 +1,35 @@
 import { z } from "zod";
 
+// ── Shared sub-schemas ──────────────────────────────────────────────────────
+
+const extractionMetricConfigSchema = z.object({
+  label: z.string().min(1).max(100),
+  category: z.string().min(1).max(100),
+  disposition: z.string().min(1).max(100),
+  matchValue: z.string().min(1).max(100),
+});
+
+const extractionResultConfigSchema = z.object({
+  label: z.string().min(1).max(100),
+  category: z.string().min(1).max(100),
+  disposition: z.string().min(1).max(100),
+});
+
+const extractionConfigSchema = z.object({
+  metrics: z.array(extractionMetricConfigSchema).default([]),
+  results: z.array(extractionResultConfigSchema).default([]),
+});
+
+const requiredVariableSchema = z.object({
+  name: z.string().min(1).max(50),
+  label: z.string().min(1).max(100),
+  required: z.boolean().default(true),
+});
+
+const genderSchema = z.enum(["MALE", "FEMALE"]);
+
+// ── Platform Agent CRUD ─────────────────────────────────────────────────────
+
 export const registerPlatformAgentSchema = z.object({
   bolnaId: z.string().uuid(),
   slug: z
@@ -14,6 +44,10 @@ export const registerPlatformAgentSchema = z.object({
   description: z.string().max(500).optional(),
   isFeatured: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
+  extractionConfig: extractionConfigSchema.nullable().optional(),
+  welcomeMessage: z.string().max(1000).nullable().optional(),
+  requiredVariables: z.array(requiredVariableSchema).nullable().optional(),
+  gender: genderSchema.nullable().optional(),
 });
 
 export const updatePlatformAgentSchema = z.object({
@@ -31,6 +65,18 @@ export const updatePlatformAgentSchema = z.object({
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
+  // [NEW]
+  extractionConfig: extractionConfigSchema.nullable().optional(),
+  welcomeMessage: z.string().max(1000).nullable().optional(),
+  requiredVariables: z.array(requiredVariableSchema).nullable().optional(),
+  gender: genderSchema.nullable().optional(),
+});
+
+export const updateExtractionConfigSchema = z.object({
+  extractionConfig: extractionConfigSchema.nullable(),
+  welcomeMessage: z.string().max(1000).nullable().optional(),
+  requiredVariables: z.array(requiredVariableSchema).nullable().optional(),
+  gender: genderSchema.nullable().optional(),
 });
 
 export const listPlatformAgentsQuerySchema = z.object({
@@ -43,6 +89,7 @@ export const listPlatformAgentsQuerySchema = z.object({
 
 export const importFromBolnaSchema = z.object({
   bolnaId: z.string().uuid(),
+  bolnaApiKeyId: z.string().uuid().optional(),
   slug: z
     .string()
     .min(3)

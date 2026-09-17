@@ -407,3 +407,56 @@ export interface BolnaCategoryCreatePayload {
   name: string;
   model: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC EXTRACTION CONFIG (PlatformAgent.extractionConfig)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ExtractionMetricConfig {
+  label: string;
+  category: string;
+  disposition: string;
+  matchValue: string;
+}
+
+export interface ExtractionResultConfig {
+  label: string;
+  category: string;
+  disposition: string;
+}
+
+export interface ExtractionConfig {
+  metrics: ExtractionMetricConfig[];
+  results: ExtractionResultConfig[];
+}
+
+export interface RequiredVariable {
+  name: string;
+  label: string;
+  required: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC EXTRACTION RESPONSE (CallAnalysis.extractionResponse)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ExtractionMetricResponse {
+  label: string;
+  category: string;
+  disposition: string;
+  matchValue: string;
+  matched: boolean;
+  actualValue: string | null;
+}
+
+export interface ExtractionResultResponse {
+  label: string;
+  category: string;
+  disposition: string;
+  value: string | null;
+}
+
+export interface ExtractionResponse {
+  metrics: ExtractionMetricResponse[];
+  results: ExtractionResultResponse[];
+}

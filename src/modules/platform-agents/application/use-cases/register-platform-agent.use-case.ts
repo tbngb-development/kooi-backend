@@ -5,6 +5,8 @@ import {
   DuplicatePlatformAgentSlugError,
   DuplicatePlatformAgentBolnaIdError,
 } from "../../domain/errors/platform-agent.errors";
+import { extractPromptInputFields } from "../../../assistants/infrastructure/promptVariableExtractor";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
 export class RegisterPlatformAgentUseCase {
   constructor(
@@ -13,7 +15,6 @@ export class RegisterPlatformAgentUseCase {
   ) {}
 
   async execute(dto: RegisterPlatformAgentDTO) {
- 
     const existingSlug = await this.repository.findBySlug(dto.slug);
     if (existingSlug) {
       throw new DuplicatePlatformAgentSlugError(dto.slug);
@@ -24,12 +25,38 @@ export class RegisterPlatformAgentUseCase {
       throw new DuplicatePlatformAgentBolnaIdError(dto.bolnaId);
     }
 
-    const template = await this.templateProvider.fetchTemplate(dto.bolnaId, dto.bolnaApiKeyId);
+    const template = await this.templateProvider.fetchTemplate(
+      dto.bolnaId,
+      dto.bolnaApiKeyId,
+    );
+
+    const requiredVariables = this.buildRequiredVariables(
+      template.systemPrompt,
+      template.welcomeMessage,
+    );
 
     return this.repository.create({
       ...dto,
       defaultConfig: template.defaultConfig,
       systemPrompt: template.systemPrompt,
+      welcomeMessage: dto.welcomeMessage ?? template.welcomeMessage,
+      requiredVariables: dto.requiredVariables ?? requiredVariables,
     });
+  }
+
+  private buildRequiredVariables(
+    systemPrompt: string | null,
+    welcomeMessage: string | null,
+  ): RequiredVariable[] {
+    const fields = extractPromptInputFields(
+      systemPrompt ?? "",
+      welcomeMessage ?? "",
+    );
+
+    return fields.map((field) => ({
+      name: field.key,
+      label: field.label,
+      required: true,
+    }));
   }
 }

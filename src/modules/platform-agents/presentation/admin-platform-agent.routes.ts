@@ -9,6 +9,7 @@ import {
   importFromBolnaSchema,
   assignCategoriesSchema,
   assignDispositionsSchema,
+  updateExtractionConfigSchema, // [NEW]
 } from "./platform-agent.schema";
 
 export function buildAdminPlatformAgentRoutes(
@@ -61,6 +62,13 @@ export function buildAdminPlatformAgentRoutes(
   router.post(
     "/:id/extractions/sync",
     controller.syncExtractionsToBolnaHandler,
+  );
+
+  // ── [NEW] dynamic extraction config ────────────────────────────────────────
+  router.patch(
+    "/:id/extraction-config",
+    validate(updateExtractionConfigSchema),
+    controller.updateExtractionConfigHandler,
   );
 
   return router;

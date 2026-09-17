@@ -148,4 +148,22 @@ export interface WebhookRepository {
    * Returns null dispositions array if no platform agent is linked.
    */
   getAgentDispositionsForCall(callId: string): Promise<AgentDispositionMap>;
+
+  /**
+   * Resolves the PlatformAgent behind a call and returns its extractionConfig.
+   * Returns null if no agent or no config is found.
+   */
+  getExtractionConfigForCall(callId: string): Promise<{
+    platformAgentId: string;
+    extractionConfig: unknown;
+  } | null>;
+
+  /**
+   * Persists the computed { metrics, results } response on CallAnalysis.
+   */
+  updateExtractionResponse(
+    callId: string,
+    tenantId: string,
+    response: unknown,
+  ): Promise<void>;
 }
