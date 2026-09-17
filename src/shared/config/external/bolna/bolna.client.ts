@@ -10,6 +10,12 @@ import type {
   BolnaBatchStatus,
   BolnaExecution,
   RetryConfig,
+  BolnaExtractionCategoryListResponse,
+  BolnaCategoryCreatePayload,
+  BolnaExtractionCategoryResponse,
+  BolnaDispositionCreatePayload,
+  BolnaDispositionResponse,
+  BolnaDispositionCreateResponse,
 } from "../../../types/bolna.types";
 
 export interface CreateBatchParams {
@@ -41,6 +47,29 @@ export interface IBolnaClient {
     delete(
       bolnaBatchId: string,
     ): Promise<{ message: string; state: "deleted" }>;
+  };
+  extractions: {
+    listCategories(
+      agentId: string,
+    ): Promise<BolnaExtractionCategoryListResponse>;
+    createCategory(
+      agentId: string,
+      payload: BolnaCategoryCreatePayload,
+    ): Promise<BolnaExtractionCategoryResponse>;
+    updateCategory(
+      categoryId: string,
+      payload: Partial<BolnaCategoryCreatePayload>,
+    ): Promise<BolnaExtractionCategoryResponse>;
+    deleteCategory(categoryId: string): Promise<void>;
+    listDispositions(agentId?: string): Promise<BolnaDispositionResponse[]>;
+    createDisposition(
+      payload: BolnaDispositionCreatePayload,
+    ): Promise<BolnaDispositionCreateResponse>;
+    updateDisposition(
+      dispositionId: string,
+      payload: Partial<BolnaDispositionCreatePayload>,
+    ): Promise<BolnaDispositionCreateResponse>;
+    deleteDisposition(dispositionId: string): Promise<void>;
   };
 }
 
@@ -189,6 +218,78 @@ export class BolnaClient implements IBolnaClient {
         state: "deleted";
       }>(`/batches/${bolnaBatchId}`);
       return response.data;
+    },
+  };
+  extractions = {
+    listCategories: async (
+      agentId: string,
+    ): Promise<BolnaExtractionCategoryListResponse> => {
+      const response = await this.http.get<BolnaExtractionCategoryListResponse>(
+        `/agent/${agentId}/extraction-categories`,
+      );
+      return response.data;
+    },
+
+    createCategory: async (
+      agentId: string,
+      payload: BolnaCategoryCreatePayload,
+    ): Promise<BolnaExtractionCategoryResponse> => {
+      const response = await this.http.post<BolnaExtractionCategoryResponse>(
+        `/agent/${agentId}/extraction-categories`,
+        payload,
+      );
+      return response.data;
+    },
+
+    updateCategory: async (
+      categoryId: string,
+      payload: Partial<BolnaCategoryCreatePayload>,
+    ): Promise<BolnaExtractionCategoryResponse> => {
+      const response = await this.http.patch<BolnaExtractionCategoryResponse>(
+        `/extraction-categories/${categoryId}`,
+        payload,
+      );
+      return response.data;
+    },
+
+    deleteCategory: async (categoryId: string): Promise<void> => {
+      await this.http.delete(`/extraction-categories/${categoryId}`);
+    },
+
+    listDispositions: async (
+      agentId?: string,
+    ): Promise<BolnaDispositionResponse[]> => {
+      const params = agentId ? { agent_id: agentId } : {};
+      const response = await this.http.get<BolnaDispositionResponse[]>(
+        "/dispositions/",
+        { params },
+      );
+      return response.data;
+    },
+
+    createDisposition: async (
+      payload: BolnaDispositionCreatePayload,
+    ): Promise<BolnaDispositionCreateResponse> => {
+      const response = await this.http.post<BolnaDispositionCreateResponse>(
+        "/dispositions/",
+        payload,
+      );
+      return response.data;
+    },
+
+    updateDisposition: async (
+      dispositionId: string,
+      payload: Partial<BolnaDispositionCreatePayload>,
+    ): Promise<BolnaDispositionCreateResponse> => {
+      const response = await this.http.put<BolnaDispositionCreateResponse>(
+        `/dispositions/${dispositionId}`,
+        payload,
+      );
+      return response.data;
+    },
+
+    deleteDisposition: async (dispositionId: string): Promise<void> => {
+      await this.http.delete(`/dispositions/${dispositionId}`);
     },
   };
 }

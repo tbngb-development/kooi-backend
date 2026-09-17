@@ -1,6 +1,6 @@
 import prisma from "../../../../shared/config/database/prisma";
 import {
- type Prisma,
+  type Prisma,
   type CallStatus,
   type Disposition,
   type LeadTemperature,
@@ -156,6 +156,7 @@ export class PrismaCallRepository implements CallRepository {
         transcriptMessages: c.transcriptMessages,
         summary: c.summary,
         callHistory: c.callHistory,
+        extractionResult: c.extractionResult as unknown as Record<string, any>,
         startedAt: c.startedAt,
         endedAt: c.endedAt,
         createdAt: c.createdAt,
@@ -231,6 +232,7 @@ export class PrismaCallRepository implements CallRepository {
       transcriptMessages: call.transcriptMessages,
       summary: call.summary,
       callHistory: call.callHistory,
+      extractionResult: call.extractionResult as unknown as Record<string, any>,
       startedAt: call.startedAt,
       endedAt: call.endedAt,
       createdAt: call.createdAt,
@@ -267,6 +269,10 @@ export class PrismaCallRepository implements CallRepository {
             languageSupportRequired: call.callAnalysis.languageSupportRequired
               ? String(call.callAnalysis.languageSupportRequired)
               : null,
+            dynamicExtractions: call.callAnalysis
+              .dynamicExtractions as unknown as string,
+            extractionResult: call.callAnalysis
+              .extractionResult as unknown as string,
           }
         : null,
     };

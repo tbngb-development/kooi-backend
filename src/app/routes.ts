@@ -32,6 +32,9 @@ import {
 import { buildAdminWalletRoutes } from "../modules/wallet/presentation/admin-wallet.routes";
 import { buildAdminPaymentRoutes } from "../modules/payments/presentation/admin-payment.routes";
 import { buildAdminUserRoutes } from "../modules/users/presentation/admin-user.routes";
+import { buildAdminPlatformAgentRoutes } from "../modules/platform-agents/presentation/admin-platform-agent.routes";
+import { buildAdminExtractionRoutes } from "../modules/extractions/presentation/admin-extraction.routes";
+import { buildAdminIndustryPackRoutes } from "../modules/industry-packs/presentation/admin-industry-pack.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -121,10 +124,7 @@ export function buildRoutes(c: AppContainer): Router {
 
   router.use(
     "/v1/wallet",
-    buildTenantWalletRoutes(
-      c.wallet.tenantController,
-      c.authenticate,
-    ),
+    buildTenantWalletRoutes(c.wallet.tenantController, c.authenticate),
   );
 
   router.use(
@@ -161,6 +161,34 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+
+  router.use(
+    "/v1/admin/platform-agents",
+    buildAdminPlatformAgentRoutes(
+      c.platformAgents.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
+  router.use(
+    "/v1/admin/extractions",
+    buildAdminExtractionRoutes(
+      c.extractions.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
+  router.use(
+    "/v1/admin/industry-packs",
+    buildAdminIndustryPackRoutes(
+      c.industryPacks.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
   router.use(
     "/v1/admin/dashboard",
     buildAdminDashboardRoutes(

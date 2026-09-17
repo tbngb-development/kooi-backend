@@ -36,6 +36,16 @@ export interface CallCostSnapshotData {
   chargedAmount: number;
 }
 
+/** Dispositions assigned to the platform agent behind a call's campaign */
+export interface AgentDispositionMap {
+  platformAgentId: string | null;
+  dispositions: {
+    id: string;
+    name: string;
+    slug: string;
+  }[];
+}
+
 export interface WebhookRepository {
   findCallByBolnaCallId(
     bolnaCallId: string,
@@ -86,6 +96,7 @@ export interface WebhookRepository {
       duration?: number | null;
       recording?: string | null;
       cost?: number | null;
+      extracted_data?: Record<string, any> | null;
       endedAt: Date;
     },
   ): Promise<void>;
@@ -130,4 +141,11 @@ export interface WebhookRepository {
     callId: string,
     data: CallCostSnapshotData,
   ): Promise<void>;
+
+  /**
+   * Resolves the platform agent behind a call and returns all dispositions
+   * assigned to it (via categories M2M + direct M2M).
+   * Returns null dispositions array if no platform agent is linked.
+   */
+  getAgentDispositionsForCall(callId: string): Promise<AgentDispositionMap>;
 }

@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction, RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import type { TokenService } from "../../modules/auth/application/interfaces/token-service.interface";
 import type { AuthRepository } from "../../modules/auth/application/interfaces/auth-repository.interface";
 import { UnauthorizedError } from "../errors/unauthorized.error";
@@ -9,8 +9,6 @@ import { BEARER_PREFIX, HEADER_AUTHORIZATION } from "../constants/headers";
 import type {
   AuthContext,
   TenantAuthContext,
-  AdminAuthContext,
-  BaseAuthContext,
 } from "../types";
 
 export class AuthenticateMiddleware {

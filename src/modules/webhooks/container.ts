@@ -21,6 +21,7 @@ export function buildWebhookModule(
     webhookRepo,
     deps.debitWalletForCall,
   );
+
   const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo);
 
   const controller = new WebhookController(

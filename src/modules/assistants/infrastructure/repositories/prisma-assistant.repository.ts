@@ -2,6 +2,7 @@ import prisma from "../../../../shared/config/database/prisma";
 import type {
   AssistantRepository,
   RegisterAssistantData,
+  AssistantWithPlatformAgent,
 } from "../../application/interfaces/assistant-repository.interface";
 import type { AssistantEntityData } from "../../domain/entities/assistant.entity";
 
@@ -27,12 +28,54 @@ export class PrismaAssistantRepository implements AssistantRepository {
     return this.toEntityData(assistant);
   }
 
-  async findByBolnaId(
+  async findByIdWithPlatformAgent(
     tenantId: string,
-    bolnaId: string,
+    id: string,
+  ): Promise<AssistantWithPlatformAgent | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: { id, tenantId },
+      include: {
+        platformAgent: {
+          include: {
+            industryPack: true,
+          },
+        },
+      },
+    });
+
+    if (!assistant) return null;
+
+    return {
+      ...this.toEntityData(assistant),
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        bolnaId: assistant.platformAgent.bolnaId,
+        name: assistant.platformAgent.name,
+        slug: assistant.platformAgent.slug,
+        systemPrompt: assistant.platformAgent.systemPrompt,
+        description: assistant.platformAgent.description,
+        category: assistant.platformAgent.category,
+        isFeatured: assistant.platformAgent.isFeatured,
+        industryPack: assistant.platformAgent.industryPack
+          ? {
+              id: assistant.platformAgent.industryPack.id,
+              name: assistant.platformAgent.industryPack.name,
+              slug: assistant.platformAgent.industryPack.slug,
+            }
+          : null,
+      },
+    };
+  }
+
+  async findByPlatformAgentId(
+    tenantId: string | null,
+    platformAgentId: string,
   ): Promise<AssistantEntityData | null> {
     const assistant = await prisma.assistant.findFirst({
-      where: { bolnaId, tenantId },
+      where: {
+        platformAgentId,
+        ...(tenantId && { tenantId }),
+      },
     });
 
     if (!assistant) return null;
@@ -45,7 +88,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
   ): Promise<AssistantEntityData> {
     const assistant = await prisma.assistant.create({
       data: {
-        bolnaId: data.bolnaId,
+        platformAgentId: data.platformAgentId,
         name: data.name,
         tenantId,
         config: data.config as any,
@@ -61,7 +104,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
     name: string,
   ): Promise<AssistantEntityData> {
     const assistant = await prisma.assistant.update({
-      where: { id },
+      where: { id, tenantId },
       data: { name },
     });
 
@@ -74,7 +117,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
     config: any,
   ): Promise<AssistantEntityData> {
     const assistant = await prisma.assistant.update({
-      where: { id },
+      where: { id, tenantId },
       data: { config },
     });
 
@@ -83,7 +126,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
 
   async delete(tenantId: string, id: string): Promise<void> {
     await prisma.assistant.delete({
-      where: { id },
+      where: { id, tenantId },
     });
   }
 
@@ -95,18 +138,18 @@ export class PrismaAssistantRepository implements AssistantRepository {
 
   private toEntityData(a: {
     id: string;
-    bolnaId: string;
     name: string;
     tenantId: string;
+    platformAgentId: string;
     config: unknown;
     createdAt: Date;
     updatedAt: Date;
   }): AssistantEntityData {
     return {
       id: a.id,
-      bolnaId: a.bolnaId,
       name: a.name,
       tenantId: a.tenantId,
+      platformAgentId: a.platformAgentId,
       config: a.config as Record<string, unknown>,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,

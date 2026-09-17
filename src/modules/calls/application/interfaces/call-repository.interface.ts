@@ -79,6 +79,8 @@ export interface DetailedCallResult extends CallEntityData {
     followupSchedule: string | null;
     doNotCall: string | null;
     languageSupportRequired: string | null;
+    dynamicExtractions: string | null;
+    extractionResult: string | null;
   } | null;
 }
 

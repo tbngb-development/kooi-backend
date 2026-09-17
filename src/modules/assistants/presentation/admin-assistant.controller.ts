@@ -9,7 +9,6 @@ import { type ListBolnaAgentsUseCase } from "../application/use-cases/list-bolna
 import { type GetAssistantUseCase } from "../application/use-cases/get-assistant.use-case";
 import { type RegisterAssistantUseCase } from "../application/use-cases/register-assistant.use-case";
 import { type UpdateAssistantUseCase } from "../application/use-cases/update-assistant.use-case";
-import { type SyncAssistantUseCase } from "../application/use-cases/sync-assistant.use-case";
 import { type DeleteAssistantUseCase } from "../application/use-cases/delete-assistant.use-case";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 
@@ -20,7 +19,6 @@ export class AdminAssistantController {
     private readonly getAssistantUseCase: GetAssistantUseCase,
     private readonly registerAssistantUseCase: RegisterAssistantUseCase,
     private readonly updateAssistantUseCase: UpdateAssistantUseCase,
-    private readonly syncAssistantUseCase: SyncAssistantUseCase,
     private readonly deleteAssistantUseCase: DeleteAssistantUseCase,
   ) {}
 
@@ -35,23 +33,6 @@ export class AdminAssistantController {
     }
     return tenantId;
   }
-
-  listBolnaAgents = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const tenantId =
-        (req.query.tenantId as string) ??
-        (req.body?.tenantId as string) ??
-        ((req as AuthRequest).user as TenantAuthContext)?.tenantId;
-
-      sendSuccess(res, await this.listBolnaAgentsUseCase.execute(tenantId));
-    } catch (err) {
-      next(err);
-    }
-  };
 
   list = async (
     req: Request,
@@ -95,7 +76,7 @@ export class AdminAssistantController {
       const data = await this.registerAssistantUseCase.execute({
         tenantId: this.resolveTenantId(req),
         name: req.body.name,
-        bolnaId: req.body.bolnaId,
+        platformAgentId: req.body.platformAgentId,
       });
       sendSuccess(res, data, HttpStatus.CREATED);
     } catch (err) {
@@ -115,24 +96,6 @@ export class AdminAssistantController {
         name: req.body.name,
       });
       sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  sync = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      sendSuccess(
-        res,
-        await this.syncAssistantUseCase.execute(
-          this.resolveTenantId(req),
-          param(req, "id"),
-        ),
-      );
     } catch (err) {
       next(err);
     }

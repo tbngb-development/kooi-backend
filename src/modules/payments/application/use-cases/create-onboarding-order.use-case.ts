@@ -28,6 +28,7 @@ export class CreateOnboardingOrderUseCase {
   ) {}
 
   async execute(tenantId: string): Promise<CreateOrderResult> {
+    console.log("tenant id: ", tenantId);
     // 1. Get tenant plan (must be PENDING_PAYMENT)
     const tenantPlan = await this.planRepo.getTenantPlan(tenantId);
     if (!tenantPlan) throw new TenantPlanNotFoundError(tenantId);

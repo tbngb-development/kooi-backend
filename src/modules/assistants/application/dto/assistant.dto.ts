@@ -1,7 +1,7 @@
 export interface RegisterAssistantInput {
   tenantId: string;
   name: string;
-  bolnaId: string;
+  platformAgentId: string;
 }
 
 export interface UpdateAssistantInput {
@@ -13,12 +13,36 @@ export interface UpdateAssistantInput {
 export interface GetAssistantOutput {
   assistant: {
     id: string;
-    bolnaId: string;
     name: string;
     tenantId: string;
+    platformAgentId: string;
     config: Record<string, unknown>;
     createdAt: Date;
     updatedAt: Date;
+    platformAgent: {
+      id: string;
+      bolnaId: string;
+      name: string;
+      slug: string;
+      description: string | null;
+      category: string | null;
+      isFeatured: boolean;
+      industryPack: {
+        id: string;
+        name: string;
+        slug: string;
+      } | null;
+    };
   };
-  variables: {key: string, label: string}[];
+  variables: { key: string; label: string }[];
+}
+
+export interface AssistantEntityData {
+  id: string;
+  name: string;
+  tenantId: string;
+  platformAgentId: string;
+  config: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
 }

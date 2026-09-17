@@ -78,12 +78,7 @@ export interface BolnaBatchStatus {
   created_at: string;
   updated_at: string;
   status:
-    | "created"
-    | "scheduled"
-    | "running"
-    | "completed"
-    | "stopped"
-    | "failed";
+    "created" | "scheduled" | "running" | "completed" | "stopped" | "failed";
   scheduled_at?: string;
   from_phone_numbers?: string[];
   file_name?: string;
@@ -337,4 +332,78 @@ export interface ParsedCallAnalysis {
   doNotCall: ExtractionFlag | null;
   languageSupportRequired: ExtractionFlag | null;
   callSummary: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION TYPES (Bolna Dispositions & Categories)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BolnaObjectiveOption {
+  value: string;
+  condition: string;
+  sub_options?: BolnaObjectiveOption[];
+}
+
+export interface BolnaSubjectiveTypeConfig {
+  pattern: string;
+  description?: string;
+}
+
+export interface BolnaDispositionResponse {
+  id: string;
+  name: string;
+  question: string;
+  system_prompt: string | null;
+  category: string;
+  category_id: string | null;
+  model: string;
+  is_subjective: boolean;
+  is_objective: boolean;
+  subjective_type: string;
+  subjective_type_config: BolnaSubjectiveTypeConfig | null;
+  objective_options: BolnaObjectiveOption[] | null;
+  agent_ids: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BolnaExtractionCategoryResponse {
+  id: string;
+  name: string;
+  model: string;
+  agent_id: string;
+  created_at: string;
+  updated_at: string;
+  dispositions?: BolnaDispositionResponse[];
+}
+
+export interface BolnaExtractionCategoryListResponse {
+  categories: BolnaExtractionCategoryResponse[];
+}
+
+export interface BolnaDispositionCreatePayload {
+  agent_id: string;
+  name: string;
+  question: string;
+  category_id?: string;
+  category?: string;
+  system_prompt?: string;
+  model?: string;
+  is_subjective?: boolean;
+  is_objective?: boolean;
+  subjective_type?: string;
+  subjective_type_config?: BolnaSubjectiveTypeConfig | null;
+  objective_options?: BolnaObjectiveOption[];
+}
+
+export interface BolnaDispositionCreateResponse {
+  message: string;
+  id: string;
+  category_id: string;
+}
+
+export interface BolnaCategoryCreatePayload {
+  name: string;
+  model: string;
 }

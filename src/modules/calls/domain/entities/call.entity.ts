@@ -17,6 +17,7 @@ export interface CallEntityData {
   transcriptMessages: unknown | null;
   summary: string | null;
   callHistory: unknown | null;
+  extractionResult: Record<string, any> | null;
   startedAt: Date | null;
   endedAt: Date | null;
   createdAt: Date;

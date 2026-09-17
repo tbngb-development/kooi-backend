@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const registerAssistantSchema = z.object({
   name: z.string().min(1, "Friendly name is required").max(100),
-  bolnaId: z.string().min(1, "Bolna ID is required").max(100),
+  platformAgentId: z.string().uuid("Platform Agent ID must be a valid UUID"),
 });
 
 export const updateAssistantSchema = z.object({
