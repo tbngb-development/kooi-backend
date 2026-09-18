@@ -8,6 +8,7 @@ import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-c
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
+import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 
 export class AdminCallController {
@@ -16,6 +17,7 @@ export class AdminCallController {
     private readonly getCallDetailsUseCase: GetCallUseCase,
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
+    private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -110,6 +112,23 @@ export class AdminCallController {
           leadId: query.leadId,
         }),
       );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getExtractionResponse = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const data = await this.getCallExtractionResponseUseCase.execute(
+        tenantId,
+        param(req, "id"),
+      );
+      sendSuccess(res, data);
     } catch (err) {
       next(err);
     }

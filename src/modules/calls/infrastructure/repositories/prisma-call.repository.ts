@@ -15,6 +15,7 @@ import type {
   CallStatsFilters,
   CallStatsResult,
 } from "../../application/interfaces/call-repository.interface";
+import { type ExtractionResponse } from "../../../../shared/types/bolna.types";
 
 const QUALIFYING_DISPOSITIONS: Disposition[] = [
   "QUALIFIED_CONSULTANT_FOLLOWUP",
@@ -273,6 +274,8 @@ export class PrismaCallRepository implements CallRepository {
               .dynamicExtractions as unknown as string,
             extractionResult: call.callAnalysis
               .extractionResult as unknown as string,
+            extractionResponse: call.callAnalysis
+              .extractionResponse as unknown as string,
           }
         : null,
     };
@@ -414,5 +417,29 @@ export class PrismaCallRepository implements CallRepository {
       dispositionBreakdown,
       temperatureBreakdown,
     };
+  }
+
+  async getExtractionResponse(
+    tenantId: string,
+    callId: string,
+  ): Promise<ExtractionResponse | null> {
+    const call = await prisma.call.findFirst({
+      where: {
+        id: callId,
+        tenantId,
+      },
+      select: {
+        callAnalysis: {
+          select: {
+            extractionResponse: true,
+          },
+        },
+      },
+    });
+
+    if (!call?.callAnalysis?.extractionResponse) return null;
+
+    return call.callAnalysis
+      .extractionResponse as unknown as ExtractionResponse;
   }
 }

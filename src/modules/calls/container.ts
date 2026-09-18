@@ -7,6 +7,7 @@ import { TenantCallController } from "./presentation/tenant-call.controller";
 import { AdminCallController } from "./presentation/admin-call.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import { BolnaCallProviderImpl } from "./infrastructure/repositories/bolna-call.provider";
+import { GetCallExtractionResponseUseCase } from "./application/use-cases/get-call-extraction-response.use-case";
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -23,6 +24,11 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const getCall = new GetCallUseCase(repo);
   const getTranscript = new GetCallTranscriptUseCase(repo);
   const getStats = new GetCallStatsUseCase(repo);
+  const getCallExtractionResponseUseCase = new GetCallExtractionResponseUseCase(
+    repo,
+  );
+
+
   const bolnaProvider = new BolnaCallProviderImpl(deps.bolnaClientFactory);
 
   return {
@@ -31,12 +37,14 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       getCall,
       getTranscript,
       getStats,
+      getCallExtractionResponseUseCase,
     ),
     adminController: new AdminCallController(
       listCalls,
       getCall,
       getTranscript,
       getStats,
+      getCallExtractionResponseUseCase
     ),
   };
 }

@@ -7,6 +7,7 @@ import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-c
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
+import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case"; // [NEW]
 
 export class TenantCallController {
   constructor(
@@ -14,6 +15,7 @@ export class TenantCallController {
     private readonly getCallDetailsUseCase: GetCallUseCase,
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
+    private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase, // [NEW]
   ) {}
 
   list = async (
@@ -97,6 +99,24 @@ export class TenantCallController {
         leadId: query.leadId,
       });
 
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── [NEW] Dedicated dynamic extraction response endpoint ─────────────────
+  getExtractionResponseHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const data = await this.getCallExtractionResponseUseCase.execute(
+        tenantId,
+        param(req, "id"),
+      );
       sendSuccess(res, data);
     } catch (err) {
       next(err);

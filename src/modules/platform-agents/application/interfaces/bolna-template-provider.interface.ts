@@ -6,8 +6,9 @@ import type {
 export interface BolnaTemplateData {
   bolnaId: string;
   agentName: string;
-  defaultConfig: Record<string, unknown>;
   systemPrompt: string | null;
+  welcomeMessage: string | null;
+  defaultConfig: Record<string, unknown>;
 }
 
 export interface BolnaTemplateProvider {

@@ -1,9 +1,16 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Prisma, PlatformAgent } from "@prisma/client";
+import type {
+  Prisma,
+  PlatformAgent,
+  AgentGender,
+  AgentBolnaExtractionBinding,
+} from "@prisma/client";
 import type {
   AgentExtractionConfig,
+  ExtractionConfigUpdateData,
   PlatformAgentRepository,
   PlatformAgentWithCount,
+  DispositionObjectiveOption,
 } from "../../application/interfaces/platform-agent-repository.interface";
 import type {
   RegisterPlatformAgentDTO,
@@ -30,6 +37,12 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       sortOrder: data.sortOrder ?? 0,
       isActive: true,
       bolnaApiKey: { connect: { id: data.bolnaApiKeyId } },
+      extractionConfig:
+        data.extractionConfig as unknown as Prisma.InputJsonValue,
+      welcomeMessage: data.welcomeMessage ?? undefined,
+      requiredVariables:
+        data.requiredVariables as unknown as Prisma.InputJsonValue,
+      gender: data.gender ?? undefined,
     };
 
     if (data.industryPackId) {
@@ -69,6 +82,22 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.isFeatured !== undefined) updateData.isFeatured = data.isFeatured;
     if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
+
+    // [NEW]
+    if (data.extractionConfig !== undefined) {
+      updateData.extractionConfig =
+        data.extractionConfig as unknown as Prisma.InputJsonValue;
+    }
+    if (data.welcomeMessage !== undefined) {
+      updateData.welcomeMessage = data.welcomeMessage;
+    }
+    if (data.requiredVariables !== undefined) {
+      updateData.requiredVariables =
+        data.requiredVariables as unknown as Prisma.InputJsonValue;
+    }
+    if (data.gender !== undefined) {
+      updateData.gender = data.gender;
+    }
 
     if (data.bolnaApiKeyId !== undefined) {
       updateData.bolnaApiKey = { connect: { id: data.bolnaApiKeyId } };
@@ -211,6 +240,10 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
                         id: true,
                         name: true,
                         slug: true,
+                        // [NEW] for extractionConfig validation
+                        isObjective: true,
+                        isSubjective: true,
+                        objectiveOptions: true,
                       },
                     },
                   },
@@ -240,11 +273,44 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
           dispositionName: d.disposition.name,
           dispositionSlug: d.disposition.slug,
           sortOrder: d.sortOrder,
+          isObjective: d.disposition.isObjective,
+          isSubjective: d.disposition.isSubjective,
+          objectiveOptions: d.disposition.objectiveOptions as
+            DispositionObjectiveOption[] | null,
         })),
       })),
       bolnaBindings: agent.bolnaBindings,
     };
   }
+
+  // ── [NEW] Extraction Config (JSON field) ────────────────────────────────
+
+  async updateExtractionConfig(
+    platformAgentId: string,
+    data: ExtractionConfigUpdateData,
+  ): Promise<PlatformAgent> {
+    const updateData: Prisma.PlatformAgentUpdateInput = {
+      extractionConfig: data.extractionConfig as Prisma.InputJsonValue,
+    };
+
+    if (data.welcomeMessage !== undefined) {
+      updateData.welcomeMessage = data.welcomeMessage;
+    }
+    if (data.requiredVariables !== undefined) {
+      updateData.requiredVariables =
+        data.requiredVariables as Prisma.InputJsonValue;
+    }
+    if (data.gender !== undefined) {
+      updateData.gender = data.gender;
+    }
+
+    return prisma.platformAgent.update({
+      where: { id: platformAgentId },
+      data: updateData,
+    });
+  }
+
+  // ── Bolna Bindings ──────────────────────────────────────────────────────
 
   async upsertBolnaBinding(data: {
     platformAgentId: string;
@@ -252,7 +318,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     bolnaAgentId: string;
     bolnaCategoryId: string;
     bolnaDispositionId: string;
-  }): Promise<any> {
+  }): Promise<AgentBolnaExtractionBinding> {
     return prisma.agentBolnaExtractionBinding.upsert({
       where: {
         platformAgentId_dispositionId: {
@@ -295,7 +361,9 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     });
   }
 
-  async getBolnaBindings(platformAgentId: string): Promise<any[]> {
+  async getBolnaBindings(
+    platformAgentId: string,
+  ): Promise<AgentBolnaExtractionBinding[]> {
     return prisma.agentBolnaExtractionBinding.findMany({
       where: { platformAgentId },
     });

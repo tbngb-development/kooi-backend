@@ -23,10 +23,37 @@ import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 
+import type {
+  ExtractionConfig,
+  ExtractionMetricConfig,
+  ExtractionResultConfig,
+  ExtractionMetricResponse,
+  ExtractionResultResponse,
+  ExtractionResponse,
+} from "../../../../shared/types/bolna.types";
+
+interface DynamicExtractionEntry {
+  localDispositionId: string | null;
+  localDispositionSlug: string | null;
+  subjective: string | null;
+  objective: string | null;
+  confidence: number | null;
+  confidenceLabel: string | null;
+  reasoning: {
+    subjective: string | null;
+    objective: string | null;
+  };
+  validation: string | null;
+}
+
+type DynamicExtractionMap = Record<
+  string,
+  Record<string, DynamicExtractionEntry>
+>;
+
 export class ProcessCallWebhookUseCase {
   constructor(
     private readonly webhookRepo: WebhookRepository,
-    // [REMOVED] private readonly generateDynamicExtractions: GenerateDynamicExtractionsUseCase,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
   ) {}
 
@@ -213,13 +240,21 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
-    // [NEW] Map extracted_data to local dispositions (replaces GenerateDynamicExtractionsUseCase)
+    // [NEW] Map extracted_data to local dispositions AND build dynamic response
     try {
-      await this.mapCallExtractions(
+      const dynamicResult = await this.mapCallExtractions(
         call.id,
         call.tenantId,
-        payload.extracted_data as Record<string, any> | null | undefined,
+        payload.extracted_data as Record<string, unknown> | null | undefined,
       );
+
+      if (dynamicResult) {
+        await this.buildExtractionResponse(
+          call.id,
+          call.tenantId,
+          dynamicResult,
+        );
+      }
     } catch (err) {
       // Best-effort — don't fail the webhook if extraction mapping fails
       console.error("[Webhook] Dynamic extraction mapping failed:", err);
@@ -325,9 +360,9 @@ export class ProcessCallWebhookUseCase {
   private async mapCallExtractions(
     callId: string,
     tenantId: string,
-    extractedData: Record<string, any> | null | undefined,
-  ): Promise<void> {
-    if (!extractedData || Object.keys(extractedData).length === 0) return;
+    extractedData: Record<string, unknown> | null | undefined,
+  ): Promise<DynamicExtractionMap | null> {
+    if (!extractedData || Object.keys(extractedData).length === 0) return null;
 
     const agentMap = await this.webhookRepo.getAgentDispositionsForCall(callId);
 
@@ -343,7 +378,7 @@ export class ProcessCallWebhookUseCase {
           extractionResult: extractedData as InputJsonValue,
         },
       });
-      return;
+      return null;
     }
 
     // Build lookup — all dispositions come through categories now
@@ -359,16 +394,16 @@ export class ProcessCallWebhookUseCase {
       });
     }
 
-    const dynamicResult: Record<string, any> = {};
+    const dynamicResult: DynamicExtractionMap = {};
     let primaryDispositionId: string | null = null;
 
     for (const [categoryName, dispositions] of Object.entries(extractedData)) {
       if (typeof dispositions !== "object" || dispositions === null) continue;
 
-      const categoryResult: Record<string, any> = {};
+      const categoryResult: Record<string, DynamicExtractionEntry> = {};
 
       for (const [dispName, value] of Object.entries(
-        dispositions as Record<string, any>,
+        dispositions as Record<string, Record<string, unknown>>,
       )) {
         if (typeof value !== "object" || value === null) continue;
 
@@ -376,19 +411,21 @@ export class ProcessCallWebhookUseCase {
           dispositionLookup.get(dispName.toLowerCase()) ??
           dispositionLookup.get(dispName);
 
-        categoryResult[dispName] = {
+        const entry: DynamicExtractionEntry = {
           localDispositionId: localDisp?.id ?? null,
           localDispositionSlug: localDisp?.slug ?? null,
-          subjective: value.subjective ?? null,
-          objective: value.objective ?? null,
-          confidence: value.confidence ?? null,
-          confidenceLabel: value.confidence_label ?? null,
+          subjective: (value.subjective as string) ?? null,
+          objective: (value.objective as string) ?? null,
+          confidence: (value.confidence as number) ?? null,
+          confidenceLabel: (value.confidence_label as string) ?? null,
           reasoning: {
-            subjective: value.reasoning_subjective ?? null,
-            objective: value.reasoning_objective ?? null,
+            subjective: (value.reasoning_subjective as string) ?? null,
+            objective: (value.reasoning_objective as string) ?? null,
           },
-          validation: value.validation ?? null,
+          validation: (value.validation as string) ?? null,
         };
+
+        categoryResult[dispName] = entry;
 
         if (!primaryDispositionId && localDisp && value.objective != null) {
           const slugLower = localDisp.slug.toLowerCase();
@@ -405,13 +442,10 @@ export class ProcessCallWebhookUseCase {
     }
 
     if (!primaryDispositionId) {
-      for (const [, dispositions] of Object.entries(dynamicResult)) {
-        for (const [, result] of Object.entries(
-          dispositions as Record<string, any>,
-        )) {
-          const r = result as any;
-          if (r.localDispositionId && r.objective != null) {
-            primaryDispositionId = r.localDispositionId;
+      for (const dispositions of Object.values(dynamicResult)) {
+        for (const result of Object.values(dispositions)) {
+          if (result.localDispositionId && result.objective != null) {
+            primaryDispositionId = result.localDispositionId;
             break;
           }
         }
@@ -425,15 +459,85 @@ export class ProcessCallWebhookUseCase {
         callId,
         tenantId,
         extractionResult: extractedData as InputJsonValue,
-        dynamicExtractions: dynamicResult as InputJsonValue,
+        dynamicExtractions: dynamicResult as unknown as InputJsonValue,
         extractionDispositionId: primaryDispositionId,
       },
       update: {
         extractionResult: extractedData as InputJsonValue,
-        dynamicExtractions: dynamicResult as InputJsonValue,
+        dynamicExtractions: dynamicResult as unknown as InputJsonValue,
         extractionDispositionId: primaryDispositionId,
       },
     });
+
+    return dynamicResult;
+  }
+
+  /**
+   * Reads the PlatformAgent's extractionConfig and the just-computed
+   * dynamicExtractions to produce the { metrics, results } response.
+   * Stores the result in CallAnalysis.extractionResponse.
+   */
+  private async buildExtractionResponse(
+    callId: string,
+    tenantId: string,
+    dynamicResult: DynamicExtractionMap,
+  ): Promise<void> {
+    const agentConfig =
+      await this.webhookRepo.getExtractionConfigForCall(callId);
+
+    if (!agentConfig) return;
+
+    const config = agentConfig.extractionConfig as ExtractionConfig | null;
+    if (!config) return;
+
+    // Build a case-insensitive lookup of dynamic extractions
+    // Key: "category|disposition" (both lowercased)
+    const dynamicLookup = new Map<string, DynamicExtractionEntry>();
+    for (const [catName, dispositions] of Object.entries(dynamicResult)) {
+      for (const [dispName, entry] of Object.entries(dispositions)) {
+        const key = `${catName.toLowerCase()}|${dispName.toLowerCase()}`;
+        dynamicLookup.set(key, entry);
+      }
+    }
+
+    // ── Build metrics ───────────────────────────────────────────────────
+    const metrics: ExtractionMetricResponse[] = [];
+    for (const metric of config.metrics) {
+      const key = `${metric.category.toLowerCase()}|${metric.disposition.toLowerCase()}`;
+      const entry = dynamicLookup.get(key);
+
+      const actualValue = entry?.objective ?? null;
+      const matched =
+        actualValue !== null &&
+        actualValue.toLowerCase() === metric.matchValue.toLowerCase();
+
+      metrics.push({
+        label: metric.label,
+        category: metric.category,
+        disposition: metric.disposition,
+        matchValue: metric.matchValue,
+        matched,
+        actualValue,
+      });
+    }
+
+    // ── Build results ───────────────────────────────────────────────────
+    const results: ExtractionResultResponse[] = [];
+    for (const result of config.results) {
+      const key = `${result.category.toLowerCase()}|${result.disposition.toLowerCase()}`;
+      const entry = dynamicLookup.get(key);
+
+      results.push({
+        label: result.label,
+        category: result.category,
+        disposition: result.disposition,
+        value: entry?.subjective ?? null,
+      });
+    }
+
+    const response: ExtractionResponse = { metrics, results };
+
+    await this.webhookRepo.updateExtractionResponse(callId, tenantId, response);
   }
 
   // ── Completion Checks ────────────────────────────────────────────────────

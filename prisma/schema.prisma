@@ -8,7 +8,7 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH & MULTI-TENANCY  (UNCHANGED)
+// AUTH & MULTI-TENANCY 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Tenant {
@@ -91,7 +91,7 @@ model RefreshToken {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ASSISTANT  (UNCHANGED)
+// ASSISTANT 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Assistant {
@@ -109,7 +109,7 @@ model Assistant {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BROCHURE  (UNCHANGED)
+// BROCHURE 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Brochure {
@@ -182,7 +182,7 @@ model Brochure {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CAMPAIGN  (UNCHANGED)
+// CAMPAIGN 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Campaign {
@@ -222,7 +222,7 @@ enum CampaignStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEAD BATCH  (UNCHANGED)
+// LEAD BATCH  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model LeadBatch {
@@ -306,7 +306,7 @@ enum LeadStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL  (UNCHANGED)
+// CALL  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Call {
@@ -361,7 +361,7 @@ enum CallStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL ANALYSIS  [CHANGED — added extractionDispositionId]
+// CALL ANALYSIS  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model CallAnalysis {
@@ -386,7 +386,8 @@ model CallAnalysis {
   dynamicExtractions Json?
   extractionResult   Json?
 
-  // [NEW] FK to local dynamic disposition (coexists with enum above)
+  extractionResponse Json?
+
   extractionDispositionId String?
   extractionDisposition   ExtractionDisposition? @relation(fields: [extractionDispositionId], references: [id], onDelete: SetNull)
 
@@ -403,7 +404,6 @@ model CallAnalysis {
   @@index([extractionDispositionId]) // [NEW]
 }
 
-// [KEPT] All existing enums for backward compatibility (Q1=B, Q2=B)
 enum Disposition {
   INTERESTED_SEND_DETAILS
   QUALIFIED_CONSULTANT_FOLLOWUP
@@ -473,7 +473,7 @@ enum ExtractionFlag {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLANS & BILLING  (UNCHANGED)
+// PLANS & BILLING
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum PricingModel {
@@ -652,7 +652,7 @@ model TenantPlanEvent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WALLET  (UNCHANGED)
+// WALLET  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Wallet {
@@ -760,7 +760,7 @@ model Recharge {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BOLNA API KEYS  (UNCHANGED)
+// BOLNA API KEYS  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model BolnaApiKey {
@@ -818,7 +818,7 @@ enum InviteStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLATFORM AGENT  [CHANGED — replaced extractionCategories 1:M with M2M]
+// PLATFORM AGENT 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PlatformAgent {
@@ -831,6 +831,11 @@ model PlatformAgent {
 
   defaultConfig Json
   systemPrompt  String?
+
+  extractionConfig    Json?
+  welcomeMessage      String?
+  requiredVariables   Json?
+  gender              AgentGender?
 
   isActive   Boolean @default(true)
   isFeatured Boolean @default(false)
@@ -854,6 +859,11 @@ model PlatformAgent {
   @@index([industryPackId])
   @@index([category])
   @@index([bolnaApiKeyId])
+}
+
+enum AgentGender {
+  MALE
+  FEMALE
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
