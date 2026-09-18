@@ -1,3 +1,5 @@
+import type { DynamicFilterMap } from "../../../../shared/types/bolna.types";
+
 export interface ListCallsInput {
   tenantId: string;
   campaignId?: string;
@@ -13,4 +15,5 @@ export interface ListCallsInput {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  dynamicFilters?: DynamicFilterMap;
 }

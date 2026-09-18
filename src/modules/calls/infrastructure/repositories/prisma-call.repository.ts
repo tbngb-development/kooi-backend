@@ -15,7 +15,12 @@ import type {
   CallStatsFilters,
   CallStatsResult,
 } from "../../application/interfaces/call-repository.interface";
-import { type ExtractionResponse } from "../../../../shared/types/bolna.types";
+import type {
+  AvailableFiltersResponse,
+  DynamicFilterMap,
+  ExtractionConfig,
+  ExtractionResponse,
+} from "../../../../shared/types/bolna.types";
 
 const QUALIFYING_DISPOSITIONS: Disposition[] = [
   "QUALIFIED_CONSULTANT_FOLLOWUP",
@@ -109,6 +114,34 @@ export class PrismaCallRepository implements CallRepository {
           { phone: { contains: search } },
         ],
       };
+    }
+
+    // [NEW] Dynamic JSONB filters on extractionResponse.metrics
+    const dynamicAndConditions: Prisma.CallWhereInput[] = [];
+
+    if (
+      filters.dynamicFilters &&
+      Object.keys(filters.dynamicFilters).length > 0
+    ) {
+      for (const [dispositionName, actualValue] of Object.entries(
+        filters.dynamicFilters,
+      )) {
+        dynamicAndConditions.push({
+          callAnalysis: {
+            extractionResponse: {
+              path: ["metrics"],
+              array_contains: [{ disposition: dispositionName, actualValue }],
+            },
+          },
+        });
+      }
+    }
+
+    if (dynamicAndConditions.length > 0) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        ...dynamicAndConditions,
+      ];
     }
 
     const validSortFields = ["startedAt", "duration", "cost", "createdAt"];
@@ -441,5 +474,134 @@ export class PrismaCallRepository implements CallRepository {
 
     return call.callAnalysis
       .extractionResponse as unknown as ExtractionResponse;
+  }
+
+  async getAvailableFilters(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<AvailableFiltersResponse> {
+    const legacy = {
+      disposition: [
+        "INTERESTED_SEND_DETAILS",
+        "QUALIFIED_CONSULTANT_FOLLOWUP",
+        "SITE_VISIT_INTEREST",
+        "INTERESTED_GENERAL",
+        "FOLLOWUP_REQUESTED",
+        "NOT_INTERESTED",
+        "DO_NOT_CALL",
+        "WRONG_NUMBER",
+        "ALREADY_PURCHASED",
+        "BROKER",
+        "LANGUAGE_CALLBACK_REQUIRED",
+        "CALL_ENDED_BY_CUSTOMER",
+        "CALL_ENDED_ABUSIVE",
+        "NO_RESPONSE",
+        "CALL_DROPPED",
+      ],
+      leadTemperature: ["HOT", "WARM", "NURTURE", "COLD", "NOT_APPLICABLE"],
+      locationMatch: ["MATCH", "MISMATCH", "NOT_ASKED", "NOT_MENTIONED"],
+    };
+
+    // ── Single query: resolve agent + all assigned dispositions ────────
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: {
+        assistant: {
+          select: {
+            platformAgent: {
+              select: {
+                id: true,
+                categories: {
+                  select: {
+                    category: {
+                      select: {
+                        name: true,
+                        dispositions: {
+                          select: {
+                            disposition: {
+                              select: {
+                                name: true,
+                                slug: true,
+                                isObjective: true,
+                                objectiveOptions: true,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const agent = campaign?.assistant?.platformAgent;
+    if (!agent) {
+      return { legacy, dynamic: [] };
+    }
+
+    // ── In-memory: flatten categories → dispositions, deduplicate ──────
+    const seen = new Set<string>();
+    const dynamic: AvailableFiltersResponse["dynamic"] = [];
+
+    for (const catRel of agent.categories) {
+      const categoryName = catRel.category.name;
+
+      for (const dispRel of catRel.category.dispositions) {
+        const disp = dispRel.disposition;
+
+        // Skip non-objective dispositions (no predefined values to filter by)
+        if (!disp.isObjective) continue;
+
+        // Deduplicate across categories
+        if (seen.has(disp.slug)) continue;
+        seen.add(disp.slug);
+
+        const options = this.flattenObjectiveValues(
+          disp.objectiveOptions as Array<{
+            value: string;
+            sub_options?: unknown[];
+          }> | null,
+        );
+
+        if (options.length === 0) continue;
+
+        dynamic.push({
+          label: disp.name,
+          disposition: disp.name,
+          category: categoryName,
+          type: "metric",
+          options,
+        });
+      }
+    }
+
+    return { legacy, dynamic };
+  }
+
+  private flattenObjectiveValues(
+    options: Array<{ value: string; sub_options?: unknown[] }> | null,
+  ): string[] {
+    if (!options) return [];
+
+    const values: string[] = [];
+    for (const opt of options) {
+      values.push(opt.value);
+      if (opt.sub_options && Array.isArray(opt.sub_options)) {
+        values.push(
+          ...this.flattenObjectiveValues(
+            opt.sub_options as Array<{
+              value: string;
+              sub_options?: unknown[];
+            }>,
+          ),
+        );
+      }
+    }
+    return values;
   }
 }

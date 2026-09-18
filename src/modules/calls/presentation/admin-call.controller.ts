@@ -4,12 +4,13 @@ import type { ListCallsQuery, GetCallStatsQuery } from "./call.schema";
 import { sendSuccess } from "../../../shared/utils/response";
 import { AdminMessages } from "../../../shared/constants/messages";
 import { param } from "../../../shared/utils/paramHelper";
+import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-case";
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
 import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case";
-import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
+import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
 
 export class AdminCallController {
   constructor(
@@ -18,6 +19,8 @@ export class AdminCallController {
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
     private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase,
+
+    private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -56,6 +59,7 @@ export class AdminCallController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
+        dynamicFilters: query.dynamicFilters, 
       });
 
       sendSuccess(res, data);
@@ -127,6 +131,24 @@ export class AdminCallController {
       const data = await this.getCallExtractionResponseUseCase.execute(
         tenantId,
         param(req, "id"),
+      );
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getAvailableFilters = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const campaignId = req.query.campaignId as string;
+      const data = await this.getAvailableFiltersUseCase.execute(
+        tenantId,
+        campaignId,
       );
       sendSuccess(res, data);
     } catch (err) {

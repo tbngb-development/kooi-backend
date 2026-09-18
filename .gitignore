@@ -6,4 +6,5 @@ dist
 .env.production
 .env.staging
 kooi-v1-auth.json
+docs
 

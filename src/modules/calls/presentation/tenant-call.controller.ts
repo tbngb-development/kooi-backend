@@ -7,7 +7,8 @@ import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-c
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
-import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case"; // [NEW]
+import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case";
+import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
 
 export class TenantCallController {
   constructor(
@@ -15,7 +16,8 @@ export class TenantCallController {
     private readonly getCallDetailsUseCase: GetCallUseCase,
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
-    private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase, // [NEW]
+    private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase,
+    private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
   ) {}
 
   list = async (
@@ -42,6 +44,7 @@ export class TenantCallController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
+        dynamicFilters: query.dynamicFilters, 
       });
 
       sendSuccess(res, data);
@@ -116,6 +119,24 @@ export class TenantCallController {
       const data = await this.getCallExtractionResponseUseCase.execute(
         tenantId,
         param(req, "id"),
+      );
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getAvailableFilters = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const query = req.query as unknown as { campaignId: string };
+      const data = await this.getAvailableFiltersUseCase.execute(
+        tenantId,
+        query.campaignId,
       );
       sendSuccess(res, data);
     } catch (err) {

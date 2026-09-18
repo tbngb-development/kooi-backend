@@ -183,7 +183,7 @@ export function buildContainer(): AppContainer {
       checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
     }),
     leads: buildLeadModule(),
-    calls: buildCallModule({ bolnaClientFactory }),
+    calls: buildCallModule(),
     dashboard: buildDashboardModule(),
     brochures: buildBrochureModule(),
     users: buildUserModule({ passwordService }),

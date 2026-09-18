@@ -1,4 +1,7 @@
-import { type CallRepository, type PaginatedCallsResult } from "../interfaces/call-repository.interface";
+import {
+  type CallRepository,
+  type PaginatedCallsResult,
+} from "../interfaces/call-repository.interface";
 import { type ListCallsInput } from "../dto/call.dto";
 
 export class ListCallsUseCase {
@@ -19,6 +22,7 @@ export class ListCallsUseCase {
       sortOrder: input.sortOrder,
       page: input.page,
       limit: input.limit,
+      dynamicFilters: input.dynamicFilters ,
     });
   }
 }

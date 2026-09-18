@@ -401,7 +401,8 @@ model CallAnalysis {
   @@index([callId])
   @@index([disposition])
   @@index([leadTemperature])
-  @@index([extractionDispositionId]) // [NEW]
+  @@index([extractionDispositionId]) 
+  @@index([extractionResponse], type: Gin)
 }
 
 enum Disposition {
