@@ -4,15 +4,19 @@ import {
   type LocationMatch,
 } from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
-import { type ExtractionResponse } from "../../../../shared/types/bolna.types";
+import type {
+  ExtractionResponse,
+  AvailableFiltersResponse,
+  DynamicFilterMap,
+} from "../../../../shared/types/bolna.types";
 
 export interface ListCallsFilters {
   campaignId?: string;
   leadId?: string;
-  status?: string; // Comma-separated or single
-  disposition?: string; // Comma-separated or single
-  leadTemperature?: string; // Comma-separated or single
-  locationMatch?: string; // Comma-separated or single
+  status?: string;
+  disposition?: string;
+  leadTemperature?: string;
+  locationMatch?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -20,6 +24,7 @@ export interface ListCallsFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  dynamicFilters?: DynamicFilterMap;
 }
 
 export interface PaginatedCallsResult {
@@ -140,4 +145,9 @@ export interface CallRepository {
     tenantId: string,
     callId: string,
   ): Promise<ExtractionResponse | null>;
+
+  getAvailableFilters(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<AvailableFiltersResponse>;
 }

@@ -5,20 +5,15 @@ import { GetCallTranscriptUseCase } from "./application/use-cases/get-call-trans
 import { GetCallStatsUseCase } from "./application/use-cases/get-call-stats.use-case";
 import { TenantCallController } from "./presentation/tenant-call.controller";
 import { AdminCallController } from "./presentation/admin-call.controller";
-import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
-import { BolnaCallProviderImpl } from "./infrastructure/repositories/bolna-call.provider";
 import { GetCallExtractionResponseUseCase } from "./application/use-cases/get-call-extraction-response.use-case";
-
-export interface CallModuleDeps {
-  bolnaClientFactory: IBolnaClientFactory;
-}
+import { GetAvailableFiltersUseCase } from "./application/use-cases/get-available-filters.use-case";
 
 export interface CallModule {
   adminController: AdminCallController;
   tenantController: TenantCallController;
 }
 
-export function buildCallModule(deps: CallModuleDeps): CallModule {
+export function buildCallModule(): CallModule {
   const repo = new PrismaCallRepository();
   const listCalls = new ListCallsUseCase(repo);
   const getCall = new GetCallUseCase(repo);
@@ -27,9 +22,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const getCallExtractionResponseUseCase = new GetCallExtractionResponseUseCase(
     repo,
   );
-
-
-  const bolnaProvider = new BolnaCallProviderImpl(deps.bolnaClientFactory);
+  const getAvailableFilters = new GetAvailableFiltersUseCase(repo);
 
   return {
     tenantController: new TenantCallController(
@@ -38,13 +31,15 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       getTranscript,
       getStats,
       getCallExtractionResponseUseCase,
+      getAvailableFilters,
     ),
     adminController: new AdminCallController(
       listCalls,
       getCall,
       getTranscript,
       getStats,
-      getCallExtractionResponseUseCase
+      getCallExtractionResponseUseCase,
+      getAvailableFilters,
     ),
   };
 }

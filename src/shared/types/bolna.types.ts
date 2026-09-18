@@ -461,3 +461,27 @@ export interface ExtractionResponse {
   metrics: ExtractionMetricResponse[];
   results: ExtractionResultResponse[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC FILTER TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DynamicFilterOption {
+  label: string;
+  disposition: string;
+  category: string;
+  type: "metric" | "result";
+  options: string[]; // objective option values for metrics, empty for results
+}
+
+export interface AvailableFiltersResponse {
+  legacy: {
+    disposition: string[];
+    leadTemperature: string[];
+    locationMatch: string[];
+  };
+  dynamic: DynamicFilterOption[];
+}
+
+/** Key: disposition name, Value: actualValue to match */
+export type DynamicFilterMap = Record<string, string>;
