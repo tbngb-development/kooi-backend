@@ -10,6 +10,7 @@ import { TenantCampaignController } from "./presentation/tenant-campaign.control
 import { AdminCampaignController } from "./presentation/admin-campaign.controller";
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
+import { GetCampaignPerformanceV2UseCase } from "./application/use-cases/get-campaign-performance-v2.use-case";
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
@@ -28,21 +29,26 @@ export function buildCampaignModule(): CampaignModule {
   const getCampaignPerformance = new GetCampaignPerformanceUseCase(
     campaignRepo,
   );
+  const getCampaignPerformanceV2 = new GetCampaignPerformanceV2UseCase(
+    campaignRepo,
+  );
 
   return {
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,
-    new CreateCampaignUseCase(campaignRepo, planRepo),
+      new CreateCampaignUseCase(campaignRepo, planRepo),
       new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo),
       getCampaignStats,
       getCampaignPerformance,
+      getCampaignPerformanceV2,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,
       getCampaign,
       getCampaignStats,
       getCampaignPerformance,
+      getCampaignPerformanceV2,
     ),
   };
 }

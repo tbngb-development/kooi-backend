@@ -10,6 +10,7 @@ import type { CreateCampaignUseCase } from "../application/use-cases/create-camp
 import type { ParseLeadsUseCase } from "../application/use-cases/parse-leads.use-case";
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
 import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
+import type { GetCampaignPerformanceV2UseCase } from "../application/use-cases/get-campaign-performance-v2.use-case";
 
 export class TenantCampaignController {
   constructor(
@@ -19,6 +20,7 @@ export class TenantCampaignController {
     private readonly parseLeadsUseCase: ParseLeadsUseCase,
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
     private readonly getCampaignPerformanceUseCase: GetCampaignPerformanceUseCase,
+    private readonly getCampaignPerformanceV2UseCase: GetCampaignPerformanceV2UseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -127,6 +129,25 @@ export class TenantCampaignController {
       const { tenantId } = this.getTenant(req);
       const batchId = req.query.batchId as string | undefined;
       const data = await this.getCampaignPerformanceUseCase.execute(
+        tenantId,
+        param(req, "id"),
+        batchId,
+      );
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  performanceV2 = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const batchId = req.query.batchId as string | undefined;
+      const data = await this.getCampaignPerformanceV2UseCase.execute(
         tenantId,
         param(req, "id"),
         batchId,

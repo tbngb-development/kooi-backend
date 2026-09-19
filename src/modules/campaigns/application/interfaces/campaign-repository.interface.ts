@@ -1,6 +1,7 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
+import type { CampaignPerformanceV2Result } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
   name: string;
@@ -133,6 +134,12 @@ export interface CampaignRepository {
     campaignId: string,
     batchId?: string,
   ): Promise<CampaignPerformanceResult>;
+
+  getPerformanceV2(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignPerformanceV2Result>;
 
   findAssistantWithAgent(
     tenantId: string,

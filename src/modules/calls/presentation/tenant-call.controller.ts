@@ -44,7 +44,9 @@ export class TenantCallController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
-        dynamicFilters: query.dynamicFilters, 
+        dynamicFilters: query.dynamicFilters,
+        metricKey: query.metricKey,
+        metricValue: query.metricValue,
       });
 
       sendSuccess(res, data);

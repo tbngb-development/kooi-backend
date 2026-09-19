@@ -43,6 +43,8 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
   dynamicFilters: dynamicFiltersSchema, // [NEW]
+  metricKey: z.string().min(1).max(100).optional(),
+  metricValue: z.string().min(1).max(200).optional(),
 });
 
 export const getCallStatsQuerySchema = z.object({

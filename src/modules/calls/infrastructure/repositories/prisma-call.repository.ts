@@ -116,6 +116,14 @@ export class PrismaCallRepository implements CallRepository {
       };
     }
 
+    if (filters.metricKey && filters.metricValue) {
+      where.callMetrics = {
+        some: {
+          metricKey: filters.metricKey,
+          actualValue: filters.metricValue,
+        },
+      };
+    }
     // [NEW] Dynamic JSONB filters on extractionResponse.metrics
     const dynamicAndConditions: Prisma.CallWhereInput[] = [];
 

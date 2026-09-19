@@ -344,6 +344,7 @@ model Call {
   batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
   callAnalysis CallAnalysis?
+  callMetrics  CallMetric[] 
 
   @@index([tenantId])
   @@index([campaignId])
@@ -1021,4 +1022,29 @@ model AgentBolnaExtractionBinding {
 
   @@unique([platformAgentId, dispositionId])
   @@index([bolnaAgentId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL METRIC 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallMetric {
+  id          String   @id @default(uuid())
+  callId      String
+  tenantId    String
+  campaignId  String
+  batchId     String?
+  metricKey   String
+  metricLabel String
+  matched     Boolean
+  actualValue String
+  matchValue  String
+  createdAt   DateTime @default(now())
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, metricKey, actualValue])
+  @@index([tenantId, campaignId, metricKey, matched])
+  @@index([callId])
+  @@index([tenantId, batchId, metricKey])
 }

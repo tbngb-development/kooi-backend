@@ -36,6 +36,7 @@ export function buildTenantCampaignRoutes(
   // Member routes (before /:id)
   router.get("/:id/stats", controller.stats);
   router.get("/:id/performance", controller.performance);
+  router.get("/:id/performance-v2", controller.performanceV2);
   router.post(
     "/:id/parse-leads",
     leadsUploadMemory.single("file"),

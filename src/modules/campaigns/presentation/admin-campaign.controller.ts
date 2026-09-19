@@ -3,11 +3,12 @@ import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import { sendSuccess } from "../../../shared/utils/response";
 import { AdminMessages } from "../../../shared/constants/messages";
 import { param } from "../../../shared/utils/paramHelper";
+import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 import type { ListCampaignsUseCase } from "../application/use-cases/list-campaigns.use-case";
 import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.use-case";
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
 import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
-import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
+import type { GetCampaignPerformanceV2UseCase } from "../application/use-cases/get-campaign-performance-v2.use-case";
 
 export class AdminCampaignController {
   constructor(
@@ -15,6 +16,7 @@ export class AdminCampaignController {
     private readonly getCampaignUseCase: GetCampaignUseCase,
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
     private readonly getCampaignPerformanceUseCase: GetCampaignPerformanceUseCase,
+    private readonly getCampaignPerformanceV2UseCase: GetCampaignPerformanceV2UseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -86,6 +88,27 @@ export class AdminCampaignController {
         await this.getCampaignPerformanceUseCase.execute(
           tenantId,
           param(req, "id"),
+        ),
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  performanceV2 = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const batchId = req.query.batchId as string | undefined;
+      sendSuccess(
+        res,
+        await this.getCampaignPerformanceV2UseCase.execute(
+          tenantId,
+          param(req, "id"),
+          batchId,
         ),
       );
     } catch (err) {

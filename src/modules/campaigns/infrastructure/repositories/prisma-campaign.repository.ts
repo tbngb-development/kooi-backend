@@ -9,7 +9,11 @@ import type {
   AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
-import type { CampaignStatus } from "@prisma/client";
+import { type CampaignStatus } from "@prisma/client";
+import type {
+  CampaignPerformanceV2Result,
+  PerformanceV2MetricBreakdown,
+} from "../../application/dto/campaign.dto";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(tenantId: string): Promise<CampaignListItem[]> {
@@ -399,6 +403,88 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
+  async getPerformanceV2(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignPerformanceV2Result> {
+    // Single indexed GROUP BY — returns ~20-30 rows regardless of call count
+    const rows = await prisma.callMetric.groupBy({
+      by: [
+        "metricKey",
+        "metricLabel",
+        "actualValue",
+        "matched",
+        "actualValue",
+        "matchValue",
+        
+      ],
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      _count: true,
+    });
+
+    if (rows.length === 0) {
+      return { metrics: [] };
+    }
+
+    // Group pre-aggregated rows by metricKey (tiny dataset, in-memory is fine)
+    const metricMap = new Map<
+      string,
+      {
+        label: string;
+        totalEvaluated: number;
+        matched: number;
+        actualValue: string;
+        matchValue: string;
+        valueCounts: Record<string, number>;
+      }
+    >();
+
+    for (const row of rows) {
+      let acc = metricMap.get(row.metricKey);
+      if (!acc) {
+        acc = {
+          label: row.metricLabel,
+          actualValue: row.actualValue,
+          matchValue: row.matchValue,
+          totalEvaluated: 0,
+          matched: 0,
+          valueCounts: {},
+        };
+        metricMap.set(row.metricKey, acc);
+      }
+
+      const count = row._count;
+      acc.totalEvaluated += count;
+      if (row.matched) acc.matched += count;
+      acc.valueCounts[row.actualValue] = count;
+    }
+
+    const metrics: PerformanceV2MetricBreakdown[] = [];
+    for (const [key, acc] of metricMap) {
+      const matchRate =
+        acc.totalEvaluated > 0
+          ? parseFloat(((acc.matched / acc.totalEvaluated) * 100).toFixed(1))
+          : 0;
+
+      metrics.push({
+        key,
+        label: acc.label,
+        totalEvaluated: acc.totalEvaluated,
+        matched: acc.matched,
+        actualValue: acc.actualValue,
+        matchValue: acc.matchValue,
+        matchRate,
+        actualValueBreakdown: acc.valueCounts,
+      });
+    }
+
+    return { metrics };
+  }
   async findAssistantWithAgent(
     tenantId: string,
     assistantId: string,

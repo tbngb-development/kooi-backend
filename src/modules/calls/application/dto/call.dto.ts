@@ -16,4 +16,6 @@ export interface ListCallsInput {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
+  metricKey?: string; // e.g., "lead_temperature"
+  metricValue?: string; // e.g., "HOT"
 }
