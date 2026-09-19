@@ -1,4 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
   AssistantRepository,
   RegisterAssistantData,
@@ -46,13 +47,22 @@ export class PrismaAssistantRepository implements AssistantRepository {
     if (!assistant) return null;
 
     return {
-      ...this.toEntityData(assistant),
+      id: assistant.id,
+      name: assistant.name,
+      tenantId: assistant.tenantId,
+      platformAgentId: assistant.platformAgentId,
+      config: assistant.config as Record<string, unknown>,
+      createdAt: assistant.createdAt,
+      updatedAt: assistant.updatedAt,
       platformAgent: {
         id: assistant.platformAgent.id,
         bolnaId: assistant.platformAgent.bolnaId,
         name: assistant.platformAgent.name,
         slug: assistant.platformAgent.slug,
         systemPrompt: assistant.platformAgent.systemPrompt,
+        welcomeMessage: assistant.platformAgent.welcomeMessage, // [ADD]
+        requiredVariables: assistant.platformAgent.requiredVariables as
+          RequiredVariable[] | null,
         description: assistant.platformAgent.description,
         category: assistant.platformAgent.category,
         isFeatured: assistant.platformAgent.isFeatured,

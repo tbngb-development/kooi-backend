@@ -60,3 +60,23 @@ export class InvalidCampaignStatusTransitionError extends AppError {
     );
   }
 }
+
+export class MissingRequiredVariablesError extends AppError {
+  constructor(missingVariables: string[]) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Missing required campaign variables: ${missingVariables.join(", ")}`,
+      "MISSING_REQUIRED_VARIABLES",
+    );
+  }
+}
+
+export class RetryConfigNotAllowedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "Retry automation is not available on your current plan",
+      "RETRY_CONFIG_NOT_ALLOWED",
+    );
+  }
+}

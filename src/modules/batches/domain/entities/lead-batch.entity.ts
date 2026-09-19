@@ -5,6 +5,7 @@ import {
   isBatchActive,
   isBatchTerminal,
 } from "./batch-status.rules";
+import { type RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface LeadBatchEntityData {
   id: string;
@@ -15,7 +16,7 @@ export interface LeadBatchEntityData {
   fileName: string | null;
   originalFileUrl: string | null;
   transformedCsvUrl: string | null;
-  retryConfig: Record<string, unknown> | null;
+  retryConfig?: RetryConfig;
   scheduledAt: Date | null;
   bolnaScheduledAt: Date | null;
   totalLeads: number;

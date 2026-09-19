@@ -21,6 +21,7 @@ import {
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
 import { env } from "../../../../shared/config/env";
+import { type RetryConfig } from "../../../../shared/types/bolna.types";
 
 export class CreateBatchUseCase {
   constructor(
@@ -76,10 +77,10 @@ export class CreateBatchUseCase {
     if (newLeads.length === 0) throw new AllLeadsDuplicateError();
 
     // 6. Resolve retry config
-    const retryConfig = input.retryConfig ??
-      (campaign.defaultRetryConfig as Record<string, unknown>) ?? {
-        enabled: false,
-      };
+    const resolvedRetryConfig: RetryConfig | undefined =
+      input.retryConfig ??
+      (campaign.defaultRetryConfig as RetryConfig | null) ??
+      undefined;
 
     // 7. Create batch + leads in DB
     const batch = await this.batchRepo.create({
@@ -87,7 +88,7 @@ export class CreateBatchUseCase {
       tenantId: input.tenantId,
       fileName: input.fileName,
       totalLeads: newLeads.length,
-      retryConfig: retryConfig as Record<string, unknown>,
+      retryConfig: resolvedRetryConfig,
     });
 
     await this.batchRepo.createLeads(
@@ -129,11 +130,10 @@ export class CreateBatchUseCase {
 
     try {
       const result = await this.bolnaProvider.createBatch(input.tenantId, {
-        // Safe runtime inheritance of platform level template bolnaId
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batch.id}.csv`,
-        retryConfig: retryConfig as CreateBatchInput["retryConfig"],
+        retryConfig: resolvedRetryConfig,
         webhookUrl,
       });
       bolnaBatchId = result.batch_id;

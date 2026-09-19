@@ -1,5 +1,6 @@
 import type { BatchStatus } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
+import { type RetryConfig } from "../../../../shared/types/bolna.types";
 
 // ── Input DTOs ───────────────────────────────────────────────────────────────
 
@@ -8,7 +9,7 @@ export interface CreateBatchData {
   tenantId: string;
   fileName: string;
   totalLeads: number;
-  retryConfig: Record<string, unknown> | null;
+  retryConfig?: RetryConfig ;
 }
 
 export interface CreateLeadData {

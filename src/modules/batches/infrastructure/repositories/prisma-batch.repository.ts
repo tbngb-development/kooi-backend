@@ -1,4 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import type {
   BatchRepository,
   CreateBatchData,
@@ -8,11 +9,7 @@ import type {
   PendingLeadRow,
 } from "../../application/interfaces/batch-repository.interface";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
-import {
-  type BatchStatus,
-  LeadStatus,
-  type Prisma,
-} from "@prisma/client";
+import { type BatchStatus, LeadStatus, type Prisma } from "@prisma/client";
 
 export class PrismaBatchRepository implements BatchRepository {
   async list(tenantId: string, campaignId: string): Promise<BatchListItem[]> {
@@ -64,7 +61,8 @@ export class PrismaBatchRepository implements BatchRepository {
         status: "CREATED",
         fileName: data.fileName,
         totalLeads: data.totalLeads,
-        retryConfig: data.retryConfig as any,
+        retryConfig:
+          (data.retryConfig as unknown as Prisma.InputJsonValue) ?? undefined,
       },
     });
 
@@ -277,7 +275,7 @@ export class PrismaBatchRepository implements BatchRepository {
       fileName: batch.fileName,
       originalFileUrl: batch.originalFileUrl,
       transformedCsvUrl: batch.transformedCsvUrl,
-      retryConfig: batch.retryConfig as Record<string, unknown> | null,
+      retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined, // [FIXED]
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
       totalLeads: batch.totalLeads,

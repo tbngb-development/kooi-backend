@@ -33,7 +33,7 @@ export function buildCampaignModule(): CampaignModule {
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,
-      new CreateCampaignUseCase(campaignRepo),
+    new CreateCampaignUseCase(campaignRepo, planRepo),
       new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo),
       getCampaignStats,
       getCampaignPerformance,

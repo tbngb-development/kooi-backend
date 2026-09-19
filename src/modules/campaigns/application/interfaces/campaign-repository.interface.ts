@@ -1,5 +1,6 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
 export interface CreateCampaignData {
   name: string;
@@ -78,6 +79,16 @@ export interface CampaignListItem {
   }>;
 }
 
+export interface AssistantWithAgentData {
+  id: string;
+  name: string;
+  platformAgent: {
+    id: string;
+    bolnaId: string;
+    requiredVariables: RequiredVariable[] | null;
+  };
+}
+
 export interface CampaignRepository {
   list(tenantId: string): Promise<CampaignListItem[]>;
 
@@ -123,7 +134,10 @@ export interface CampaignRepository {
     batchId?: string,
   ): Promise<CampaignPerformanceResult>;
 
-  checkAssistantExists(tenantId: string, assistantId: string): Promise<boolean>;
+  findAssistantWithAgent(
+    tenantId: string,
+    assistantId: string,
+  ): Promise<AssistantWithAgentData | null>;
 
   checkBrochureConfirmed(
     tenantId: string,

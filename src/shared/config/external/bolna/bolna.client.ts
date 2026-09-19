@@ -140,19 +140,7 @@ export class BolnaClient implements IBolnaClient {
       }
 
       if (params.retryConfig?.enabled) {
-        const payloadRetry = {
-          enabled: true,
-          max_retries: params.retryConfig.max_retries,
-          retry_on_statuses: params.retryConfig.retry_on_statuses ?? [
-            "no-answer",
-            "busy",
-            "failed",
-          ],
-          retry_on_voicemail: params.retryConfig.retry_on_voicemail ?? false,
-          retry_intervals_minutes: params.retryConfig
-            .retry_intervals_minutes ?? [15, 30],
-        };
-        form.append("retry_config", JSON.stringify(payloadRetry));
+        form.append("retry_config", JSON.stringify(params.retryConfig));
       }
 
       const response = await axios.post<BolnaBatchResponse>(

@@ -1,10 +1,12 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
   CampaignRepository,
   CreateCampaignData,
   CampaignStatsResult,
   CampaignPerformanceResult,
   CampaignListItem,
+  AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { CampaignStatus } from "@prisma/client";
@@ -397,14 +399,37 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  async checkAssistantExists(
+  async findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
-  ): Promise<boolean> {
-    const count = await prisma.assistant.count({
+  ): Promise<AssistantWithAgentData | null> {
+    const assistant = await prisma.assistant.findFirst({
       where: { id: assistantId, tenantId },
+      select: {
+        id: true,
+        name: true,
+        platformAgent: {
+          select: {
+            id: true,
+            bolnaId: true,
+            requiredVariables: true,
+          },
+        },
+      },
     });
-    return count > 0;
+
+    if (!assistant) return null;
+
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        bolnaId: assistant.platformAgent.bolnaId,
+        requiredVariables: assistant.platformAgent.requiredVariables as
+          RequiredVariable[] | null,
+      },
+    };
   }
 
   async checkBrochureConfirmed(
