@@ -1,4 +1,4 @@
-import type { BatchStatus } from "@prisma/client";
+import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 
@@ -9,7 +9,7 @@ export interface CreateBatchData {
   tenantId: string;
   fileName: string;
   totalLeads: number;
-  retryConfig?: RetryConfig ;
+  retryConfig?: RetryConfig;
 }
 
 export interface CreateLeadData {
@@ -98,7 +98,10 @@ export interface BatchRepository {
 
   resetActiveLeadsToPending(batchId: string): Promise<number>;
 
-  failActiveCalls(batchId: string): Promise<number>;
+  markPendingLeadsAsStopped(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<number>;
 
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;
 

@@ -277,6 +277,7 @@ model Lead {
   company    String?
   status     LeadStatus @default(PENDING)
   doNotCall  Boolean    @default(false)
+  stoppedReason LeadStopReason?
   tenantId   String
   campaignId String
   batchId    String?
@@ -303,6 +304,12 @@ enum LeadStatus {
   NOT_QUALIFIED
   NO_ANSWER
   FAILED
+  STOPPED
+}
+
+enum LeadStopReason {
+  LOW_BALANCE
+  MANUAL
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,6 +366,7 @@ enum CallStatus {
   FAILED
   NO_ANSWER
   BUSY
+  STOPPED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

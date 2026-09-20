@@ -20,13 +20,12 @@ import type {
   ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
+import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 import type {
   ExtractionConfig,
-  ExtractionMetricConfig,
-  ExtractionResultConfig,
   ExtractionMetricResponse,
   ExtractionResultResponse,
   ExtractionResponse,
@@ -55,6 +54,7 @@ export class ProcessCallWebhookUseCase {
   constructor(
     private readonly webhookRepo: WebhookRepository,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
+    private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
   ) {}
 
   async execute(payload: WebhookCallPayload): Promise<void> {
@@ -96,6 +96,13 @@ export class ProcessCallWebhookUseCase {
           "RUNNING",
           new Date(),
         );
+
+        // [NEW] Check credit limit when in-flight count increases
+        if (this.stopBatchesOnInsufficientBalance) {
+          this.stopBatchesOnInsufficientBalance
+            .execute({ tenantId: resolved.tenantId })
+            .catch(console.error);
+        }
         break;
       }
 
@@ -342,12 +349,14 @@ export class ProcessCallWebhookUseCase {
   }
 
   private async handleCallCanceled(call: ResolvedCallContext): Promise<void> {
+    if (call.status === "STOPPED") return;
+
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status: "FAILED",
+      status: "STOPPED", 
       endedAt: new Date(),
     });
 
-    await this.webhookRepo.updateLeadStatus(call.leadId, "PENDING");
+    await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
     await this.checkBatchCompletion(call);
   }
 

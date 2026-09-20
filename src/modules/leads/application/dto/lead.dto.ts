@@ -10,3 +10,4 @@ export interface ListLeadsInput {
   page?: number;
   limit?: number;
 }
+

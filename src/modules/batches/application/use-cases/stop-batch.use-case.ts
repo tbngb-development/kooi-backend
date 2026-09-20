@@ -21,12 +21,14 @@ export class StopBatchUseCase {
       batchId,
     );
     if (!batchData) throw new BatchNotFoundError();
+
     if (batchData.status !== "SCHEDULED" && batchData.status !== "RUNNING") {
       throw new BatchOperationError(
         `Cannot stop batch in "${batchData.status}" status.`,
       );
     }
 
+    // 1. Tell Bolna to stop processing the queue
     if (batchData.bolnaBatchId) {
       try {
         await this.bolnaProvider.stopBatch(tenantId, batchData.bolnaBatchId);
@@ -35,18 +37,21 @@ export class StopBatchUseCase {
       }
     }
 
+    // 2. Mark the batch as STOPPED
     const updatedBatch = await this.batchRepo.update(batchId, {
       status: "STOPPED",
     });
 
-    await this.batchRepo.resetActiveLeadsToPending(batchId);
-    await this.batchRepo.failActiveCalls(batchId);
+    // 3. Mark all never-dialed leads in this batch as STOPPED
+  await this.batchRepo.markPendingLeadsAsStopped(batchId,'MANUAL');
+
+    // 4. Recalculate campaign status
     await this.checkAndUpdateCampaignStatus(campaignId);
 
     return {
       batch: updatedBatch,
-      warning:
-        "Batch stopped. Non-completed calls reset to PENDING for resume.",
+      message:
+        "Batch stopped successfully. Remaining queued leads marked as STOPPED. In-flight calls will settle naturally.",
     };
   }
 

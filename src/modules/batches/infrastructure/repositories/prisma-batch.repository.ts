@@ -9,7 +9,12 @@ import type {
   PendingLeadRow,
 } from "../../application/interfaces/batch-repository.interface";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
-import { type BatchStatus, LeadStatus, type Prisma } from "@prisma/client";
+import {
+  type BatchStatus,
+  LeadStatus,
+  type LeadStopReason,
+  type Prisma,
+} from "@prisma/client";
 
 export class PrismaBatchRepository implements BatchRepository {
   async list(tenantId: string, campaignId: string): Promise<BatchListItem[]> {
@@ -67,6 +72,24 @@ export class PrismaBatchRepository implements BatchRepository {
     });
 
     return this.toEntityData(batch);
+  }
+
+  /**
+   * Mark all never-dialed (PENDING) leads in this batch as STOPPED
+   * since the batch has been terminated.
+   */
+  async markPendingLeadsAsStopped(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<number> {
+    const result = await prisma.lead.updateMany({
+      where: {
+        batchId,
+        status: "PENDING",
+      },
+      data: { status: "STOPPED", stoppedReason: reason },
+    });
+    return result.count;
   }
 
   async update(
@@ -184,7 +207,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
   async resetActiveLeadsToPending(batchId: string): Promise<number> {
     const result = await prisma.lead.updateMany({
-      where: { batchId, status: { in: ["CALLING", "PENDING"] } },
+      where: { batchId, status: "PENDING" },
       data: { status: "PENDING" },
     });
 
