@@ -472,6 +472,57 @@ export class PrismaPlanRepository implements PlanRepository {
     });
   }
 
+  async countRunningCampaigns(tenantId: string): Promise<number> {
+    return prisma.campaign.count({
+      where: {
+        tenantId,
+        status: "RUNNING",
+      },
+    });
+  }
+
+  /**
+   * Counts how many distinct campaigns are scheduled to run
+   * within [targetTime - window, targetTime + window].
+   */
+  async countConcurrentCampaignsAtTime(
+    tenantId: string,
+    targetTime: Date,
+    excludeCampaignId?: string,
+    windowMinutes = 60,
+  ): Promise<number> {
+    const windowStart = new Date(
+      targetTime.getTime() - windowMinutes * 60 * 1000,
+    );
+    const windowEnd = new Date(
+      targetTime.getTime() + windowMinutes * 60 * 1000,
+    );
+
+    const conflictingBatches = await prisma.leadBatch.findMany({
+      where: {
+        tenantId,
+        campaignId: excludeCampaignId ? { not: excludeCampaignId } : undefined,
+        status: { in: ["SCHEDULED", "RUNNING"] },
+        OR: [
+          // 1. Currently live running batches
+          { status: "RUNNING" },
+          // 2. Scheduled in the overlapping time window
+          {
+            status: "SCHEDULED",
+            scheduledAt: {
+              gte: windowStart,
+              lte: windowEnd,
+            },
+          },
+        ],
+      },
+      select: { campaignId: true },
+      distinct: ["campaignId"],
+    });
+
+    return conflictingBatches.length;
+  }
+
   async countAgents(tenantId: string): Promise<number> {
     return prisma.assistant.count({
       where: { tenantId },

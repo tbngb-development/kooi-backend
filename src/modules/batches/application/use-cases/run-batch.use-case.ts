@@ -45,7 +45,7 @@ export class RunBatchUseCase {
     const campaign = await this.campaignRepo.findById(tenantId, campaignId);
     if (!campaign) throw new CampaignNotFoundError();
 
-    // 3. Enforce maxActiveCampaigns if this campaign is not already RUNNING
+    // 3. Enforce maxActiveCampaigns only against live RUNNING campaigns
     if (campaign.status !== "RUNNING") {
       const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
       if (
@@ -53,7 +53,9 @@ export class RunBatchUseCase {
         activePlan.maxActiveCampaigns !== null &&
         activePlan.maxActiveCampaigns !== undefined
       ) {
-        const runningCount = await this.planRepo.countActiveCampaigns(tenantId);
+        // [FIXED] Count ONLY live RUNNING campaigns (not DRAFT or COMPLETED)
+        const runningCount =
+          await this.planRepo.countRunningCampaigns(tenantId);
         if (runningCount >= activePlan.maxActiveCampaigns) {
           throw new MaxActiveCampaignsReachedError(
             activePlan.maxActiveCampaigns,
@@ -102,8 +104,9 @@ export class RunBatchUseCase {
         startedAt: new Date(),
       });
     }
-
+    
     const runsAt = new Date(bolnaScheduledAt ?? now).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
       dateStyle: "medium",
       timeStyle: "short",
     });

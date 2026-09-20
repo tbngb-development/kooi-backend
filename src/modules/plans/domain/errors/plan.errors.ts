@@ -1,6 +1,8 @@
 import { NotFoundError } from "../../../../shared/errors/not-found.error";
 import { ForbiddenError } from "../../../../shared/errors/forbidden.error";
 import { ConflictError } from "../../../../shared/errors/conflict.error";
+import { HttpStatus } from "../../../../shared/constants";
+import { AppError } from "../../../../shared/errors";
 
 export class PlanNotFoundError extends NotFoundError {
   constructor(identifier?: string) {
@@ -71,5 +73,15 @@ export class PlanVersionImmutableError extends ConflictError {
 export class NoPublishedPlanVersionError extends NotFoundError {
   constructor(planSlugOrId: string) {
     super(`No published version found for plan ${planSlugOrId}`);
+  }
+}
+
+export class ScheduledCampaignConflictError extends AppError {
+  constructor(timeStr: string, maxAllowed: number) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Another campaign is already scheduled/running around ${timeStr}. Your plan allows a maximum of ${maxAllowed} concurrent campaign(s). Please choose a different time slot.`,
+      "SCHEDULED_CAMPAIGN_CONFLICT",
+    );
   }
 }

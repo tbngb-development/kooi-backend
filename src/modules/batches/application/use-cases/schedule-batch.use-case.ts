@@ -8,14 +8,12 @@ import {
   BatchOperationError,
   BatchNoBolnaIdError,
 } from "../../domain/errors/batch.errors";
-import {
-  CampaignNotFoundError,
-  MaxActiveCampaignsReachedError,
-} from "../../../campaigns/domain/errors/campaign.errors";
+import { CampaignNotFoundError } from "../../../campaigns/domain/errors/campaign.errors";
 import {
   toBolnaISO,
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
+import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
 
 export class ScheduleBatchUseCase {
   constructor(
@@ -59,21 +57,30 @@ export class ScheduleBatchUseCase {
     const campaign = await this.campaignRepo.findById(tenantId, campaignId);
     if (!campaign) throw new CampaignNotFoundError();
 
-    // 3. Enforce maxActiveCampaigns if this campaign is not already RUNNING
-    if (campaign.status !== "RUNNING") {
-      const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
-      if (
-        activePlan &&
-        activePlan.maxActiveCampaigns !== null &&
-        activePlan.maxActiveCampaigns !== undefined
-      ) {
-        const runningCount =
-          await this.planRepo.countActiveCampaigns(tenantId);
-        if (runningCount >= activePlan.maxActiveCampaigns) {
-          throw new MaxActiveCampaignsReachedError(
-            activePlan.maxActiveCampaigns,
-          );
-        }
+    // 3. Enforce maxActiveCampaigns with Time-Window Overlap Guard
+    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
+    if (
+      activePlan &&
+      activePlan.maxActiveCampaigns !== null &&
+      activePlan.maxActiveCampaigns !== undefined
+    ) {
+      // Check if other campaigns are scheduled/running in this time window
+      const concurrentCount =
+        await this.planRepo.countConcurrentCampaignsAtTime(
+          tenantId,
+          targetDate,
+          campaignId, // Exclude this campaign (scheduling 2 batches in SAME campaign is fine)
+        );
+
+      if (concurrentCount >= activePlan.maxActiveCampaigns) {
+        const formattedTime = targetDate.toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        throw new ScheduledCampaignConflictError(
+          formattedTime,
+          activePlan.maxActiveCampaigns,
+        );
       }
     }
 
@@ -115,9 +122,20 @@ export class ScheduleBatchUseCase {
       });
     }
 
+    const finalDate = bolnaScheduledAt
+      ? new Date(bolnaScheduledAt)
+      : targetDate;
+
+    // 2. Format explicitly in IST (Asia/Kolkata)
+    const scheduledFormattedTime = finalDate.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
     return {
       batch: updatedBatch,
-      message: `Batch scheduled for ${bolnaScheduledAt ?? isoString}`,
+      message: `Batch scheduled successfully for ${scheduledFormattedTime}`,
       ...(balanceWarning && { balanceWarning }),
     };
   }
