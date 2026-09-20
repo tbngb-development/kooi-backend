@@ -75,7 +75,7 @@ export interface BatchRepository {
       bolnaBatchId?: string;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
-      scheduledAt?: Date;
+      scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData>;

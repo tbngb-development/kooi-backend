@@ -42,7 +42,13 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     tenantController: new TenantBatchController(
       listBatches,
       getBatch,
-      new CreateBatchUseCase(batchRepo, campaignRepo, storage, bolnaProvider),
+      new CreateBatchUseCase(
+        batchRepo,
+        campaignRepo,
+        storage,
+        bolnaProvider,
+        planRepo,
+      ),
       new RunBatchUseCase(
         batchRepo,
         campaignRepo,

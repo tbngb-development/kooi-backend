@@ -6,6 +6,8 @@ export interface CreateBatchInput {
   fileBuffer: Buffer;
   fileName: string;
   retryConfig?: RetryConfig;
+  scheduledAt?: string; // ISO-8601 string for future scheduling
+  runImmediately?: boolean; // Set to true to bypass scheduling and run immediately
 }
 
 export interface CreateBatchOutput {
@@ -16,6 +18,7 @@ export interface CreateBatchOutput {
     filteredNonIndian: number;
     imported: number;
   };
+  message?: string;
 }
 
 export interface ScheduleBatchInput {

@@ -83,6 +83,7 @@ export class TenantBatchController {
         return;
       }
 
+      // 1. Resolve optional retryConfig override
       let retryConfig: RetryConfig | undefined;
       if (req.body.retryConfig) {
         try {
@@ -99,12 +100,20 @@ export class TenantBatchController {
         }
       }
 
+      // 2. Resolve Solution 1 atomic fields from body parameters
+      const scheduledAt = req.body.scheduledAt as string | undefined;
+      const runImmediately =
+        req.body.runImmediately === "true" || req.body.runImmediately === true;
+
+      // 3. Delegate execution
       const data = await this.createBatchUseCase.execute({
         tenantId,
         campaignId,
         fileBuffer: req.file.buffer,
         fileName: req.file.originalname,
         retryConfig,
+        scheduledAt,
+        runImmediately,
       });
 
       sendSuccess(res, data, HttpStatus.CREATED);

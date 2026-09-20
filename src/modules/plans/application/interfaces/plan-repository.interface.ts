@@ -71,6 +71,14 @@ export interface PlanRepository {
 
   // ── Enforcement Counts ────────────────────────────────────────
   countActiveCampaigns(tenantId: string): Promise<number>;
+  countRunningCampaigns(tenantId: string): Promise<number>;
+
+  countConcurrentCampaignsAtTime(
+    tenantId: string,
+    targetTime: Date,
+    excludeCampaignId?: string,
+    windowMinutes?: number,
+  ): Promise<number>;
   countAgents(tenantId: string): Promise<number>;
   countTeamMembers(tenantId: string): Promise<number>;
 }

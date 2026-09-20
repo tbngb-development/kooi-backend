@@ -34,14 +34,14 @@ export function buildTenantCampaignRoutes(
   router.get("/", controller.list);
   router.post(
     "/",
-    authorize.tenantRoles("OWNER", "ADMIN"),
+    authorize.tenantRoles("OWNER", "ADMIN", "USER"),
     validate(createCampaignSchema),
     controller.create,
   );
 
   router.post(
     "/extract-variables",
-    authorize.tenantRoles("OWNER", "ADMIN"),
+    authorize.tenantRoles("OWNER", "ADMIN", "USER"),
     documentUpload.single("file"),
     validate(extractVariablesSchema),
     controller.extractVariables,
