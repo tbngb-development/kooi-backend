@@ -3,7 +3,6 @@ import type { PlanRepository } from "../../../plans/application/interfaces/plan-
 import type { CreateCampaignInput } from "../dto/campaign.dto";
 import {
   CampaignAssistantNotFoundError,
-  BrochureNotConfirmedError,
   MissingRequiredVariablesError,
   RetryConfigNotAllowedError,
   MaxActiveCampaignsReachedError,
@@ -17,10 +16,10 @@ export class CreateCampaignUseCase {
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
-    // 1. Fetch active tenant plan (resolves commercial & entitlement terms)
+    // 1. Fetch active tenant plan
     const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
 
-    // 2. Enforce active campaigns limit (null = unlimited)
+    // 2. Enforce active campaigns limit
     if (
       activePlan &&
       activePlan.maxActiveCampaigns !== null &&
@@ -41,16 +40,17 @@ export class CreateCampaignUseCase {
       throw new CampaignAssistantNotFoundError();
     }
 
-    // 4. Validate and clean variables using domain rule
+    // 4. Validate and clean variables
+    const requiredVariables = assistant.platformAgent.requiredVariables;
     const { cleaned, missing } = validateAndCleanVariables(
-      assistant.platformAgent.requiredVariables,
+      requiredVariables,
       input.variables,
     );
     if (missing.length > 0) {
       throw new MissingRequiredVariablesError(missing);
     }
 
-    // 5. Resolve retry config — only act if user explicitly provided one
+    // 5. Resolve retry config
     let finalRetryConfig = input.defaultRetryConfig;
 
     if (input.defaultRetryConfig) {
@@ -60,24 +60,12 @@ export class CreateCampaignUseCase {
         throw new RetryConfigNotAllowedError();
       }
 
-      // Plan doesn't allow retry — strip the config entirely
       if (!retryAllowed) {
         finalRetryConfig = undefined;
       }
     }
 
-    // 6. Brochure confirmation check (unchanged)
-    if (input.brochureId) {
-      const confirmed = await this.campaignRepo.checkBrochureConfirmed(
-        tenantId,
-        input.brochureId,
-      );
-      if (!confirmed) {
-        throw new BrochureNotConfirmedError();
-      }
-    }
-
-    // 7. Create campaign
+    // 6. Create campaign
     return this.campaignRepo.create(tenantId, {
       ...input,
       variables: cleaned,

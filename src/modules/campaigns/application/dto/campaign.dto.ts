@@ -2,9 +2,26 @@ export interface CreateCampaignInput {
   name: string;
   description?: string;
   assistantId: string;
-  brochureId?: string;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
+}
+
+export interface ExtractVariablesInput {
+  assistantId: string;
+  filePath: string;
+  originalFileName: string;
+}
+
+export interface ExtractVariablesOutput {
+  variables: Record<string, string | null>;
+  confidence: number;
+  warnings: string[];
+  pdfMeta: {
+    fileName: string;
+    pageCount: number;
+    textLength: number;
+    truncated: boolean;
+  };
 }
 
 export interface ParseLeadsInput {

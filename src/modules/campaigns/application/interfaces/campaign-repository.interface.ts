@@ -7,7 +7,6 @@ export interface CreateCampaignData {
   name: string;
   description?: string;
   assistantId: string;
-  brochureId?: string;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
 }
@@ -18,12 +17,6 @@ export interface CampaignStatsResult {
       id: string;
       name: string;
       platformAgent: { bolnaId: string };
-    } | null;
-    brochure: {
-      id: string;
-      projectName: string | null;
-      configurations: string[];
-      startingPrice: number | null;
     } | null;
     batches: Array<{
       id: string;
@@ -66,12 +59,6 @@ export interface CampaignListItem {
   createdAt: Date;
   updatedAt: Date;
   assistant: { id: string; name: string } | null;
-  brochure: {
-    id: string;
-    projectName: string | null;
-    city: string | null;
-    configurations: string[];
-  } | null;
   batches: Array<{
     id: string;
     status: string;
@@ -108,7 +95,6 @@ export interface CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
-        brochure: { id: string; isConfirmed: boolean } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -146,8 +132,4 @@ export interface CampaignRepository {
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
 
-  checkBrochureConfirmed(
-    tenantId: string,
-    brochureId: string,
-  ): Promise<boolean>;
 }

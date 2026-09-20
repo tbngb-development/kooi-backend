@@ -21,14 +21,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       where: { tenantId },
       include: {
         assistant: true,
-        brochure: {
-          select: {
-            id: true,
-            projectName: true,
-            city: true,
-            configurations: true,
-          },
-        },
         batches: {
           select: {
             id: true,
@@ -67,7 +59,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
-        brochure: { id: string; isConfirmed: boolean } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -80,7 +71,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
             platformAgent: true,
           },
         },
-        brochure: true,
         batches: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -96,12 +86,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
             platformAgent: {
               bolnaId: campaign.assistant.platformAgent.bolnaId,
             },
-          }
-        : null,
-      brochure: campaign.brochure
-        ? {
-            id: campaign.brochure.id,
-            isConfirmed: campaign.brochure.isConfirmed,
           }
         : null,
       batches: campaign.batches.map((b) => ({
@@ -121,7 +105,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
         description: data.description,
         tenantId,
         assistantId: data.assistantId,
-        brochureId: data.brochureId,
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
       },
@@ -163,14 +146,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
         assistant: {
           include: {
             platformAgent: true,
-          },
-        },
-        brochure: {
-          select: {
-            id: true,
-            projectName: true,
-            configurations: true,
-            startingPrice: true,
           },
         },
         batches: {
@@ -216,7 +191,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
               },
             }
           : null,
-        brochure: campaign.brochure,
         batches: campaign.batches,
       },
       leads: leadStats.map((s) => ({
@@ -408,17 +382,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
     batchId?: string,
   ): Promise<CampaignPerformanceV2Result> {
-    // Single indexed GROUP BY — returns ~20-30 rows regardless of call count
     const rows = await prisma.callMetric.groupBy({
-      by: [
-        "metricKey",
-        "metricLabel",
-        "actualValue",
-        "matched",
-        "actualValue",
-        "matchValue",
-        
-      ],
+      by: ["metricKey", "metricLabel", "actualValue", "matched", "matchValue"],
       where: {
         tenantId,
         campaignId,
@@ -431,7 +396,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       return { metrics: [] };
     }
 
-    // Group pre-aggregated rows by metricKey (tiny dataset, in-memory is fine)
     const metricMap = new Map<
       string,
       {
@@ -485,6 +449,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     return { metrics };
   }
+
   async findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
@@ -518,16 +483,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  async checkBrochureConfirmed(
-    tenantId: string,
-    brochureId: string,
-  ): Promise<boolean> {
-    const brochure = await prisma.brochure.findFirst({
-      where: { id: brochureId, tenantId },
-      select: { isConfirmed: true },
-    });
-    return brochure?.isConfirmed ?? false;
-  }
+  // ── REMOVED checkBrochureConfirmed ──
 
   private toEntityData(campaign: {
     id: string;
@@ -536,7 +492,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
     status: string;
     tenantId: string;
     assistantId: string;
-    brochureId: string | null;
     variables: unknown;
     defaultRetryConfig: unknown;
     totalLeads: number;
@@ -555,7 +510,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       status: campaign.status as CampaignStatus,
       tenantId: campaign.tenantId,
       assistantId: campaign.assistantId,
-      brochureId: campaign.brochureId,
       variables: campaign.variables as Record<string, string> | null,
       defaultRetryConfig: campaign.defaultRetryConfig as Record<
         string,

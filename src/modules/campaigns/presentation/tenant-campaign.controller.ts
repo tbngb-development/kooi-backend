@@ -4,6 +4,7 @@ import type { CreateCampaignInput } from "../application/dto/campaign.dto";
 import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
+import { cleanupUploadedFile } from "../../../shared/middleware/upload";
 import type { ListCampaignsUseCase } from "../application/use-cases/list-campaigns.use-case";
 import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.use-case";
 import type { CreateCampaignUseCase } from "../application/use-cases/create-campaign.use-case";
@@ -11,6 +12,7 @@ import type { ParseLeadsUseCase } from "../application/use-cases/parse-leads.use
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
 import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
 import type { GetCampaignPerformanceV2UseCase } from "../application/use-cases/get-campaign-performance-v2.use-case";
+import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
 
 export class TenantCampaignController {
   constructor(
@@ -21,6 +23,7 @@ export class TenantCampaignController {
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
     private readonly getCampaignPerformanceUseCase: GetCampaignPerformanceUseCase,
     private readonly getCampaignPerformanceV2UseCase: GetCampaignPerformanceV2UseCase,
+    private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -69,6 +72,51 @@ export class TenantCampaignController {
       const data = await this.createCampaignUseCase.execute(tenantId, payload);
       sendSuccess(res, data, HttpStatus.CREATED);
     } catch (err) {
+      next(err);
+    }
+  };
+
+  extractVariables = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    const filePath = req.file?.path;
+    try {
+      const { tenantId } = this.getTenant(req);
+
+      if (!req.file || !filePath) {
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          error: "PDF file is required",
+        });
+        return;
+      }
+
+      const assistantId = req.body?.assistantId;
+      if (!assistantId) {
+        cleanupUploadedFile(filePath);
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          error: "assistantId is required",
+        });
+        return;
+      }
+
+      const result = await this.extractVariablesUseCase.execute(tenantId, {
+        assistantId,
+        filePath,
+        originalFileName: req.file.originalname,
+      });
+
+      sendSuccess(
+        res,
+        result,
+        HttpStatus.OK,
+        "Variables extracted successfully",
+      );
+    } catch (err) {
+      if (filePath) cleanupUploadedFile(filePath);
       next(err);
     }
   };

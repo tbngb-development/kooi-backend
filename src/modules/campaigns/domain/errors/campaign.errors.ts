@@ -15,21 +15,6 @@ export class CampaignAssistantNotFoundError extends NotFoundError {
   }
 }
 
-export class CampaignBrochureNotFoundError extends NotFoundError {
-  constructor() {
-    super("Brochure");
-  }
-}
-
-export class BrochureNotConfirmedError extends AppError {
-  constructor() {
-    super(
-      HttpStatus.UNPROCESSABLE_ENTITY,
-      "Brochure must be confirmed before linking to a campaign",
-      "BROCHURE_NOT_CONFIRMED",
-    );
-  }
-}
 
 export class CampaignIdRequiredError extends AppError {
   constructor() {

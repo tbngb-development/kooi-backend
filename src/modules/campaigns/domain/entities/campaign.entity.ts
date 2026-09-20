@@ -9,7 +9,6 @@ export interface CampaignEntityData {
   status: CampaignStatus;
   tenantId: string;
   assistantId: string;
-  brochureId: string | null;
   variables: Record<string, string> | null;
   defaultRetryConfig: Record<string, unknown> | null;
   totalLeads: number;
@@ -36,9 +35,6 @@ export class CampaignEntity {
   }
   get assistantId(): string {
     return this.data.assistantId;
-  }
-  get brochureId(): string | null {
-    return this.data.brochureId;
   }
   get totalLeads(): number {
     return this.data.totalLeads;

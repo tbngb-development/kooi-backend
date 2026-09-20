@@ -6,11 +6,12 @@ import { CreateCampaignUseCase } from "./application/use-cases/create-campaign.u
 import { ParseLeadsUseCase } from "./application/use-cases/parse-leads.use-case";
 import { GetCampaignStatsUseCase } from "./application/use-cases/get-campaign-stats.use-case";
 import { GetCampaignPerformanceUseCase } from "./application/use-cases/get-campaign-performance.use-case";
+import { GetCampaignPerformanceV2UseCase } from "./application/use-cases/get-campaign-performance-v2.use-case";
+import { ExtractCampaignVariablesUseCase } from "./application/use-cases/extract-campaign-variables.use-case";
 import { TenantCampaignController } from "./presentation/tenant-campaign.controller";
 import { AdminCampaignController } from "./presentation/admin-campaign.controller";
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
-import { GetCampaignPerformanceV2UseCase } from "./application/use-cases/get-campaign-performance-v2.use-case";
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
@@ -32,6 +33,7 @@ export function buildCampaignModule(): CampaignModule {
   const getCampaignPerformanceV2 = new GetCampaignPerformanceV2UseCase(
     campaignRepo,
   );
+  const extractVariables = new ExtractCampaignVariablesUseCase(campaignRepo);
 
   return {
     tenantController: new TenantCampaignController(
@@ -42,6 +44,7 @@ export function buildCampaignModule(): CampaignModule {
       getCampaignStats,
       getCampaignPerformance,
       getCampaignPerformanceV2,
+      extractVariables,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,
