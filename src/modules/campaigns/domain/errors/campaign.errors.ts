@@ -51,6 +51,16 @@ export class CampaignFailedError extends AppError {
   }
 }
 
+export class MaxActiveCampaignsReachedError extends AppError {
+  constructor(maxAllowed: number) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `You have reached the maximum active campaigns limit (${maxAllowed}) allowed on your plan`,
+      "MAX_ACTIVE_CAMPAIGNS_REACHED",
+    );
+  }
+}
+
 export class InvalidCampaignStatusTransitionError extends AppError {
   constructor(from: CampaignStatus, to: CampaignStatus) {
     super(

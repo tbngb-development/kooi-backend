@@ -15,6 +15,7 @@ import { TenantBatchController } from "./presentation/tenant-batch.controller";
 import { AdminBatchController } from "./presentation/admin-batch.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { CheckBalanceForBatchUseCase } from "../wallet/application/use-cases/check-balance-for-batch.use-case";
+import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -35,6 +36,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
   const getBatch = new GetBatchUseCase(batchRepo);
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
+  const planRepo = new PrismaPlanRepository();
 
   return {
     tenantController: new TenantBatchController(
@@ -45,12 +47,14 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         batchRepo,
         campaignRepo,
         bolnaProvider,
+        planRepo,
         deps.checkBalanceForBatch,
       ),
       new ScheduleBatchUseCase(
         batchRepo,
         campaignRepo,
         bolnaProvider,
+        planRepo,
         deps.checkBalanceForBatch,
       ),
       new StopBatchUseCase(batchRepo, campaignRepo, bolnaProvider),

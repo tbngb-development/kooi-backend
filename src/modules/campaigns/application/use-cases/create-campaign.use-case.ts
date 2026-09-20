@@ -6,6 +6,7 @@ import {
   BrochureNotConfirmedError,
   MissingRequiredVariablesError,
   RetryConfigNotAllowedError,
+  MaxActiveCampaignsReachedError,
 } from "../../domain/errors/campaign.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
 
@@ -16,7 +17,22 @@ export class CreateCampaignUseCase {
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
-    // 1. Fetch assistant + platform agent
+    // 1. Fetch active tenant plan (resolves commercial & entitlement terms)
+    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
+
+    // 2. Enforce active campaigns limit (null = unlimited)
+    if (
+      activePlan &&
+      activePlan.maxActiveCampaigns !== null &&
+      activePlan.maxActiveCampaigns !== undefined
+    ) {
+      const activeCount = await this.planRepo.countActiveCampaigns(tenantId);
+      if (activeCount >= activePlan.maxActiveCampaigns) {
+        throw new MaxActiveCampaignsReachedError(activePlan.maxActiveCampaigns);
+      }
+    }
+
+    // 3. Fetch assistant + platform agent
     const assistant = await this.campaignRepo.findAssistantWithAgent(
       tenantId,
       input.assistantId,
@@ -25,7 +41,7 @@ export class CreateCampaignUseCase {
       throw new CampaignAssistantNotFoundError();
     }
 
-    // 2. Validate and clean variables using domain rule
+    // 4. Validate and clean variables using domain rule
     const { cleaned, missing } = validateAndCleanVariables(
       assistant.platformAgent.requiredVariables,
       input.variables,
@@ -34,12 +50,11 @@ export class CreateCampaignUseCase {
       throw new MissingRequiredVariablesError(missing);
     }
 
-    // 3. Resolve retry config — only act if user explicitly provided one
+    // 5. Resolve retry config — only act if user explicitly provided one
     let finalRetryConfig = input.defaultRetryConfig;
 
     if (input.defaultRetryConfig) {
-      const tenantPlan = await this.planRepo.getTenantPlan(tenantId);
-      const retryAllowed = tenantPlan?.planVersion?.retryAutomation ?? false;
+      const retryAllowed = activePlan?.retryAutomation ?? false;
 
       if (!retryAllowed && input.defaultRetryConfig.enabled) {
         throw new RetryConfigNotAllowedError();
@@ -51,7 +66,7 @@ export class CreateCampaignUseCase {
       }
     }
 
-    // 4. Brochure confirmation check (unchanged)
+    // 6. Brochure confirmation check (unchanged)
     if (input.brochureId) {
       const confirmed = await this.campaignRepo.checkBrochureConfirmed(
         tenantId,
@@ -62,7 +77,7 @@ export class CreateCampaignUseCase {
       }
     }
 
-    // 5. Create campaign
+    // 7. Create campaign
     return this.campaignRepo.create(tenantId, {
       ...input,
       variables: cleaned,

@@ -1,6 +1,9 @@
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { BatchRepository } from "../../../batches/application/interfaces/batch-repository.interface";
-import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
+import type {
+  PlanRepository,
+  TenantActivePlan,
+} from "../../../plans/application/interfaces/plan-repository.interface";
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 import type { ParseLeadsInput, ParseLeadsOutput } from "../dto/campaign.dto";
 import {
@@ -14,6 +17,8 @@ import {
 } from "../../../leads/infrastructure/leadParser";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import { env } from "../../../../shared/config/env";
+import { MaxLeadsPerBatchExceededError } from "../../../batches/domain/errors/batch.errors";
+import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 
 export class ParseLeadsUseCase {
   constructor(
@@ -34,7 +39,14 @@ export class ParseLeadsUseCase {
       throw new CampaignFailedError("parse leads for");
     }
 
-    // Parse files safely
+    // 1. Fetch active plan
+    const activePlan = await this.planRepo.getActivePlanForTenant(
+      input.tenantId,
+    );
+
+    if (!activePlan) throw new TenantPlanNotFoundError(input.tenantId);
+
+    // 2. Parse file
     const { rows, headerInfo } = parseLeadBuffer(
       input.fileBuffer,
       input.fileName,
@@ -43,6 +55,7 @@ export class ParseLeadsUseCase {
     if (rows.length === 0) {
       const zeroEstimation = await this.calculateEmptyEstimation(
         input.tenantId,
+        activePlan,
       );
       return {
         total: 0,
@@ -110,10 +123,25 @@ export class ParseLeadsUseCase {
       }
     }
 
-    // ── Generate Financial Cost Estimations ──────────────────────────
+    // 3. Enforce maxLeadsPerBatch limit (null = unlimited)
+    if (
+      activePlan &&
+      activePlan.maxLeadsPerBatch !== null &&
+      activePlan.maxLeadsPerBatch !== undefined
+    ) {
+      if (newLeads.length > activePlan.maxLeadsPerBatch) {
+        throw new MaxLeadsPerBatchExceededError(
+          activePlan.maxLeadsPerBatch,
+          newLeads.length,
+        );
+      }
+    }
+
+    // 4. Generate Financial Cost Estimations
     const estimation = await this.estimateCampaignCost(
       input.tenantId,
       newLeads.length,
+      activePlan,
     );
 
     return {
@@ -135,26 +163,19 @@ export class ParseLeadsUseCase {
     };
   }
 
-  /**
-   * Pure mathematical billing calculator utilizing the active tenant plan config.
-   */
   private async estimateCampaignCost(
     tenantId: string,
     leadCount: number,
+    activePlan: TenantActivePlan,
   ): Promise<ParseLeadsOutput["estimation"]> {
-    // 1. Core Mathematical Constants
-    const ANSWER_RATE = 0.4; // Historical answer pickup rate (40%)
-    const RETRIES = 1; // Retries configured
+    const ANSWER_RATE = 0.4;
+    const RETRIES = 1;
     const MIN_DURATION_SEC = 45;
     const MAX_DURATION_SEC = 90;
 
-    // 2. Fetch Active Tenant Plan Terms
-    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
-
-    // Sensible system fallbacks if no plan has been active (e.g. initial setup)
-    const perMinuteRate = activePlan?.perMinuteRate ?? 500; // Default ₹5.00/min
-    const billingMinSec = activePlan?.billingMinimumSec ?? 30;
-    const billingIncrementSec = activePlan?.billingIncrementSec ?? 60;
+    const perMinuteRate = activePlan.perMinuteRate;
+    const billingMinSec = activePlan.billingMinimumSec;
+    const billingIncrementSec = activePlan.billingIncrementSec;
 
     // 3. Fetch Tenant Wallet Balance
     const wallet = await this.walletRepo.findByTenantId(tenantId);
@@ -177,17 +198,11 @@ export class ParseLeadsUseCase {
       };
     }
 
-    // 4. Calculate Connected Call Counts
-    // First attempt: N calls -> N * 40% connect. N * 60% fail.
     const firstAttemptConnected = leadCount * ANSWER_RATE;
     const firstAttemptFailed = leadCount * (1 - ANSWER_RATE);
-
-    // Second attempt (1 retry): retry attempts placed on failed calls -> failed * 40% connect.
     const retryAttemptConnected = firstAttemptFailed * ANSWER_RATE;
-
     const totalConnectedCalls = firstAttemptConnected + retryAttemptConnected;
 
-    // 5. Account for Carrier Plan Billing Minimums and Increments
     const getBilledSeconds = (durationSec: number): number => {
       let billed = Math.max(durationSec, billingMinSec);
       if (billingIncrementSec > 0) {
@@ -199,7 +214,6 @@ export class ParseLeadsUseCase {
     const minBilledSec = getBilledSeconds(MIN_DURATION_SEC);
     const maxBilledSec = getBilledSeconds(MAX_DURATION_SEC);
 
-    // Calculate dynamic cost in paisa
     const costPerCallMinPaisa = (minBilledSec / 60) * perMinuteRate;
     const costPerCallMaxPaisa = (maxBilledSec / 60) * perMinuteRate;
 
@@ -226,10 +240,9 @@ export class ParseLeadsUseCase {
 
   private async calculateEmptyEstimation(
     tenantId: string,
+    activePlan: TenantActivePlan,
   ): Promise<ParseLeadsOutput["estimation"]> {
-    const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
-    const perMinuteRate = activePlan?.perMinuteRate ?? 500;
-
+    const perMinuteRate = activePlan.perMinuteRate ?? 500;
     const wallet = await this.walletRepo.findByTenantId(tenantId);
     const currentBalancePaisa =
       (wallet?.cashBalance ?? 0) + (wallet?.bonusBalance ?? 0);
