@@ -14,8 +14,6 @@ import { buildTenantCallRoutes } from "../modules/calls/presentation/tenant-call
 import { buildAdminCallRoutes } from "../modules/calls/presentation/admin-call.routes";
 import { buildTenantDashboardRoutes } from "../modules/dashboard/presentation/tenant-dashboard.routes";
 import { buildAdminDashboardRoutes } from "../modules/dashboard/presentation/admin-dashboard.routes";
-import { buildTenantBrochureRoutes } from "../modules/brochure/presentation/tenant-brochure.routes";
-import { buildAdminBrochureRoutes } from "../modules/brochure/presentation/admin-brochure.routes";
 import { buildTenantUserRoutes } from "../modules/users/presentation/tenant-user.routes";
 import { buildWebhookRoutes } from "../modules/webhooks/presentation/webhook.routes";
 import { buildAdminBatchRoutes } from "../modules/batches/presentation/admin-batch.routes";
@@ -91,14 +89,6 @@ export function buildRoutes(c: AppContainer): Router {
   router.use(
     "/v1/dashboard",
     buildTenantDashboardRoutes(c.dashboard.tenantController, c.authenticate),
-  );
-  router.use(
-    "/v1/brochures",
-    buildTenantBrochureRoutes(
-      c.brochures.tenantController,
-      c.authenticate,
-      c.authorize,
-    ),
   );
   router.use(
     "/v1/users",
@@ -221,15 +211,6 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/admin/calls",
     buildAdminCallRoutes(c.calls.adminController, c.authenticate, c.authorize),
   );
-  router.use(
-    "/v1/admin/brochures",
-    buildAdminBrochureRoutes(
-      c.brochures.adminController,
-      c.authenticate,
-      c.authorize,
-    ),
-  );
-
   router.use(
     "/v1/admin/plans",
     buildAdminPlanRoutes(c.plans.adminController, c.authenticate, c.authorize),

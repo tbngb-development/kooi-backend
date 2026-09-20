@@ -1,3 +1,4 @@
+import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import { type AssistantEntityData } from "../../domain/entities/assistant.entity";
 
 export interface RegisterAssistantData {
@@ -5,14 +6,22 @@ export interface RegisterAssistantData {
   name: string;
   config: Record<string, unknown>;
 }
-
-export interface AssistantWithPlatformAgent extends AssistantEntityData {
+export interface AssistantWithPlatformAgent {
+  id: string;
+  name: string;
+  tenantId: string;
+  platformAgentId: string;
+  config: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
   platformAgent: {
     id: string;
     bolnaId: string;
     name: string;
     slug: string;
-    systemPrompt: string | null;
+    systemPrompt: string | null; // Already present
+    welcomeMessage: string | null;
+    requiredVariables: RequiredVariable[] | null; // [ADD]
     description: string | null;
     category: string | null;
     isFeatured: boolean;

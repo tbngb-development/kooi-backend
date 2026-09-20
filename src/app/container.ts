@@ -36,10 +36,6 @@ import {
   buildDashboardModule,
   type DashboardModule,
 } from "../modules/dashboard/container";
-import {
-  buildBrochureModule,
-  type BrochureModule,
-} from "../modules/brochure/container";
 import { buildUserModule, type UserModule } from "../modules/users/container";
 import {
   buildWebhookModule,
@@ -87,7 +83,6 @@ export interface AppContainer {
   leads: LeadModule;
   calls: CallModule;
   dashboard: DashboardModule;
-  brochures: BrochureModule;
   users: UserModule;
   webhooks: WebhookModule;
 
@@ -185,7 +180,6 @@ export function buildContainer(): AppContainer {
     leads: buildLeadModule(),
     calls: buildCallModule(),
     dashboard: buildDashboardModule(),
-    brochures: buildBrochureModule(),
     users: buildUserModule({ passwordService }),
     webhooks: buildWebhookModule({
       debitWalletForCall: wallet.useCases.debitWalletForCall,

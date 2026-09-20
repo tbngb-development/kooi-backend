@@ -34,7 +34,12 @@ export interface GetAssistantOutput {
       } | null;
     };
   };
-  variables: { key: string; label: string }[];
+  variables: {
+    key: string;
+    label: string;
+    required: boolean;
+    isEditable: boolean;
+  }[];
 }
 
 export interface AssistantEntityData {

@@ -99,18 +99,20 @@ export async function extractTextFromPDF(
 
 // ─── Text Cleaner ─────────────────────────────────────────────────────────────
 function cleanExtractedText(text: string): string {
-  return text
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    .replace(/ {2,}/g, " ")
-    .replace(/^\s+$/gm, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
+  return (
+    text
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+      .replace(/ {2,}/g, " ")
+      .replace(/^\s+$/gm, "")
+      .split("\n")
+      .map((line) => line.trim())
+      .join("\n")
+      .trim()
+  );
 }
 
 // ─── Quality Assessment ───────────────────────────────────────────────────────

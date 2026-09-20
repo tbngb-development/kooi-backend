@@ -17,6 +17,7 @@ export function buildAdminCampaignRoutes(
   router.get("/:id", controller.get);
   router.get("/:id/stats", controller.stats);
   router.get("/:id/performance", controller.performance);
+  router.get("/:id/performance-v2", controller.performanceV2);
 
   return router;
 }

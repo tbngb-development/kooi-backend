@@ -1,4 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import type {
   BatchRepository,
   CreateBatchData,
@@ -11,6 +12,7 @@ import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entit
 import {
   type BatchStatus,
   LeadStatus,
+  type LeadStopReason,
   type Prisma,
 } from "@prisma/client";
 
@@ -64,11 +66,30 @@ export class PrismaBatchRepository implements BatchRepository {
         status: "CREATED",
         fileName: data.fileName,
         totalLeads: data.totalLeads,
-        retryConfig: data.retryConfig as any,
+        retryConfig:
+          (data.retryConfig as unknown as Prisma.InputJsonValue) ?? undefined,
       },
     });
 
     return this.toEntityData(batch);
+  }
+
+  /**
+   * Mark all never-dialed (PENDING) leads in this batch as STOPPED
+   * since the batch has been terminated.
+   */
+  async markPendingLeadsAsStopped(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<number> {
+    const result = await prisma.lead.updateMany({
+      where: {
+        batchId,
+        status: "PENDING",
+      },
+      data: { status: "STOPPED", stoppedReason: reason },
+    });
+    return result.count;
   }
 
   async update(
@@ -186,7 +207,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
   async resetActiveLeadsToPending(batchId: string): Promise<number> {
     const result = await prisma.lead.updateMany({
-      where: { batchId, status: { in: ["CALLING", "PENDING"] } },
+      where: { batchId, status: "PENDING" },
       data: { status: "PENDING" },
     });
 
@@ -277,7 +298,7 @@ export class PrismaBatchRepository implements BatchRepository {
       fileName: batch.fileName,
       originalFileUrl: batch.originalFileUrl,
       transformedCsvUrl: batch.transformedCsvUrl,
-      retryConfig: batch.retryConfig as Record<string, unknown> | null,
+      retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined, // [FIXED]
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
       totalLeads: batch.totalLeads,

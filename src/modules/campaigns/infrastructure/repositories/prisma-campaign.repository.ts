@@ -1,13 +1,19 @@
 import prisma from "../../../../shared/config/database/prisma";
+import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
   CampaignRepository,
   CreateCampaignData,
   CampaignStatsResult,
   CampaignPerformanceResult,
   CampaignListItem,
+  AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
-import type { CampaignStatus } from "@prisma/client";
+import { type CampaignStatus } from "@prisma/client";
+import type {
+  CampaignPerformanceV2Result,
+  PerformanceV2MetricBreakdown,
+} from "../../application/dto/campaign.dto";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(tenantId: string): Promise<CampaignListItem[]> {
@@ -15,14 +21,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       where: { tenantId },
       include: {
         assistant: true,
-        brochure: {
-          select: {
-            id: true,
-            projectName: true,
-            city: true,
-            configurations: true,
-          },
-        },
         batches: {
           select: {
             id: true,
@@ -61,7 +59,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
-        brochure: { id: string; isConfirmed: boolean } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -74,7 +71,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
             platformAgent: true,
           },
         },
-        brochure: true,
         batches: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -90,12 +86,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
             platformAgent: {
               bolnaId: campaign.assistant.platformAgent.bolnaId,
             },
-          }
-        : null,
-      brochure: campaign.brochure
-        ? {
-            id: campaign.brochure.id,
-            isConfirmed: campaign.brochure.isConfirmed,
           }
         : null,
       batches: campaign.batches.map((b) => ({
@@ -115,7 +105,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
         description: data.description,
         tenantId,
         assistantId: data.assistantId,
-        brochureId: data.brochureId,
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
       },
@@ -157,14 +146,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
         assistant: {
           include: {
             platformAgent: true,
-          },
-        },
-        brochure: {
-          select: {
-            id: true,
-            projectName: true,
-            configurations: true,
-            startingPrice: true,
           },
         },
         batches: {
@@ -210,7 +191,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
               },
             }
           : null,
-        brochure: campaign.brochure,
         batches: campaign.batches,
       },
       leads: leadStats.map((s) => ({
@@ -397,26 +377,113 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  async checkAssistantExists(
+  async getPerformanceV2(
     tenantId: string,
-    assistantId: string,
-  ): Promise<boolean> {
-    const count = await prisma.assistant.count({
-      where: { id: assistantId, tenantId },
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignPerformanceV2Result> {
+    const rows = await prisma.callMetric.groupBy({
+      by: ["metricKey", "metricLabel", "actualValue", "matched", "matchValue"],
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      _count: true,
     });
-    return count > 0;
+
+    if (rows.length === 0) {
+      return { metrics: [] };
+    }
+
+    const metricMap = new Map<
+      string,
+      {
+        label: string;
+        totalEvaluated: number;
+        matched: number;
+        actualValue: string;
+        matchValue: string;
+        valueCounts: Record<string, number>;
+      }
+    >();
+
+    for (const row of rows) {
+      let acc = metricMap.get(row.metricKey);
+      if (!acc) {
+        acc = {
+          label: row.metricLabel,
+          actualValue: row.actualValue,
+          matchValue: row.matchValue,
+          totalEvaluated: 0,
+          matched: 0,
+          valueCounts: {},
+        };
+        metricMap.set(row.metricKey, acc);
+      }
+
+      const count = row._count;
+      acc.totalEvaluated += count;
+      if (row.matched) acc.matched += count;
+      acc.valueCounts[row.actualValue] = count;
+    }
+
+    const metrics: PerformanceV2MetricBreakdown[] = [];
+    for (const [key, acc] of metricMap) {
+      const matchRate =
+        acc.totalEvaluated > 0
+          ? parseFloat(((acc.matched / acc.totalEvaluated) * 100).toFixed(1))
+          : 0;
+
+      metrics.push({
+        key,
+        label: acc.label,
+        totalEvaluated: acc.totalEvaluated,
+        matched: acc.matched,
+        actualValue: acc.actualValue,
+        matchValue: acc.matchValue,
+        matchRate,
+        actualValueBreakdown: acc.valueCounts,
+      });
+    }
+
+    return { metrics };
   }
 
-  async checkBrochureConfirmed(
+  async findAssistantWithAgent(
     tenantId: string,
-    brochureId: string,
-  ): Promise<boolean> {
-    const brochure = await prisma.brochure.findFirst({
-      where: { id: brochureId, tenantId },
-      select: { isConfirmed: true },
+    assistantId: string,
+  ): Promise<AssistantWithAgentData | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: { id: assistantId, tenantId },
+      select: {
+        id: true,
+        name: true,
+        platformAgent: {
+          select: {
+            id: true,
+            bolnaId: true,
+            requiredVariables: true,
+          },
+        },
+      },
     });
-    return brochure?.isConfirmed ?? false;
+
+    if (!assistant) return null;
+
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        bolnaId: assistant.platformAgent.bolnaId,
+        requiredVariables: assistant.platformAgent.requiredVariables as
+          RequiredVariable[] | null,
+      },
+    };
   }
+
+  // ── REMOVED checkBrochureConfirmed ──
 
   private toEntityData(campaign: {
     id: string;
@@ -425,7 +492,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
     status: string;
     tenantId: string;
     assistantId: string;
-    brochureId: string | null;
     variables: unknown;
     defaultRetryConfig: unknown;
     totalLeads: number;
@@ -444,7 +510,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       status: campaign.status as CampaignStatus,
       tenantId: campaign.tenantId,
       assistantId: campaign.assistantId,
-      brochureId: campaign.brochureId,
       variables: campaign.variables as Record<string, string> | null,
       defaultRetryConfig: campaign.defaultRetryConfig as Record<
         string,

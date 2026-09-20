@@ -29,7 +29,6 @@ model Tenant {
   leads         Lead[]
   calls         Call[]
   assistants    Assistant[]
-  brochures     Brochure[]
   callAnalyses  CallAnalysis[]
 
   @@index([email])
@@ -109,79 +108,6 @@ model Assistant {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BROCHURE 
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Brochure {
-  id       String @id @default(uuid())
-  tenantId String
-
-  originalFileName String
-  fileSizeMB       String
-  pageCount        Int
-  rawTextLength    Int
-
-  projectName    String?
-  developerName  String?
-  reraNumber     String?
-  projectWebsite String?
-  contactNumber  String?
-
-  city        String?
-  area        String?
-  state       String?
-  landmark    String?
-  fullAddress String?
-
-  propertyTypes  String[]
-  configurations String[]
-  totalUnits     Int?
-  totalTowers    Int?
-  totalFloors    Int?
-  sizeMin        Float?
-  sizeMax        Float?
-  sizeUnit       String?
-
-  startingPrice     Float?
-  maxPrice          Float?
-  pricePerSqft      Float?
-  priceLabel        String?
-  paymentPlan       String?
-  bankApprovals     String[]
-  maintenanceCharge String?
-
-  possessionDate     String?
-  launchDate         String?
-  constructionStatus String? @default("unknown")
-
-  amenities            String[]
-  specifications       String[]
-  nearbyInfrastructure String[]
-  usps                 String[]
-
-  minimumBudget          Float?
-  maximumBudget          Float?
-  targetBuyerProfile     String?
-  preferredLocations     String[]
-  investmentType         String[]
-  keyQualifyingQuestions String[]
-
-  confidence         Float    @default(0)
-  extractionWarnings String[]
-
-  isConfirmed Boolean   @default(false)
-  confirmedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  campaigns Campaign[]
-
-  @@index([tenantId])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // CAMPAIGN 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -192,7 +118,6 @@ model Campaign {
   status             CampaignStatus @default(DRAFT)
   tenantId           String
   assistantId        String
-  brochureId         String?
   variables          Json?
   defaultRetryConfig Json?
   totalLeads         Int            @default(0)
@@ -206,12 +131,9 @@ model Campaign {
 
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
   assistant Assistant   @relation(fields: [assistantId], references: [id])
-  brochure  Brochure?   @relation(fields: [brochureId], references: [id])
   leads     Lead[]
   calls     Call[]
   batches   LeadBatch[]
-
-  @@index([brochureId])
 }
 
 enum CampaignStatus {
@@ -277,6 +199,7 @@ model Lead {
   company    String?
   status     LeadStatus @default(PENDING)
   doNotCall  Boolean    @default(false)
+  stoppedReason LeadStopReason?
   tenantId   String
   campaignId String
   batchId    String?
@@ -303,6 +226,12 @@ enum LeadStatus {
   NOT_QUALIFIED
   NO_ANSWER
   FAILED
+  STOPPED
+}
+
+enum LeadStopReason {
+  LOW_BALANCE
+  MANUAL
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -344,6 +273,7 @@ model Call {
   batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
   callAnalysis CallAnalysis?
+  callMetrics  CallMetric[] 
 
   @@index([tenantId])
   @@index([campaignId])
@@ -358,6 +288,7 @@ enum CallStatus {
   FAILED
   NO_ANSWER
   BUSY
+  STOPPED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1021,4 +952,29 @@ model AgentBolnaExtractionBinding {
 
   @@unique([platformAgentId, dispositionId])
   @@index([bolnaAgentId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL METRIC 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallMetric {
+  id          String   @id @default(uuid())
+  callId      String
+  tenantId    String
+  campaignId  String
+  batchId     String?
+  metricKey   String
+  metricLabel String
+  matched     Boolean
+  actualValue String
+  matchValue  String
+  createdAt   DateTime @default(now())
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, metricKey, actualValue])
+  @@index([tenantId, campaignId, metricKey, matched])
+  @@index([callId])
+  @@index([tenantId, batchId, metricKey])
 }

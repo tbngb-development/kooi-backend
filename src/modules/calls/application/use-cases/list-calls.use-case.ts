@@ -7,7 +7,7 @@ import { type ListCallsInput } from "../dto/call.dto";
 export class ListCallsUseCase {
   constructor(private readonly callRepo: CallRepository) {}
 
-  async execute(input: ListCallsInput): Promise<PaginatedCallsResult> {
+  async execute(input: ListCallsInput): Promise<PaginatedCallsResult> { 
     return this.callRepo.list(input.tenantId, {
       campaignId: input.campaignId,
       leadId: input.leadId,
@@ -22,7 +22,9 @@ export class ListCallsUseCase {
       sortOrder: input.sortOrder,
       page: input.page,
       limit: input.limit,
-      dynamicFilters: input.dynamicFilters ,
+      dynamicFilters: input.dynamicFilters,
+      metricKey: input.metricKey,
+      metricValue: input.metricValue,
     });
   }
 }

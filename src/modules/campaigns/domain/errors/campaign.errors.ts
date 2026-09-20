@@ -15,21 +15,6 @@ export class CampaignAssistantNotFoundError extends NotFoundError {
   }
 }
 
-export class CampaignBrochureNotFoundError extends NotFoundError {
-  constructor() {
-    super("Brochure");
-  }
-}
-
-export class BrochureNotConfirmedError extends AppError {
-  constructor() {
-    super(
-      HttpStatus.UNPROCESSABLE_ENTITY,
-      "Brochure must be confirmed before linking to a campaign",
-      "BROCHURE_NOT_CONFIRMED",
-    );
-  }
-}
 
 export class CampaignIdRequiredError extends AppError {
   constructor() {
@@ -51,12 +36,42 @@ export class CampaignFailedError extends AppError {
   }
 }
 
+export class MaxActiveCampaignsReachedError extends AppError {
+  constructor(maxAllowed: number) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `You have reached the maximum active campaigns limit (${maxAllowed}) allowed on your plan`,
+      "MAX_ACTIVE_CAMPAIGNS_REACHED",
+    );
+  }
+}
+
 export class InvalidCampaignStatusTransitionError extends AppError {
   constructor(from: CampaignStatus, to: CampaignStatus) {
     super(
       HttpStatus.CONFLICT,
       `Invalid campaign status transition: ${from} → ${to}`,
       "INVALID_STATUS_TRANSITION",
+    );
+  }
+}
+
+export class MissingRequiredVariablesError extends AppError {
+  constructor(missingVariables: string[]) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Missing required campaign variables: ${missingVariables.join(", ")}`,
+      "MISSING_REQUIRED_VARIABLES",
+    );
+  }
+}
+
+export class RetryConfigNotAllowedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "Retry automation is not available on your current plan",
+      "RETRY_CONFIG_NOT_ALLOWED",
     );
   }
 }

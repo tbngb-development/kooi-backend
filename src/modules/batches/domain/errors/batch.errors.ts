@@ -94,3 +94,13 @@ export class BolnaBatchCreationError extends AppError {
     );
   }
 }
+
+export class MaxLeadsPerBatchExceededError extends AppError {
+  constructor(maxAllowed: number, actual: number) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `The file contains ${actual} ready-to-import leads, which exceeds your plan limit of ${maxAllowed} leads per batch.`,
+      "MAX_LEADS_PER_BATCH_EXCEEDED",
+    );
+  }
+}

@@ -2,9 +2,26 @@ export interface CreateCampaignInput {
   name: string;
   description?: string;
   assistantId: string;
-  brochureId?: string;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
+}
+
+export interface ExtractVariablesInput {
+  assistantId: string;
+  filePath: string;
+  originalFileName: string;
+}
+
+export interface ExtractVariablesOutput {
+  variables: Record<string, string | null>;
+  confidence: number;
+  warnings: string[];
+  pdfMeta: {
+    fileName: string;
+    pageCount: number;
+    textLength: number;
+    truncated: boolean;
+  };
 }
 
 export interface ParseLeadsInput {
@@ -42,4 +59,21 @@ export interface ParseLeadsOutput {
       durationMaxSec: number; // e.g. 90
     };
   };
+}
+
+// ── V2 Performance (Dynamic Extraction Metrics) ─────────────────────
+
+export interface PerformanceV2MetricBreakdown {
+  key: string;
+  label: string;
+  totalEvaluated: number;
+  matched: number;
+  matchRate: number;
+  actualValue: string;
+  matchValue: string;
+  actualValueBreakdown: Record<string, number>;
+}
+
+export interface CampaignPerformanceV2Result {
+  metrics: PerformanceV2MetricBreakdown[];
 }

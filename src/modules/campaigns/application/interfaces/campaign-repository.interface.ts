@@ -1,11 +1,12 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
+import type { CampaignPerformanceV2Result } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
   name: string;
   description?: string;
   assistantId: string;
-  brochureId?: string;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
 }
@@ -16,12 +17,6 @@ export interface CampaignStatsResult {
       id: string;
       name: string;
       platformAgent: { bolnaId: string };
-    } | null;
-    brochure: {
-      id: string;
-      projectName: string | null;
-      configurations: string[];
-      startingPrice: number | null;
     } | null;
     batches: Array<{
       id: string;
@@ -64,18 +59,22 @@ export interface CampaignListItem {
   createdAt: Date;
   updatedAt: Date;
   assistant: { id: string; name: string } | null;
-  brochure: {
-    id: string;
-    projectName: string | null;
-    city: string | null;
-    configurations: string[];
-  } | null;
   batches: Array<{
     id: string;
     status: string;
     totalLeads: number;
     completedLeads: number;
   }>;
+}
+
+export interface AssistantWithAgentData {
+  id: string;
+  name: string;
+  platformAgent: {
+    id: string;
+    bolnaId: string;
+    requiredVariables: RequiredVariable[] | null;
+  };
 }
 
 export interface CampaignRepository {
@@ -96,7 +95,6 @@ export interface CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
-        brochure: { id: string; isConfirmed: boolean } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -123,10 +121,15 @@ export interface CampaignRepository {
     batchId?: string,
   ): Promise<CampaignPerformanceResult>;
 
-  checkAssistantExists(tenantId: string, assistantId: string): Promise<boolean>;
-
-  checkBrochureConfirmed(
+  getPerformanceV2(
     tenantId: string,
-    brochureId: string,
-  ): Promise<boolean>;
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignPerformanceV2Result>;
+
+  findAssistantWithAgent(
+    tenantId: string,
+    assistantId: string,
+  ): Promise<AssistantWithAgentData | null>;
+
 }

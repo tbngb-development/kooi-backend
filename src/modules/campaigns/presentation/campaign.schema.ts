@@ -4,7 +4,6 @@ export const createCampaignSchema = z.object({
   name: z.string().min(1, "Campaign name is required").max(200),
   description: z.string().max(2000).optional(),
   assistantId: z.string().uuid("Invalid assistant ID"),
-  brochureId: z.string().uuid("Invalid brochure ID").optional(),
   variables: z.record(z.string(), z.string()).optional(),
   defaultRetryConfig: z
     .object({
@@ -19,4 +18,9 @@ export const createCampaignSchema = z.object({
     .optional(),
 });
 
+export const extractVariablesSchema = z.object({
+  assistantId: z.uuid("Invalid assistant ID"),
+});
+
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
+export type ExtractVariablesBody = z.infer<typeof extractVariablesSchema>;

@@ -20,13 +20,12 @@ import type {
   ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
+import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 import type {
   ExtractionConfig,
-  ExtractionMetricConfig,
-  ExtractionResultConfig,
   ExtractionMetricResponse,
   ExtractionResultResponse,
   ExtractionResponse,
@@ -55,6 +54,7 @@ export class ProcessCallWebhookUseCase {
   constructor(
     private readonly webhookRepo: WebhookRepository,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
+    private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
   ) {}
 
   async execute(payload: WebhookCallPayload): Promise<void> {
@@ -96,6 +96,13 @@ export class ProcessCallWebhookUseCase {
           "RUNNING",
           new Date(),
         );
+
+        // [NEW] Check credit limit when in-flight count increases
+        if (this.stopBatchesOnInsufficientBalance) {
+          this.stopBatchesOnInsufficientBalance
+            .execute({ tenantId: resolved.tenantId })
+            .catch(console.error);
+        }
         break;
       }
 
@@ -342,12 +349,14 @@ export class ProcessCallWebhookUseCase {
   }
 
   private async handleCallCanceled(call: ResolvedCallContext): Promise<void> {
+    if (call.status === "STOPPED") return;
+
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status: "FAILED",
+      status: "STOPPED", 
       endedAt: new Date(),
     });
 
-    await this.webhookRepo.updateLeadStatus(call.leadId, "PENDING");
+    await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
     await this.checkBatchCompletion(call);
   }
 
@@ -537,9 +546,59 @@ export class ProcessCallWebhookUseCase {
 
     const response: ExtractionResponse = { metrics, results };
 
+    await this.materializeCallMetrics(callId, tenantId, metrics);
+
     await this.webhookRepo.updateExtractionResponse(callId, tenantId, response);
   }
 
+  /**
+   * Inserts one row per metric evaluation into CallMetric for fast
+   * aggregation and filtering. Idempotent — deletes old rows for this
+   * call before inserting (handles webhook retries safely).
+   */
+  private async materializeCallMetrics(
+    callId: string,
+    tenantId: string,
+    metrics: ExtractionMetricResponse[],
+  ): Promise<void> {
+    const validMetrics = metrics.filter(
+      (m) => m.actualValue != null && m.actualValue !== "",
+    );
+
+    if (validMetrics.length === 0) return;
+
+    // Fetch call metadata for denormalization
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: { campaignId: true, batchId: true },
+    });
+
+    if (!call) return;
+
+    const toFilterKey = (label: string): string =>
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+
+    // Idempotent: remove previous metrics for this call (webhook retries)
+    await prisma.callMetric.deleteMany({ where: { callId } });
+
+    // Bulk insert all metric evaluations
+    await prisma.callMetric.createMany({
+      data: validMetrics.map((m) => ({
+        callId,
+        tenantId,
+        campaignId: call.campaignId,
+        batchId: call.batchId,
+        metricKey: toFilterKey(m.label),
+        metricLabel: m.label,
+        matched: m.matched,
+        actualValue: m.actualValue!,
+        matchValue: m.matchValue,
+      })),
+    });
+  }
   // ── Completion Checks ────────────────────────────────────────────────────
 
   private async checkBatchCompletion(call: ResolvedCallContext): Promise<void> {

@@ -3,12 +3,12 @@ import path from "path";
 import fs from "fs";
 import type { Request } from "express";
 
-// ── Ensure upload directories exist (for brochure disk storage) ──────────────
+// ── Ensure upload directories exist ──────────────────────────────────────────
 
-const BROCHURE_UPLOAD_DIR = path.join(process.cwd(), "uploads", "brochures");
+const DOCUMENT_UPLOAD_DIR = path.join(process.cwd(), "uploads", "documents");
 
-if (!fs.existsSync(BROCHURE_UPLOAD_DIR)) {
-  fs.mkdirSync(BROCHURE_UPLOAD_DIR, { recursive: true });
+if (!fs.existsSync(DOCUMENT_UPLOAD_DIR)) {
+  fs.mkdirSync(DOCUMENT_UPLOAD_DIR, { recursive: true });
 }
 
 // ── Shared filename sanitizer ────────────────────────────────────────────────
@@ -25,11 +25,11 @@ const buildFilename = (
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// BROCHURE UPLOAD (PDF only — disk storage, unchanged)
+// DOCUMENT UPLOAD (PDF only — disk storage, 10MB limit)
 // ═════════════════════════════════════════════════════════════════════════════
 
-const brochureStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, BROCHURE_UPLOAD_DIR),
+const documentStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, DOCUMENT_UPLOAD_DIR),
   filename: buildFilename,
 });
 
@@ -55,14 +55,14 @@ const pdfFileFilter = (
   }
 };
 
-export const brochureUpload = multer({
-  storage: brochureStorage,
+export const documentUpload = multer({
+  storage: documentStorage,
   fileFilter: pdfFileFilter,
-  limits: { fileSize: 100 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 }, // 10MB
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// LEADS UPLOAD — DISK STORAGE (legacy, kept for backward compatibility)
+// LEADS UPLOAD — DISK STORAGE (legacy)
 // ═════════════════════════════════════════════════════════════════════════════
 
 const LEADS_UPLOAD_DIR = path.join(process.cwd(), "uploads", "leads");
@@ -102,12 +102,8 @@ export const leadsUpload = multer({
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// LEADS UPLOAD — MEMORY STORAGE (NEW — for Clean Architecture use cases)
+// LEADS UPLOAD — MEMORY STORAGE
 // ═════════════════════════════════════════════════════════════════════════════
-//
-// Stores the file in req.file.buffer instead of writing to disk.
-// Eliminates the need for cleanup logic in use cases.
-// Use this in the new v1 routes; keep leadsUpload for legacy routes.
 
 export const leadsUploadMemory = multer({
   storage: multer.memoryStorage(),
@@ -116,7 +112,7 @@ export const leadsUploadMemory = multer({
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Shared cleanup helper (for disk storage only)
+// Shared cleanup helper
 // ═════════════════════════════════════════════════════════════════════════════
 
 export function cleanupUploadedFile(filePath: string): void {
