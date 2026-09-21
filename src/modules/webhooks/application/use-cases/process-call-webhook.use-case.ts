@@ -36,6 +36,7 @@ interface DynamicExtractionEntry {
   localDispositionSlug: string | null;
   subjective: string | null;
   objective: string | null;
+  isObjective: boolean;
   confidence: number | null;
   confidenceLabel: string | null;
   reasoning: {
@@ -256,6 +257,13 @@ export class ProcessCallWebhookUseCase {
       );
 
       if (dynamicResult) {
+         
+        await this.materializeExtractionOverview(
+          call.id,
+          call.tenantId,
+          dynamicResult,
+        );
+
         await this.buildExtractionResponse(
           call.id,
           call.tenantId,
@@ -352,7 +360,7 @@ export class ProcessCallWebhookUseCase {
     if (call.status === "STOPPED") return;
 
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status: "STOPPED", 
+      status: "STOPPED",
       endedAt: new Date(),
     });
 
@@ -391,16 +399,18 @@ export class ProcessCallWebhookUseCase {
     }
 
     // Build lookup — all dispositions come through categories now
-    const dispositionLookup = new Map<string, { id: string; slug: string }>();
+    const dispositionLookup = new Map<
+      string,
+      { id: string; slug: string; isObjective: boolean } // ← UPDATED
+    >();
     for (const disp of agentMap.dispositions) {
-      dispositionLookup.set(disp.name.toLowerCase(), {
+      const entry = {
         id: disp.id,
         slug: disp.slug,
-      });
-      dispositionLookup.set(disp.slug.toLowerCase(), {
-        id: disp.id,
-        slug: disp.slug,
-      });
+        isObjective: disp.isObjective,
+      };
+      dispositionLookup.set(disp.name.toLowerCase(), entry);
+      dispositionLookup.set(disp.slug.toLowerCase(), entry);
     }
 
     const dynamicResult: DynamicExtractionMap = {};
@@ -425,6 +435,7 @@ export class ProcessCallWebhookUseCase {
           localDispositionSlug: localDisp?.slug ?? null,
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
+          isObjective: localDisp?.isObjective ?? false,
           confidence: (value.confidence as number) ?? null,
           confidenceLabel: (value.confidence_label as string) ?? null,
           reasoning: {
@@ -599,6 +610,95 @@ export class ProcessCallWebhookUseCase {
       })),
     });
   }
+
+  /**
+   * Auto-generates structured overview rows for every objective disposition
+   * that returned a value. No manual ExtractionConfig needed.
+   *
+   * One row per (call, objective disposition) — enables GROUP BY aggregation
+   * for campaign performance overview dashboards.
+   *
+   * Idempotent: deletes previous rows for this call before inserting
+   * (handles webhook retries safely).
+   */
+  private async materializeExtractionOverview(
+    callId: string,
+    tenantId: string,
+    dynamicResult: DynamicExtractionMap,
+  ): Promise<void> {
+    // Collect all objective entries with values
+    const objectiveEntries: Array<{
+      dispositionId: string;
+      dispositionSlug: string;
+      categoryName: string;
+      objectiveValue: string;
+      confidence: number | null;
+    }> = [];
+
+    for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
+      for (const [_dispName, entry] of Object.entries(dispositions)) {
+        if (
+          entry.isObjective &&
+          entry.localDispositionId &&
+          entry.localDispositionSlug &&
+          entry.objective !== null &&
+          entry.objective.trim() !== ""
+        ) {
+          objectiveEntries.push({
+            dispositionId: entry.localDispositionId,
+            dispositionSlug: entry.localDispositionSlug,
+            categoryName,
+            objectiveValue: entry.objective.trim(),
+            confidence: entry.confidence,
+          });
+        }
+      }
+    }
+
+    if (objectiveEntries.length === 0) return;
+
+    // Fetch call metadata for denormalization
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: { campaignId: true, batchId: true },
+    });
+
+    if (!call) return;
+
+    // Fetch disposition names for denormalization
+    const dispositionIds = [
+      ...new Set(objectiveEntries.map((e) => e.dispositionId)),
+    ];
+    const dispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds } },
+      select: { id: true, name: true },
+    });
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
+
+    // Idempotent: remove previous overview rows for this call (webhook retries)
+    await prisma.callExtractionOverview.deleteMany({ where: { callId } });
+
+    // Bulk insert
+    await prisma.callExtractionOverview.createMany({
+      data: objectiveEntries.map((e) => ({
+        callId,
+        tenantId,
+        campaignId: call.campaignId,
+        batchId: call.batchId,
+        dispositionId: e.dispositionId,
+        dispositionSlug: e.dispositionSlug,
+        dispositionName: nameMap.get(e.dispositionId) ?? e.dispositionSlug,
+        categoryName: e.categoryName,
+        objectiveValue: e.objectiveValue,
+        confidence: e.confidence,
+      })),
+    });
+
+    console.info(
+      `[Webhook] Materialized ${objectiveEntries.length} overview rows for call ${callId}`,
+    );
+  }
+
   // ── Completion Checks ────────────────────────────────────────────────────
 
   private async checkBatchCompletion(call: ResolvedCallContext): Promise<void> {

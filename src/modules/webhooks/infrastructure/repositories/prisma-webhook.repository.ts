@@ -337,7 +337,12 @@ export class PrismaWebhookRepository implements WebhookRepository {
 
   async getAgentDispositionsForCall(callId: string): Promise<{
     platformAgentId: string | null;
-    dispositions: Array<{ id: string; name: string; slug: string }>;
+    dispositions: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      isObjective: boolean;
+    }>;
   }> {
     const call = await prisma.call.findUnique({
       where: { id: callId },
@@ -360,6 +365,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
                                     id: true,
                                     name: true,
                                     slug: true,
+                                    isObjective: true,
                                   },
                                 },
                               },
@@ -384,7 +390,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
 
     const dispositionMap = new Map<
       string,
-      { id: string; name: string; slug: string }
+      { id: string; name: string; slug: string; isObjective: boolean }
     >();
     for (const catRel of platformAgent.categories) {
       for (const dispRel of catRel.category.dispositions) {

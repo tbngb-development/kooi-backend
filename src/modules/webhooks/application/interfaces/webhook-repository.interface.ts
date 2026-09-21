@@ -43,6 +43,7 @@ export interface AgentDispositionMap {
     id: string;
     name: string;
     slug: string;
+    isObjective: boolean;
   }[];
 }
 

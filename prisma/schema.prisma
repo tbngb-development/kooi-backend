@@ -274,6 +274,7 @@ model Call {
   planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
   callAnalysis CallAnalysis?
   callMetrics  CallMetric[] 
+  extractionOverview CallExtractionOverview[]
 
   @@index([tenantId])
   @@index([campaignId])
@@ -849,6 +850,7 @@ model ExtractionDisposition {
   categories    ExtractionCategoryDisposition[]
   bolnaBindings AgentBolnaExtractionBinding[]
   callAnalyses  CallAnalysis[] // [NEW] reverse from CallAnalysis.extractionDispositionId
+  callOverviews CallExtractionOverview[] 
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -977,4 +979,32 @@ model CallMetric {
   @@index([tenantId, campaignId, metricKey, matched])
   @@index([callId])
   @@index([tenantId, batchId, metricKey])
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL EXTRACTION OVERVIEW (Auto-generated objective outcomes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallExtractionOverview {
+  id               String   @id @default(uuid())
+  callId           String
+  tenantId         String
+  campaignId       String
+  batchId          String?
+  dispositionId    String
+  dispositionSlug  String
+  dispositionName  String
+  categoryName     String
+  objectiveValue   String
+  confidence       Float?
+  createdAt        DateTime @default(now())
+
+  call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, dispositionId])
+  @@index([tenantId, campaignId, dispositionId, objectiveValue])
+  @@index([callId])
+  @@index([batchId])
 }

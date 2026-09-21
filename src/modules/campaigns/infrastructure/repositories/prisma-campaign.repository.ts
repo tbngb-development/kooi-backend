@@ -12,6 +12,8 @@ import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import { type CampaignStatus } from "@prisma/client";
 import type {
   CampaignPerformanceV2Result,
+  ExtractionOverviewDisposition,
+  ExtractionOverviewResult,
   PerformanceV2MetricBreakdown,
 } from "../../application/dto/campaign.dto";
 
@@ -448,6 +450,109 @@ export class PrismaCampaignRepository implements CampaignRepository {
     }
 
     return { metrics };
+  }
+
+  async getExtractionOverview(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<ExtractionOverviewResult> {
+    // Verify campaign belongs to tenant
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    // Single GROUP BY query — returns one row per (disposition, value)
+    const rows = await prisma.callExtractionOverview.groupBy({
+      by: [
+        "dispositionId",
+        "dispositionSlug",
+        "dispositionName",
+        "categoryName",
+        "objectiveValue",
+      ],
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      _count: true,
+      orderBy: [
+        { dispositionSlug: "asc" },
+        { _count: { objectiveValue: "desc" } },
+      ],
+    });
+
+    if (rows.length === 0) {
+      return { campaignId, totalCalls: 0, dispositions: [] };
+    }
+
+    // Get total unique calls for percentage calculation
+    const totalCallsResult = await prisma.callExtractionOverview.findMany({
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      select: { callId: true },
+      distinct: ["callId"],
+    });
+    const totalCalls = totalCallsResult.length;
+
+    // Group rows by disposition
+    const dispositionMap = new Map<
+      string,
+      {
+        dispositionId: string;
+        dispositionSlug: string;
+        dispositionName: string;
+        categoryName: string;
+        values: Array<{ value: string; count: number; percentage: number }>;
+        totalCount: number;
+      }
+    >();
+
+    for (const row of rows) {
+      let acc = dispositionMap.get(row.dispositionId);
+      if (!acc) {
+        acc = {
+          dispositionId: row.dispositionId,
+          dispositionSlug: row.dispositionSlug,
+          dispositionName: row.dispositionName,
+          categoryName: row.categoryName,
+          values: [],
+          totalCount: 0,
+        };
+        dispositionMap.set(row.dispositionId, acc);
+      }
+
+      const count = row._count;
+      acc.totalCount += count;
+      acc.values.push({
+        value: row.objectiveValue,
+        count,
+        percentage: 0, // calculated below
+      });
+    }
+
+    // Calculate percentages
+    const dispositions: ExtractionOverviewDisposition[] = [];
+    for (const acc of dispositionMap.values()) {
+      for (const v of acc.values) {
+        v.percentage =
+          acc.totalCount > 0
+            ? parseFloat(((v.count / acc.totalCount) * 100).toFixed(1))
+            : 0;
+      }
+      dispositions.push(acc);
+    }
+
+    return { campaignId, totalCalls, dispositions };
   }
 
   async findAssistantWithAgent(

@@ -1,7 +1,7 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
-import type { CampaignPerformanceV2Result } from "../dto/campaign.dto";
+import type { CampaignPerformanceV2Result, ExtractionOverviewResult } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
   name: string;
@@ -127,9 +127,14 @@ export interface CampaignRepository {
     batchId?: string,
   ): Promise<CampaignPerformanceV2Result>;
 
+  getExtractionOverview(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<ExtractionOverviewResult>;
+
   findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
-
 }

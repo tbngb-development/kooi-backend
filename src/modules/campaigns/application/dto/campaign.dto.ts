@@ -77,3 +77,31 @@ export interface PerformanceV2MetricBreakdown {
 export interface CampaignPerformanceV2Result {
   metrics: PerformanceV2MetricBreakdown[];
 }
+
+
+// ── Extraction Overview ──
+
+export interface ExtractionOverviewInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+}
+
+export interface ExtractionOverviewDisposition {
+  dispositionId: string;
+  dispositionSlug: string;
+  dispositionName: string;
+  categoryName: string;
+  values: Array<{
+    value: string;
+    count: number;
+    percentage: number;
+  }>;
+  totalCount: number;
+}
+
+export interface ExtractionOverviewResult {
+  campaignId: string;
+  totalCalls: number;
+  dispositions: ExtractionOverviewDisposition[];
+}
