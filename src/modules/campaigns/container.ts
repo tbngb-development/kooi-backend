@@ -13,6 +13,7 @@ import { AdminCampaignController } from "./presentation/admin-campaign.controlle
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
 import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/get-campaign-extraction-overview.use-case";
+import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
@@ -39,6 +40,9 @@ export function buildCampaignModule(): CampaignModule {
   const getExtractionOverview = new GetCampaignExtractionOverviewUseCase(
     campaignRepo,
   );
+  const getExtractionInsights = new GetCampaignExtractionInsightsUseCase(
+    campaignRepo,
+  );
 
   return {
     tenantController: new TenantCampaignController(
@@ -51,6 +55,7 @@ export function buildCampaignModule(): CampaignModule {
       getCampaignPerformanceV2,
       extractVariables,
       getExtractionOverview,
+      getExtractionInsights,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,

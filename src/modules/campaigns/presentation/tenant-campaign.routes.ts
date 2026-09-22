@@ -51,6 +51,7 @@ export function buildTenantCampaignRoutes(
   router.get("/:id/performance", controller.performance);
   router.get("/:id/performance-v2", controller.performanceV2);
   router.get("/:id/extraction-overview", controller.extractionOverview);
+  router.get("/:id/extraction-insights", controller.extractionInsights);
   router.post(
     "/:id/parse-leads",
     leadsUploadMemory.single("file"),

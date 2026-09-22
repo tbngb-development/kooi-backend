@@ -37,6 +37,7 @@ interface DynamicExtractionEntry {
   subjective: string | null;
   objective: string | null;
   isObjective: boolean;
+  isSubjective: boolean;
   confidence: number | null;
   confidenceLabel: string | null;
   reasoning: {
@@ -257,8 +258,13 @@ export class ProcessCallWebhookUseCase {
       );
 
       if (dynamicResult) {
-         
         await this.materializeExtractionOverview(
+          call.id,
+          call.tenantId,
+          dynamicResult,
+        );
+
+        await this.materializeExtractionInsights(
           call.id,
           call.tenantId,
           dynamicResult,
@@ -401,13 +407,14 @@ export class ProcessCallWebhookUseCase {
     // Build lookup — all dispositions come through categories now
     const dispositionLookup = new Map<
       string,
-      { id: string; slug: string; isObjective: boolean } // ← UPDATED
+      { id: string; slug: string; isObjective: boolean; isSubjective: boolean } // ← UPDATED
     >();
     for (const disp of agentMap.dispositions) {
       const entry = {
         id: disp.id,
         slug: disp.slug,
         isObjective: disp.isObjective,
+        isSubjective: disp.isSubjective,
       };
       dispositionLookup.set(disp.name.toLowerCase(), entry);
       dispositionLookup.set(disp.slug.toLowerCase(), entry);
@@ -436,6 +443,7 @@ export class ProcessCallWebhookUseCase {
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
           isObjective: localDisp?.isObjective ?? false,
+          isSubjective: localDisp?.isSubjective ?? false,
           confidence: (value.confidence as number) ?? null,
           confidenceLabel: (value.confidence_label as string) ?? null,
           reasoning: {
@@ -696,6 +704,88 @@ export class ProcessCallWebhookUseCase {
 
     console.info(
       `[Webhook] Materialized ${objectiveEntries.length} overview rows for call ${callId}`,
+    );
+  }
+
+  private async materializeExtractionInsights(
+    callId: string,
+    tenantId: string,
+    dynamicResult: DynamicExtractionMap,
+  ): Promise<void> {
+    const subjectiveEntries: Array<{
+      dispositionId: string;
+      dispositionSlug: string;
+      categoryName: string;
+      subjectiveValue: string;
+      normalizedValue: string;
+      confidence: number | null;
+    }> = [];
+
+    const seenDispositions = new Set<string>();
+
+    for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
+      for (const [_dispName, entry] of Object.entries(dispositions)) {
+        // Only subjective dispositions with a subjective value
+        if (
+          entry.isSubjective &&
+          entry.localDispositionId &&
+          entry.localDispositionSlug &&
+          entry.subjective !== null &&
+          entry.subjective.trim() !== ""
+        ) {
+          if (seenDispositions.has(entry.localDispositionId)) continue;
+          seenDispositions.add(entry.localDispositionId);
+
+          const raw = entry.subjective.trim();
+
+          subjectiveEntries.push({
+            dispositionId: entry.localDispositionId,
+            dispositionSlug: entry.localDispositionSlug,
+            categoryName: categoryName.trim().replace(/\s+/g, " "),
+            subjectiveValue: raw,
+            normalizedValue: raw.toLowerCase().replace(/\s+/g, " "),
+            confidence: entry.confidence,
+          });
+        }
+      }
+    }
+
+    if (subjectiveEntries.length === 0) return;
+
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: { campaignId: true, batchId: true },
+    });
+
+    if (!call) return;
+
+    const dispositionIds = Array.from(seenDispositions);
+    const dispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds } },
+      select: { id: true, name: true },
+    });
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
+
+    await prisma.callExtractionInsight.deleteMany({ where: { callId } });
+
+    await prisma.callExtractionInsight.createMany({
+      data: subjectiveEntries.map((e) => ({
+        callId,
+        tenantId,
+        campaignId: call.campaignId,
+        batchId: call.batchId,
+        dispositionId: e.dispositionId,
+        dispositionSlug: e.dispositionSlug,
+        dispositionName: nameMap.get(e.dispositionId) ?? e.dispositionSlug,
+        categoryName: e.categoryName,
+        subjectiveValue: e.subjectiveValue,
+        normalizedValue: e.normalizedValue,
+        confidence: e.confidence,
+      })),
+    });
+
+    console.info(
+      `[Webhook] Materialized ${subjectiveEntries.length} insight rows for call ${callId}`,
     );
   }
 

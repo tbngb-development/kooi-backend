@@ -342,6 +342,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
       name: string;
       slug: string;
       isObjective: boolean;
+      isSubjective: boolean;
     }>;
   }> {
     const call = await prisma.call.findUnique({
@@ -366,6 +367,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
                                     name: true,
                                     slug: true,
                                     isObjective: true,
+                                    isSubjective: true,
                                   },
                                 },
                               },
@@ -390,7 +392,13 @@ export class PrismaWebhookRepository implements WebhookRepository {
 
     const dispositionMap = new Map<
       string,
-      { id: string; name: string; slug: string; isObjective: boolean }
+      {
+        id: string;
+        name: string;
+        slug: string;
+        isObjective: boolean;
+        isSubjective: boolean;
+      }
     >();
     for (const catRel of platformAgent.categories) {
       for (const dispRel of catRel.category.dispositions) {

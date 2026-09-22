@@ -78,7 +78,6 @@ export interface CampaignPerformanceV2Result {
   metrics: PerformanceV2MetricBreakdown[];
 }
 
-
 // ── Extraction Overview ──
 
 export interface ExtractionOverviewInput {
@@ -104,4 +103,36 @@ export interface ExtractionOverviewResult {
   campaignId: string;
   totalCalls: number;
   dispositions: ExtractionOverviewDisposition[];
+}
+
+// ── Extraction Insights (Subjective) ──
+
+export interface ExtractionInsightInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+  topN?: number;
+}
+
+export interface ExtractionInsightValue {
+  value: string;
+  displayValue: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ExtractionInsightDisposition {
+  dispositionId: string;
+  dispositionSlug: string;
+  dispositionName: string;
+  categoryName: string;
+  uniqueValues: number;
+  totalCount: number;
+  topValues: ExtractionInsightValue[];
+}
+
+export interface ExtractionInsightResult {
+  campaignId: string;
+  totalCalls: number;
+  insights: ExtractionInsightDisposition[];
 }

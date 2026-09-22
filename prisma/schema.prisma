@@ -275,6 +275,7 @@ model Call {
   callAnalysis CallAnalysis?
   callMetrics  CallMetric[] 
   extractionOverview CallExtractionOverview[]
+  extractionInsights CallExtractionInsight[]
 
   @@index([tenantId])
   @@index([campaignId])
@@ -851,6 +852,7 @@ model ExtractionDisposition {
   bolnaBindings AgentBolnaExtractionBinding[]
   callAnalyses  CallAnalysis[] // [NEW] reverse from CallAnalysis.extractionDispositionId
   callOverviews CallExtractionOverview[] 
+  callInsights  CallExtractionInsight[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1005,6 +1007,34 @@ model CallExtractionOverview {
 
   @@index([tenantId, campaignId, dispositionId])
   @@index([tenantId, campaignId, dispositionId, objectiveValue])
+  @@index([callId])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL EXTRACTION INSIGHTS (Subjective / free-text outcomes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallExtractionInsight {
+  id               String   @id @default(uuid())
+  callId           String
+  tenantId         String
+  campaignId       String
+  batchId          String?
+  dispositionId    String
+  dispositionSlug  String
+  dispositionName  String
+  categoryName     String
+  subjectiveValue  String   // Raw extracted text: "CSE"
+  normalizedValue  String   // Grouping key: "cse"
+  confidence       Float?
+  createdAt        DateTime @default(now())
+
+  call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, dispositionId])
+  @@index([tenantId, campaignId, dispositionId, normalizedValue])
   @@index([callId])
   @@index([batchId])
 }

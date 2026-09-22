@@ -12,6 +12,8 @@ import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import { type CampaignStatus } from "@prisma/client";
 import type {
   CampaignPerformanceV2Result,
+  ExtractionInsightDisposition,
+  ExtractionInsightResult,
   ExtractionOverviewDisposition,
   ExtractionOverviewResult,
   PerformanceV2MetricBreakdown,
@@ -553,6 +555,117 @@ export class PrismaCampaignRepository implements CampaignRepository {
     }
 
     return { campaignId, totalCalls, dispositions };
+  }
+
+  async getExtractionInsights(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+    topN: number = 10,
+  ): Promise<ExtractionInsightResult> {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    // Single GROUP BY — one row per (disposition, normalizedValue)
+    const rows = await prisma.callExtractionInsight.groupBy({
+      by: [
+        "dispositionId",
+        "dispositionSlug",
+        "dispositionName",
+        "categoryName",
+        "normalizedValue",
+        "subjectiveValue",
+      ],
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      _count: true,
+      orderBy: { _count: { normalizedValue: "desc" } },
+    });
+
+    if (rows.length === 0) {
+      return { campaignId, totalCalls: 0, insights: [] };
+    }
+
+    // Total unique calls with any insight data
+    const totalCallsResult = await prisma.callExtractionInsight.findMany({
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      select: { callId: true },
+      distinct: ["callId"],
+    });
+    const totalCalls = totalCallsResult.length;
+
+    // Group by disposition
+    const dispositionMap = new Map<
+      string,
+      ExtractionInsightDisposition & {
+        allValues: Array<{
+          value: string;
+          displayValue: string;
+          count: number;
+        }>;
+      }
+    >();
+
+    for (const row of rows) {
+      let acc = dispositionMap.get(row.dispositionId);
+      if (!acc) {
+        acc = {
+          dispositionId: row.dispositionId,
+          dispositionSlug: row.dispositionSlug,
+          dispositionName: row.dispositionName,
+          categoryName: row.categoryName,
+          uniqueValues: 0,
+          totalCount: 0,
+          topValues: [],
+          allValues: [],
+        };
+        dispositionMap.set(row.dispositionId, acc);
+      }
+
+      const count = row._count;
+      acc.totalCount += count;
+      acc.allValues.push({
+        value: row.normalizedValue,
+        displayValue: row.subjectiveValue,
+        count,
+      });
+    }
+
+    // Sort, slice top N, calculate percentages
+    const insights: ExtractionInsightDisposition[] = [];
+    for (const acc of dispositionMap.values()) {
+      acc.allValues.sort((a, b) => b.count - a.count);
+      const top = acc.allValues.slice(0, topN);
+
+      acc.topValues = top.map((v) => ({
+        value: v.value,
+        displayValue: v.displayValue,
+        count: v.count,
+        percentage:
+          acc.totalCount > 0
+            ? parseFloat(((v.count / acc.totalCount) * 100).toFixed(1))
+            : 0,
+      }));
+
+      acc.uniqueValues = acc.allValues.length;
+      delete (acc as any).allValues;
+      insights.push(acc);
+    }
+
+    return { campaignId, totalCalls, insights };
   }
 
   async findAssistantWithAgent(

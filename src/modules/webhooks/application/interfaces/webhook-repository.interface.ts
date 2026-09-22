@@ -44,6 +44,7 @@ export interface AgentDispositionMap {
     name: string;
     slug: string;
     isObjective: boolean;
+    isSubjective: boolean;
   }[];
 }
 
