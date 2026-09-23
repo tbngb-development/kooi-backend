@@ -45,6 +45,9 @@ export class RegisterTenantOwnerUseCase {
       tenantEmail: input.email,
       userEmail: input.email,
       userName: input.name,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: input.termsVersion,
       passwordHash,
     });
 

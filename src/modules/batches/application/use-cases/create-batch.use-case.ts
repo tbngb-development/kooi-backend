@@ -187,6 +187,9 @@ export class CreateBatchUseCase {
       fileName: input.fileName,
       totalLeads: newLeads.length,
       retryConfig: resolvedRetryConfig,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: input.termsVersion,
     });
 
     await this.batchRepo.createLeads(
@@ -276,7 +279,7 @@ export class CreateBatchUseCase {
       scheduledAt: localScheduledAt,
       bolnaScheduledAt,
     });
-    
+
     await this.campaignRepo.incrementTotalLeads(
       input.campaignId,
       newLeads.length,

@@ -12,7 +12,7 @@ const nameSchema = z
   .min(1, "Name is required")
   .max(100, "Name too long")
   .trim();
-
+  
 export const registerTenantOwnerSchema = z.object({
   tenantName: z
     .string()
@@ -22,6 +22,10 @@ export const registerTenantOwnerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   name: nameSchema,
+  termsAccepted: z.literal(true, {
+    message: "You must accept the Terms & Conditions to continue.",
+  }),
+  termsVersion: z.string().min(1, "Terms version is required").max(20),
 });
 
 export const loginSchema = z.object({

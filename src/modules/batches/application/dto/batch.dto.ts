@@ -1,4 +1,16 @@
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
+import { type LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
+
+export interface CreateBatchData {
+  campaignId: string;
+  tenantId: string;
+  fileName: string;
+  totalLeads: number;
+  retryConfig?: RetryConfig;
+  termsAccepted: boolean;
+  termsAcceptedAt: Date;
+  termsVersion: string;
+}
 
 export interface CreateBatchInput {
   tenantId: string;
@@ -6,8 +18,10 @@ export interface CreateBatchInput {
   fileBuffer: Buffer;
   fileName: string;
   retryConfig?: RetryConfig;
-  scheduledAt?: string; // ISO-8601 string for future scheduling
-  runImmediately?: boolean; // Set to true to bypass scheduling and run immediately
+  scheduledAt?: string;
+  runImmediately?: boolean;
+  termsAccepted: boolean;
+  termsVersion: string;
 }
 
 export interface CreateBatchOutput {
@@ -19,6 +33,24 @@ export interface CreateBatchOutput {
     imported: number;
   };
   message?: string;
+}
+
+export interface CreateLeadData {
+  name: string | null;
+  phone: string;
+  email?: string;
+  company?: string;
+  tenantId: string;
+  campaignId: string;
+  batchId: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface BatchStatsResult {
+  batch: LeadBatchEntityData;
+  leads: Array<{ status: string; _count: number }>;
+  calls: Array<{ status: string; _count: number }>;
+  totalCost: number;
 }
 
 export interface ScheduleBatchInput {

@@ -16,6 +16,11 @@ model Tenant {
   name      String
   email     String   @unique
   isActive  Boolean  @default(true)
+
+  termsAccepted   Boolean   @default(false)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -163,6 +168,12 @@ model LeadBatch {
   retryConfig       Json?
   scheduledAt       DateTime?
   bolnaScheduledAt  DateTime?
+
+  termsAccepted   Boolean   @default(false)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+  
+
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   startedAt         DateTime?

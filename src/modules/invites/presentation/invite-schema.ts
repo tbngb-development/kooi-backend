@@ -29,4 +29,8 @@ export const acceptOwnerInviteSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
   password: z.string().min(8),
+  termsAccepted: z.literal(true, {
+    message: "You must accept the Terms & Conditions to continue.",
+  }),
+  termsVersion: z.string().min(1).max(20),
 });

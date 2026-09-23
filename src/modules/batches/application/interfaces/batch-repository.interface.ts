@@ -1,36 +1,8 @@
 import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
-import { type RetryConfig } from "../../../../shared/types/bolna.types";
+import type { BatchStatsResult, CreateBatchData, CreateLeadData } from "../dto/batch.dto";
 
-// ── Input DTOs ───────────────────────────────────────────────────────────────
 
-export interface CreateBatchData {
-  campaignId: string;
-  tenantId: string;
-  fileName: string;
-  totalLeads: number;
-  retryConfig?: RetryConfig;
-}
-
-export interface CreateLeadData {
-  name: string | null;
-  phone: string;
-  email?: string;
-  company?: string;
-  tenantId: string;
-  campaignId: string;
-  batchId: string;
-  metadata: Record<string, unknown>;
-}
-
-// ── Stats ────────────────────────────────────────────────────────────────────
-
-export interface BatchStatsResult {
-  batch: LeadBatchEntityData;
-  leads: Array<{ status: string; _count: number }>;
-  calls: Array<{ status: string; _count: number }>;
-  totalCost: number;
-}
 
 // ── List Item ────────────────────────────────────────────────────────────────
 

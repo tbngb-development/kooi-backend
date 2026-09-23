@@ -1,10 +1,12 @@
 import prisma from "../../../../shared/config/database/prisma";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import type {
-  BatchRepository,
+  BatchStatsResult,
   CreateBatchData,
   CreateLeadData,
-  BatchStatsResult,
+} from "../../application/dto/batch.dto";
+import type {
+  BatchRepository,
   BatchListItem,
   PendingLeadRow,
 } from "../../application/interfaces/batch-repository.interface";
@@ -68,6 +70,9 @@ export class PrismaBatchRepository implements BatchRepository {
         totalLeads: data.totalLeads,
         retryConfig:
           (data.retryConfig as unknown as Prisma.InputJsonValue) ?? undefined,
+        termsAccepted: data.termsAccepted,
+        termsAcceptedAt: data.termsAcceptedAt,
+        termsVersion: data.termsVersion,
       },
     });
 
@@ -286,6 +291,9 @@ export class PrismaBatchRepository implements BatchRepository {
     calledLeads: number;
     completedLeads: number;
     failedLeads: number;
+    termsAccepted: boolean;
+    termsAcceptedAt: Date | null;
+    termsVersion: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): LeadBatchEntityData {
@@ -298,13 +306,16 @@ export class PrismaBatchRepository implements BatchRepository {
       fileName: batch.fileName,
       originalFileUrl: batch.originalFileUrl,
       transformedCsvUrl: batch.transformedCsvUrl,
-      retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined, // [FIXED]
+      retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined,
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
       totalLeads: batch.totalLeads,
       calledLeads: batch.calledLeads,
       completedLeads: batch.completedLeads,
       failedLeads: batch.failedLeads,
+      termsAccepted: batch.termsAccepted,
+      termsAcceptedAt: batch.termsAcceptedAt,
+      termsVersion: batch.termsVersion,
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
     };

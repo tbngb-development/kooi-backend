@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { TenantBatchController } from "./tenant-batch.controller";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
 import { validate } from "../../../shared/middleware/validate";
-import { scheduleBatchSchema } from "./batch.schema";
+import { createBatchBodySchema, scheduleBatchSchema } from "./batch.schema";
 import { leadsUploadMemory } from "../../../shared/middleware/upload";
 
 /**
@@ -17,8 +17,12 @@ export function buildTenantBatchRoutes(
 
   // Collection
   router.get("/", controller.list);
-  router.post("/", leadsUploadMemory.single("file"), controller.create);
-
+  router.post(
+    "/",
+    leadsUploadMemory.single("file"),
+    validate(createBatchBodySchema),
+    controller.create,
+  );
   // Single resource
   router.get("/:batchId", controller.get);
   router.get("/:batchId/stats", controller.stats);

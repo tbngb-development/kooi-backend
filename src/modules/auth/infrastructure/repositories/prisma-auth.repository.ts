@@ -54,6 +54,9 @@ export class PrismaAuthRepository implements AuthRepository {
         data: {
           name: data.tenantName,
           email: data.tenantEmail,
+          termsAccepted: data.termsAccepted,
+          termsAcceptedAt: data.termsAcceptedAt,
+          termsVersion: data.termsVersion,
         },
       });
 
