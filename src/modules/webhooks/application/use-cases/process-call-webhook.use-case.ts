@@ -522,7 +522,7 @@ export class ProcessCallWebhookUseCase {
       ...new Set(objectiveEntries.map((e) => e.dispositionId)),
     ];
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds } },
+      where: { id: { in: dispositionIds } , showInOverview: true},
       select: { id: true, name: true },
     });
     const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
@@ -605,7 +605,7 @@ export class ProcessCallWebhookUseCase {
 
     const dispositionIds = Array.from(seenDispositions);
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds } },
+      where: { id: { in: dispositionIds } , showInInsights: true,},
       select: { id: true, name: true },
     });
     const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));

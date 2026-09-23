@@ -234,6 +234,8 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
                         slug: true,
                         isObjective: true,
                         isSubjective: true,
+                        showInOverview: true,
+                        showInInsights: true,
                         objectiveOptions: true,
                       },
                     },
@@ -266,6 +268,8 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
           sortOrder: d.sortOrder,
           isObjective: d.disposition.isObjective,
           isSubjective: d.disposition.isSubjective,
+            showInOverview:d.disposition.showInOverview ,
+        showInInsights: d.disposition.showInInsights,
           objectiveOptions: d.disposition.objectiveOptions as
             DispositionObjectiveOption[] | null,
         })),

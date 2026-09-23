@@ -41,8 +41,9 @@ export interface CreateDispositionDTO {
   subjectiveTypeConfig?: Record<string, unknown>;
   objectiveOptions?: Record<string, unknown>[];
   description?: string;
-  /** Optional: attach industry packs at creation time */
   industryPackIds?: string[];
+  showInOverview?: boolean;
+  showInInsights?: boolean;
 }
 
 export interface UpdateDispositionDTO {
@@ -57,6 +58,8 @@ export interface UpdateDispositionDTO {
   objectiveOptions?: Record<string, unknown>[] | null;
   description?: string;
   isActive?: boolean;
+  showInOverview?: boolean;
+  showInInsights?: boolean;
 }
 
 export interface ListDispositionsFilters {

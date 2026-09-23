@@ -41,6 +41,8 @@ export interface AgentExtractionConfig {
       sortOrder: number;
       isObjective: boolean;
       isSubjective: boolean;
+      showInOverview: boolean;
+      showInInsights: boolean;
       objectiveOptions: DispositionObjectiveOption[] | null;
     }[];
   }[];
