@@ -16,7 +16,6 @@ import type {
 } from "../../../../shared/types/bolna.types";
 import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
 import {
-  getAgentSystemPrompt,
   getAgentFirstMessage,
 } from "../../../assistants/infrastructure/promptVariableExtractor";
 

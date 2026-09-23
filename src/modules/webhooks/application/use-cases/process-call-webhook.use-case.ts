@@ -4,38 +4,21 @@ import {
 } from "../interfaces/webhook-repository.interface";
 import { type WebhookCallPayload } from "../dto/webhook.dto";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
-import {
-  sanitizeEnum,
-  DISPOSITION_VALUES,
-  LEAD_TEMPERATURE_VALUES,
-  PURCHASE_TIMELINE_VALUES,
-  PURCHASE_PURPOSE_VALUES,
-  LOCATION_MATCH_VALUES,
-  PREFERRED_NEXT_ACTION_VALUES,
-  CONTACT_CHANNEL_VALUES,
-  EXTRACTION_FLAG_VALUES,
-} from "../../domain/rules/webhook-sanitizer";
 import type {
   CallHistoryItem,
-  ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 
-import type {
-  ExtractionConfig,
-  ExtractionMetricResponse,
-  ExtractionResultResponse,
-  ExtractionResponse,
-} from "../../../../shared/types/bolna.types";
-
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
   localDispositionSlug: string | null;
   subjective: string | null;
   objective: string | null;
+  isObjective: boolean;
+  isSubjective: boolean;
   confidence: number | null;
   confidenceLabel: string | null;
   reasoning: {
@@ -247,7 +230,6 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
-    // [NEW] Map extracted_data to local dispositions AND build dynamic response
     try {
       const dynamicResult = await this.mapCallExtractions(
         call.id,
@@ -256,7 +238,13 @@ export class ProcessCallWebhookUseCase {
       );
 
       if (dynamicResult) {
-        await this.buildExtractionResponse(
+        await this.materializeExtractionOverview(
+          call.id,
+          call.tenantId,
+          dynamicResult,
+        );
+
+        await this.materializeExtractionInsights(
           call.id,
           call.tenantId,
           dynamicResult,
@@ -267,13 +255,9 @@ export class ProcessCallWebhookUseCase {
       console.error("[Webhook] Dynamic extraction mapping failed:", err);
     }
 
-    const parsed = this.parseExtractionData(payload.extracted_data);
-    const summary = parsed?.callSummary ?? null;
-
     // ── Step 1: Persist terminal state (Bolna cost in `cost` field) ──
     await this.webhookRepo.updateCallTerminalState(call.id, {
       status: "COMPLETED",
-      summary,
       transcript,
       transcriptMessages: messages.length > 0 ? messages : null,
       duration,
@@ -285,13 +269,6 @@ export class ProcessCallWebhookUseCase {
     });
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
-
-    if (parsed) {
-      await this.webhookRepo.upsertCallAnalysis(call.id, call.tenantId, parsed);
-      if (parsed.doNotCall === "YES") {
-        await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED", true);
-      }
-    }
 
     await this.webhookRepo.incrementTerminalStats(
       call.campaignId,
@@ -352,7 +329,7 @@ export class ProcessCallWebhookUseCase {
     if (call.status === "STOPPED") return;
 
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status: "STOPPED", 
+      status: "STOPPED",
       endedAt: new Date(),
     });
 
@@ -391,16 +368,19 @@ export class ProcessCallWebhookUseCase {
     }
 
     // Build lookup — all dispositions come through categories now
-    const dispositionLookup = new Map<string, { id: string; slug: string }>();
+    const dispositionLookup = new Map<
+      string,
+      { id: string; slug: string; isObjective: boolean; isSubjective: boolean } // ← UPDATED
+    >();
     for (const disp of agentMap.dispositions) {
-      dispositionLookup.set(disp.name.toLowerCase(), {
+      const entry = {
         id: disp.id,
         slug: disp.slug,
-      });
-      dispositionLookup.set(disp.slug.toLowerCase(), {
-        id: disp.id,
-        slug: disp.slug,
-      });
+        isObjective: disp.isObjective,
+        isSubjective: disp.isSubjective,
+      };
+      dispositionLookup.set(disp.name.toLowerCase(), entry);
+      dispositionLookup.set(disp.slug.toLowerCase(), entry);
     }
 
     const dynamicResult: DynamicExtractionMap = {};
@@ -425,6 +405,8 @@ export class ProcessCallWebhookUseCase {
           localDispositionSlug: localDisp?.slug ?? null,
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
+          isObjective: localDisp?.isObjective ?? false,
+          isSubjective: localDisp?.isSubjective ?? false,
           confidence: (value.confidence as number) ?? null,
           confidenceLabel: (value.confidence_label as string) ?? null,
           reasoning: {
@@ -482,90 +464,50 @@ export class ProcessCallWebhookUseCase {
   }
 
   /**
-   * Reads the PlatformAgent's extractionConfig and the just-computed
-   * dynamicExtractions to produce the { metrics, results } response.
-   * Stores the result in CallAnalysis.extractionResponse.
+   * Auto-generates structured overview rows for every objective disposition
+   * that returned a value. No manual ExtractionConfig needed.
+   *
+   * One row per (call, objective disposition) — enables GROUP BY aggregation
+   * for campaign performance overview dashboards.
+   *
+   * Idempotent: deletes previous rows for this call before inserting
+   * (handles webhook retries safely).
    */
-  private async buildExtractionResponse(
+  private async materializeExtractionOverview(
     callId: string,
     tenantId: string,
     dynamicResult: DynamicExtractionMap,
   ): Promise<void> {
-    const agentConfig =
-      await this.webhookRepo.getExtractionConfigForCall(callId);
+    // Collect all objective entries with values
+    const objectiveEntries: Array<{
+      dispositionId: string;
+      dispositionSlug: string;
+      categoryName: string;
+      objectiveValue: string;
+      confidence: number | null;
+    }> = [];
 
-    if (!agentConfig) return;
-
-    const config = agentConfig.extractionConfig as ExtractionConfig | null;
-    if (!config) return;
-
-    // Build a case-insensitive lookup of dynamic extractions
-    // Key: "category|disposition" (both lowercased)
-    const dynamicLookup = new Map<string, DynamicExtractionEntry>();
-    for (const [catName, dispositions] of Object.entries(dynamicResult)) {
-      for (const [dispName, entry] of Object.entries(dispositions)) {
-        const key = `${catName.toLowerCase()}|${dispName.toLowerCase()}`;
-        dynamicLookup.set(key, entry);
+    for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
+      for (const [_dispName, entry] of Object.entries(dispositions)) {
+        if (
+          entry.isObjective &&
+          entry.localDispositionId &&
+          entry.localDispositionSlug &&
+          entry.objective !== null &&
+          entry.objective.trim() !== ""
+        ) {
+          objectiveEntries.push({
+            dispositionId: entry.localDispositionId,
+            dispositionSlug: entry.localDispositionSlug,
+            categoryName,
+            objectiveValue: entry.objective.trim(),
+            confidence: entry.confidence,
+          });
+        }
       }
     }
 
-    // ── Build metrics ───────────────────────────────────────────────────
-    const metrics: ExtractionMetricResponse[] = [];
-    for (const metric of config.metrics) {
-      const key = `${metric.category.toLowerCase()}|${metric.disposition.toLowerCase()}`;
-      const entry = dynamicLookup.get(key);
-
-      const actualValue = entry?.objective ?? null;
-      const matched =
-        actualValue !== null &&
-        actualValue.toLowerCase() === metric.matchValue.toLowerCase();
-
-      metrics.push({
-        label: metric.label,
-        category: metric.category,
-        disposition: metric.disposition,
-        matchValue: metric.matchValue,
-        matched,
-        actualValue,
-      });
-    }
-
-    // ── Build results ───────────────────────────────────────────────────
-    const results: ExtractionResultResponse[] = [];
-    for (const result of config.results) {
-      const key = `${result.category.toLowerCase()}|${result.disposition.toLowerCase()}`;
-      const entry = dynamicLookup.get(key);
-
-      results.push({
-        label: result.label,
-        category: result.category,
-        disposition: result.disposition,
-        value: entry?.subjective ?? null,
-      });
-    }
-
-    const response: ExtractionResponse = { metrics, results };
-
-    await this.materializeCallMetrics(callId, tenantId, metrics);
-
-    await this.webhookRepo.updateExtractionResponse(callId, tenantId, response);
-  }
-
-  /**
-   * Inserts one row per metric evaluation into CallMetric for fast
-   * aggregation and filtering. Idempotent — deletes old rows for this
-   * call before inserting (handles webhook retries safely).
-   */
-  private async materializeCallMetrics(
-    callId: string,
-    tenantId: string,
-    metrics: ExtractionMetricResponse[],
-  ): Promise<void> {
-    const validMetrics = metrics.filter(
-      (m) => m.actualValue != null && m.actualValue !== "",
-    );
-
-    if (validMetrics.length === 0) return;
+    if (objectiveEntries.length === 0) return;
 
     // Fetch call metadata for denormalization
     const call = await prisma.call.findUnique({
@@ -575,30 +517,122 @@ export class ProcessCallWebhookUseCase {
 
     if (!call) return;
 
-    const toFilterKey = (label: string): string =>
-      label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
+    // Fetch disposition names for denormalization
+    const dispositionIds = [
+      ...new Set(objectiveEntries.map((e) => e.dispositionId)),
+    ];
+    const dispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds } , showInOverview: true},
+      select: { id: true, name: true },
+    });
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
 
-    // Idempotent: remove previous metrics for this call (webhook retries)
-    await prisma.callMetric.deleteMany({ where: { callId } });
+    // Idempotent: remove previous overview rows for this call (webhook retries)
+    await prisma.callExtractionOverview.deleteMany({ where: { callId } });
 
-    // Bulk insert all metric evaluations
-    await prisma.callMetric.createMany({
-      data: validMetrics.map((m) => ({
+    // Bulk insert
+    await prisma.callExtractionOverview.createMany({
+      data: objectiveEntries.map((e) => ({
         callId,
         tenantId,
         campaignId: call.campaignId,
         batchId: call.batchId,
-        metricKey: toFilterKey(m.label),
-        metricLabel: m.label,
-        matched: m.matched,
-        actualValue: m.actualValue!,
-        matchValue: m.matchValue,
+        dispositionId: e.dispositionId,
+        dispositionSlug: e.dispositionSlug,
+        dispositionName: nameMap.get(e.dispositionId) ?? e.dispositionSlug,
+        categoryName: e.categoryName,
+        objectiveValue: e.objectiveValue,
+        confidence: e.confidence,
       })),
     });
+
+    console.info(
+      `[Webhook] Materialized ${objectiveEntries.length} overview rows for call ${callId}`,
+    );
   }
+
+  private async materializeExtractionInsights(
+    callId: string,
+    tenantId: string,
+    dynamicResult: DynamicExtractionMap,
+  ): Promise<void> {
+    const subjectiveEntries: Array<{
+      dispositionId: string;
+      dispositionSlug: string;
+      categoryName: string;
+      subjectiveValue: string;
+      normalizedValue: string;
+      confidence: number | null;
+    }> = [];
+
+    const seenDispositions = new Set<string>();
+
+    for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
+      for (const [_dispName, entry] of Object.entries(dispositions)) {
+        // Only subjective dispositions with a subjective value
+        if (
+          entry.isSubjective &&
+          entry.localDispositionId &&
+          entry.localDispositionSlug &&
+          entry.subjective !== null &&
+          entry.subjective.trim() !== ""
+        ) {
+          if (seenDispositions.has(entry.localDispositionId)) continue;
+          seenDispositions.add(entry.localDispositionId);
+
+          const raw = entry.subjective.trim();
+
+          subjectiveEntries.push({
+            dispositionId: entry.localDispositionId,
+            dispositionSlug: entry.localDispositionSlug,
+            categoryName: categoryName.trim().replace(/\s+/g, " "),
+            subjectiveValue: raw,
+            normalizedValue: raw.toLowerCase().replace(/\s+/g, " "),
+            confidence: entry.confidence,
+          });
+        }
+      }
+    }
+
+    if (subjectiveEntries.length === 0) return;
+
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: { campaignId: true, batchId: true },
+    });
+
+    if (!call) return;
+
+    const dispositionIds = Array.from(seenDispositions);
+    const dispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds } , showInInsights: true,},
+      select: { id: true, name: true },
+    });
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
+
+    await prisma.callExtractionInsight.deleteMany({ where: { callId } });
+
+    await prisma.callExtractionInsight.createMany({
+      data: subjectiveEntries.map((e) => ({
+        callId,
+        tenantId,
+        campaignId: call.campaignId,
+        batchId: call.batchId,
+        dispositionId: e.dispositionId,
+        dispositionSlug: e.dispositionSlug,
+        dispositionName: nameMap.get(e.dispositionId) ?? e.dispositionSlug,
+        categoryName: e.categoryName,
+        subjectiveValue: e.subjectiveValue,
+        normalizedValue: e.normalizedValue,
+        confidence: e.confidence,
+      })),
+    });
+
+    console.info(
+      `[Webhook] Materialized ${subjectiveEntries.length} insight rows for call ${callId}`,
+    );
+  }
+
   // ── Completion Checks ────────────────────────────────────────────────────
 
   private async checkBatchCompletion(call: ResolvedCallContext): Promise<void> {
@@ -645,62 +679,4 @@ export class ProcessCallWebhookUseCase {
     }
   }
 
-  // ── Extractor Mapper ─────────────────────────────────────────────────────
-
-  private parseExtractionData(
-    extracted: Record<string, any> | null | undefined,
-  ): ParsedCallAnalysis | null {
-    if (!extracted) return null;
-
-    const obj = (field: any) => field?.objective?.trim() ?? null;
-    const subj = (field: any) => field?.subjective?.trim() ?? null;
-
-    const outcome = extracted["Call Outcome"];
-    const qualification = extracted["Lead Qualification"];
-    const nextAction = extracted["Next Action and Contact Preference"];
-    const followUp = extracted["Follow-Up Schedule"];
-    const compliance = extracted["Compliance"];
-    const summary = extracted["Summary"];
-
-    return {
-      disposition: sanitizeEnum(obj(outcome?.disposition), DISPOSITION_VALUES),
-      leadTemperature: sanitizeEnum(
-        obj(outcome?.lead_temperature),
-        LEAD_TEMPERATURE_VALUES,
-      ),
-      purchaseTimeline: sanitizeEnum(
-        obj(qualification?.purchase_timeline),
-        PURCHASE_TIMELINE_VALUES,
-      ),
-      purchasePurpose: sanitizeEnum(
-        obj(qualification?.purchase_purpose),
-        PURCHASE_PURPOSE_VALUES,
-      ),
-      locationMatch: sanitizeEnum(
-        obj(qualification?.location_match),
-        LOCATION_MATCH_VALUES,
-      ),
-      preferredNextAction: sanitizeEnum(
-        obj(nextAction?.preferred_next_action),
-        PREFERRED_NEXT_ACTION_VALUES,
-      ),
-      preferredContactChannel: sanitizeEnum(
-        obj(nextAction?.preferred_contact_channel),
-        CONTACT_CHANNEL_VALUES,
-      ),
-      doNotCall: sanitizeEnum(
-        obj(compliance?.do_not_call),
-        EXTRACTION_FLAG_VALUES,
-      ),
-      languageSupportRequired: sanitizeEnum(
-        obj(compliance?.language_support_required),
-        EXTRACTION_FLAG_VALUES,
-      ),
-      preferredConfiguration: subj(qualification?.preferred_configuration),
-      budgetRange: subj(qualification?.budget_range),
-      customerLocationPref: subj(qualification?.customer_location_pref),
-      followupSchedule: subj(followUp?.followup_schedule),
-      callSummary: subj(summary?.call_summary),
-    };
-  }
 }

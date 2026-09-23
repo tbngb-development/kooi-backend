@@ -69,6 +69,8 @@ export const createDispositionSchema = z.object({
     .optional(),
   description: z.string().max(500).optional(),
   industryPackIds: z.array(z.string().uuid()).optional(),
+  showInOverview: z.boolean().optional(),
+  showInInsights: z.boolean().optional(),
 });
 
 export const updateDispositionSchema = z.object({
@@ -100,6 +102,8 @@ export const updateDispositionSchema = z.object({
     .optional(),
   description: z.string().max(500).optional(),
   isActive: z.boolean().optional(),
+  showInOverview: z.boolean().optional(),
+  showInInsights: z.boolean().optional(),
 });
 
 export const listDispositionsQuerySchema = z.object({

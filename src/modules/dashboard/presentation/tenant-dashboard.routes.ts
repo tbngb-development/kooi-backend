@@ -19,14 +19,6 @@ export function buildTenantDashboardRoutes(
 
   // ── Funnel & Distributions ──
   router.get("/lead-funnel", controller.leadFunnel);
-  router.get("/disposition-breakdown", controller.dispositionBreakdown);
-  router.get("/temperature-distribution", controller.temperatureDistribution);
-
-  // ── Campaign Analytics ──
-  router.get("/top-campaigns", controller.topCampaigns);
-
-  // ── Activity Feed ──
-  router.get("/recent-activity", controller.recentActivity);
 
   return router;
 }

@@ -21,9 +21,6 @@ export interface TenantOverviewOutput {
   };
   leads: {
     total: number;
-    qualified: number;
-    notQualified: number;
-    qualificationRate: number;
   };
   calls: {
     total: number;
@@ -33,7 +30,6 @@ export interface TenantOverviewOutput {
   };
   spend: {
     totalPaisa: number;
-    avgCostPerQualifiedLeadPaisa: number;
   };
 }
 
@@ -72,44 +68,13 @@ export interface LeadFunnelOutput {
   totalLeads: number;
   calledLeads: number;
   completedLeads: number;
-  qualifiedLeads: number;
   rates: {
     callRate: number;
     completionRate: number;
-    qualificationRate: number;
   };
 }
 
-// ── Disposition Breakdown ───────────────────────────────────────────────────
-
-export interface DispositionBucket {
-  disposition: string;
-  count: number;
-  percentage: number;
-}
-
-export interface DispositionBreakdownOutput {
-  total: number;
-  data: DispositionBucket[];
-}
-
-// ── Temperature Distribution ────────────────────────────────────────────────
-
-export interface TemperatureBucket {
-  temperature: string;
-  count: number;
-  percentage: number;
-}
-
-export interface TemperatureDistributionOutput {
-  total: number;
-  data: TemperatureBucket[];
-}
-
 // ── Top Campaigns ───────────────────────────────────────────────────────────
-
-export type TopCampaignMetric =
-  "qualified_leads" | "total_calls" | "total_spend";
 
 export interface TopCampaignRow {
   id: string;
@@ -117,43 +82,7 @@ export interface TopCampaignRow {
   value: number;
 }
 
-export interface TopCampaignsOutput {
-  metric: TopCampaignMetric;
-  data: TopCampaignRow[];
-}
 
-// ── Recent Activity ─────────────────────────────────────────────────────────
-
-export interface RecentCallEntry {
-  id: string;
-  bolnaCallId: string | null;
-  status: string;
-  duration: number | null;
-  chargedAmountPaisa: number | null;
-  startedAt: string | null;
-  createdAt: string;
-  lead: { name: string | null; phone: string } | null;
-  campaign: { name: string } | null;
-  callAnalysis: {
-    disposition: string | null;
-    leadTemperature: string | null;
-  } | null;
-}
-
-export interface QualifiedLeadEntry {
-  leadId: string;
-  name: string | null;
-  phone: string;
-  campaign: string;
-  disposition: string | null;
-  leadTemperature: string | null;
-  qualifiedAt: string;
-}
-
-export interface RecentActivityOutput {
-  recentCalls: RecentCallEntry[];
-  qualifiedLeads: QualifiedLeadEntry[];
-}
 
 // ── Admin Filters ───────────────────────────────────────────────────────────
 

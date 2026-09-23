@@ -3,11 +3,6 @@ import type {
   CallTrendsOutput,
   SpendTrendsOutput,
   LeadFunnelOutput,
-  DispositionBreakdownOutput,
-  TemperatureDistributionOutput,
-  TopCampaignsOutput,
-  TopCampaignMetric,
-  RecentActivityOutput,
   DashboardFilters,
   TimeSeriesFilters,
 } from "../dto/dashboard.dto";
@@ -32,23 +27,4 @@ export interface DashboardRepository {
     tenantId: string,
     filters: DashboardFilters,
   ): Promise<LeadFunnelOutput>;
-
-  getDispositionBreakdown(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<DispositionBreakdownOutput>;
-
-  getTemperatureDistribution(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<TemperatureDistributionOutput>;
-
-  getTopCampaigns(
-    tenantId: string,
-    filters: DashboardFilters,
-    metric: TopCampaignMetric,
-    limit: number,
-  ): Promise<TopCampaignsOutput>;
-
-  getRecentActivity(tenantId: string): Promise<RecentActivityOutput>;
 }

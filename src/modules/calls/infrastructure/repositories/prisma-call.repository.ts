@@ -1,11 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import {
-  type Prisma,
-  type CallStatus,
-  type Disposition,
-  type LeadTemperature,
-  type LocationMatch,
-} from "@prisma/client";
+import { type Prisma, type CallStatus } from "@prisma/client";
 import type {
   CallRepository,
   ListCallsFilters,
@@ -15,19 +9,7 @@ import type {
   CallStatsFilters,
   CallStatsResult,
 } from "../../application/interfaces/call-repository.interface";
-import type {
-  AvailableFiltersResponse,
-  DynamicFilterMap,
-  ExtractionConfig,
-  ExtractionResponse,
-} from "../../../../shared/types/bolna.types";
-
-const QUALIFYING_DISPOSITIONS: Disposition[] = [
-  "QUALIFIED_CONSULTANT_FOLLOWUP",
-  "SITE_VISIT_INTEREST",
-  "INTERESTED_SEND_DETAILS",
-  "INTERESTED_GENERAL",
-];
+import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
 
 export class PrismaCallRepository implements CallRepository {
   async list(
@@ -38,9 +20,6 @@ export class PrismaCallRepository implements CallRepository {
       campaignId,
       leadId,
       status,
-      disposition,
-      leadTemperature,
-      locationMatch,
       search,
       dateFrom,
       dateTo,
@@ -74,39 +53,6 @@ export class PrismaCallRepository implements CallRepository {
       };
     }
 
-    const callAnalysisWhere: Prisma.CallAnalysisWhereInput = {};
-
-    if (disposition) {
-      const disps = disposition
-        .split(",")
-        .map((d) => d.trim() as Disposition)
-        .filter(Boolean);
-      callAnalysisWhere.disposition =
-        disps.length > 1 ? { in: disps } : disps[0];
-    }
-
-    if (leadTemperature) {
-      const temps = leadTemperature
-        .split(",")
-        .map((t) => t.trim() as LeadTemperature)
-        .filter(Boolean);
-      callAnalysisWhere.leadTemperature =
-        temps.length > 1 ? { in: temps } : temps[0];
-    }
-
-    if (locationMatch) {
-      const matches = locationMatch
-        .split(",")
-        .map((m) => m.trim() as LocationMatch)
-        .filter(Boolean);
-      callAnalysisWhere.locationMatch =
-        matches.length > 1 ? { in: matches } : matches[0];
-    }
-
-    if (Object.keys(callAnalysisWhere).length > 0) {
-      where.callAnalysis = callAnalysisWhere;
-    }
-
     if (search) {
       where.lead = {
         OR: [
@@ -116,29 +62,23 @@ export class PrismaCallRepository implements CallRepository {
       };
     }
 
-    if (filters.metricKey && filters.metricValue) {
-      where.callMetrics = {
-        some: {
-          metricKey: filters.metricKey,
-          actualValue: filters.metricValue,
-        },
-      };
-    }
-    // [NEW] Dynamic JSONB filters on extractionResponse.metrics
+    // ── [REWRITTEN] Dynamic Filters via normalized extraction tables ──
+    // Each filter entry maps to a CallExtractionOverview row (objective/metric values)
+    // e.g. { "lead_temperature": "HOT", "location_match": "MATCH" }
     const dynamicAndConditions: Prisma.CallWhereInput[] = [];
 
     if (
       filters.dynamicFilters &&
       Object.keys(filters.dynamicFilters).length > 0
     ) {
-      for (const [dispositionName, actualValue] of Object.entries(
+      for (const [dispositionId, objectiveValue] of Object.entries(
         filters.dynamicFilters,
       )) {
         dynamicAndConditions.push({
-          callAnalysis: {
-            extractionResponse: {
-              path: ["metrics"],
-              array_contains: [{ disposition: dispositionName, actualValue }],
+          extractionOverview: {
+            some: {
+              dispositionId: dispositionId,
+              objectiveValue,
             },
           },
         });
@@ -162,14 +102,24 @@ export class PrismaCallRepository implements CallRepository {
         include: {
           lead: { select: { id: true, name: true, phone: true } },
           campaign: { select: { id: true, name: true } },
-          callAnalysis: {
+          // [UPDATED] Replaced old callAnalysis hardcoded fields with normalized tables
+          extractionOverview: {
             select: {
-              id: true,
-              disposition: true,
-              leadTemperature: true,
-              preferredConfiguration: true,
-              budgetRange: true,
-              purchaseTimeline: true,
+              dispositionSlug: true,
+              dispositionName: true,
+              categoryName: true,
+              objectiveValue: true,
+              confidence: true,
+            },
+          },
+          extractionInsights: {
+            select: {
+              dispositionSlug: true,
+              dispositionName: true,
+              categoryName: true,
+              subjectiveValue: true,
+              normalizedValue: true,
+              confidence: true,
             },
           },
         },
@@ -205,19 +155,8 @@ export class PrismaCallRepository implements CallRepository {
         updatedAt: c.updatedAt,
         lead: c.lead,
         campaign: c.campaign,
-        callAnalysis: c.callAnalysis
-          ? {
-              id: c.callAnalysis.id,
-              disposition: c.callAnalysis.disposition as Disposition | null,
-              leadTemperature: c.callAnalysis
-                .leadTemperature as LeadTemperature | null,
-              preferredConfiguration: c.callAnalysis.preferredConfiguration,
-              budgetRange: c.callAnalysis.budgetRange,
-              purchaseTimeline: c.callAnalysis.purchaseTimeline
-                ? String(c.callAnalysis.purchaseTimeline)
-                : null,
-            }
-          : null,
+        extractionOverview: c.extractionOverview,
+        extractionInsights: c.extractionInsights,
       })),
       pagination: {
         total,
@@ -284,39 +223,10 @@ export class PrismaCallRepository implements CallRepository {
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,
-            disposition: call.callAnalysis.disposition as Disposition | null,
-            leadTemperature: call.callAnalysis
-              .leadTemperature as LeadTemperature | null,
-            preferredConfiguration: call.callAnalysis.preferredConfiguration,
-            budgetRange: call.callAnalysis.budgetRange,
-            purchaseTimeline: call.callAnalysis.purchaseTimeline
-              ? String(call.callAnalysis.purchaseTimeline)
-              : null,
-            purchasePurpose: call.callAnalysis.purchasePurpose
-              ? String(call.callAnalysis.purchasePurpose)
-              : null,
-            locationMatch: call.callAnalysis
-              .locationMatch as LocationMatch | null,
-            customerLocationPref: call.callAnalysis.customerLocationPref,
-            preferredNextAction: call.callAnalysis.preferredNextAction
-              ? String(call.callAnalysis.preferredNextAction)
-              : null,
-            preferredContactChannel: call.callAnalysis.preferredContactChannel
-              ? String(call.callAnalysis.preferredContactChannel)
-              : null,
-            followupSchedule: call.callAnalysis.followupSchedule,
-            doNotCall: call.callAnalysis.doNotCall
-              ? String(call.callAnalysis.doNotCall)
-              : null,
-            languageSupportRequired: call.callAnalysis.languageSupportRequired
-              ? String(call.callAnalysis.languageSupportRequired)
-              : null,
             dynamicExtractions: call.callAnalysis
               .dynamicExtractions as unknown as string,
             extractionResult: call.callAnalysis
               .extractionResult as unknown as string,
-            extractionResponse: call.callAnalysis
-              .extractionResponse as unknown as string,
           }
         : null,
     };
@@ -355,9 +265,6 @@ export class PrismaCallRepository implements CallRepository {
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,
-            disposition: call.callAnalysis.disposition as Disposition | null,
-            leadTemperature: call.callAnalysis
-              .leadTemperature as LeadTemperature | null,
           }
         : null,
     };
@@ -375,76 +282,19 @@ export class PrismaCallRepository implements CallRepository {
       ...(leadId && { leadId }),
     };
 
-    const [
-      total,
-      completed,
-      failed,
-      noAnswer,
-      busy,
-      durationAgg,
-      dispositionGroups,
-      temperatureGroups,
-      qualifiedCount,
-    ] = await Promise.all([
-      prisma.call.count({ where }),
-      prisma.call.count({ where: { ...where, status: "COMPLETED" } }),
-      prisma.call.count({ where: { ...where, status: "FAILED" } }),
-      prisma.call.count({ where: { ...where, status: "NO_ANSWER" } }),
-      prisma.call.count({ where: { ...where, status: "BUSY" } }),
+    const [total, completed, failed, noAnswer, busy, durationAgg] =
+      await Promise.all([
+        prisma.call.count({ where }),
+        prisma.call.count({ where: { ...where, status: "COMPLETED" } }),
+        prisma.call.count({ where: { ...where, status: "FAILED" } }),
+        prisma.call.count({ where: { ...where, status: "NO_ANSWER" } }),
+        prisma.call.count({ where: { ...where, status: "BUSY" } }),
 
-      prisma.call.aggregate({
-        where: { ...where, status: "COMPLETED", duration: { not: null } },
-        _avg: { duration: true },
-      }),
-
-      prisma.callAnalysis.groupBy({
-        by: ["disposition"],
-        where: {
-          tenantId,
-          ...(campaignId && { call: { campaignId } }),
-          ...(leadId && { call: { leadId } }),
-          disposition: { not: null },
-        },
-        _count: true,
-      }),
-
-      prisma.callAnalysis.groupBy({
-        by: ["leadTemperature"],
-        where: {
-          tenantId,
-          ...(campaignId && { call: { campaignId } }),
-          ...(leadId && { call: { leadId } }),
-          leadTemperature: { not: null },
-        },
-        _count: true,
-      }),
-
-      prisma.callAnalysis.count({
-        where: {
-          tenantId,
-          ...(campaignId && { call: { campaignId } }),
-          ...(leadId && { call: { leadId } }),
-          disposition: { in: QUALIFYING_DISPOSITIONS },
-        },
-      }),
-    ]);
-
-    const dispositionBreakdown: Record<string, number> = {};
-    for (const g of dispositionGroups) {
-      if (g.disposition) {
-        dispositionBreakdown[g.disposition] = g._count;
-      }
-    }
-
-    const temperatureBreakdown: Record<string, number> = {};
-    for (const g of temperatureGroups) {
-      if (g.leadTemperature) {
-        temperatureBreakdown[g.leadTemperature] = g._count;
-      }
-    }
-
-    const qualificationRate =
-      total > 0 ? ((qualifiedCount / total) * 100).toFixed(1) + "%" : "0%";
+        prisma.call.aggregate({
+          where: { ...where, status: "COMPLETED", duration: { not: null } },
+          _avg: { duration: true },
+        }),
+      ]);
 
     return {
       total,
@@ -453,63 +303,13 @@ export class PrismaCallRepository implements CallRepository {
       noAnswer,
       busy,
       avgDuration: Math.round(durationAgg._avg.duration ?? 0),
-      qualifiedCount,
-      qualificationRate,
-      dispositionBreakdown,
-      temperatureBreakdown,
     };
-  }
-
-  async getExtractionResponse(
-    tenantId: string,
-    callId: string,
-  ): Promise<ExtractionResponse | null> {
-    const call = await prisma.call.findFirst({
-      where: {
-        id: callId,
-        tenantId,
-      },
-      select: {
-        callAnalysis: {
-          select: {
-            extractionResponse: true,
-          },
-        },
-      },
-    });
-
-    if (!call?.callAnalysis?.extractionResponse) return null;
-
-    return call.callAnalysis
-      .extractionResponse as unknown as ExtractionResponse;
   }
 
   async getAvailableFilters(
     tenantId: string,
     campaignId: string,
   ): Promise<AvailableFiltersResponse> {
-    const legacy = {
-      disposition: [
-        "INTERESTED_SEND_DETAILS",
-        "QUALIFIED_CONSULTANT_FOLLOWUP",
-        "SITE_VISIT_INTEREST",
-        "INTERESTED_GENERAL",
-        "FOLLOWUP_REQUESTED",
-        "NOT_INTERESTED",
-        "DO_NOT_CALL",
-        "WRONG_NUMBER",
-        "ALREADY_PURCHASED",
-        "BROKER",
-        "LANGUAGE_CALLBACK_REQUIRED",
-        "CALL_ENDED_BY_CUSTOMER",
-        "CALL_ENDED_ABUSIVE",
-        "NO_RESPONSE",
-        "CALL_DROPPED",
-      ],
-      leadTemperature: ["HOT", "WARM", "NURTURE", "COLD", "NOT_APPLICABLE"],
-      locationMatch: ["MATCH", "MISMATCH", "NOT_ASKED", "NOT_MENTIONED"],
-    };
-
     // ── Single query: resolve agent + all assigned dispositions ────────
     const campaign = await prisma.campaign.findFirst({
       where: { id: campaignId, tenantId },
@@ -528,6 +328,7 @@ export class PrismaCallRepository implements CallRepository {
                           select: {
                             disposition: {
                               select: {
+                                id: true,
                                 name: true,
                                 slug: true,
                                 isObjective: true,
@@ -549,7 +350,7 @@ export class PrismaCallRepository implements CallRepository {
 
     const agent = campaign?.assistant?.platformAgent;
     if (!agent) {
-      return { legacy, dynamic: [] };
+      return { dynamic: [] };
     }
 
     // ── In-memory: flatten categories → dispositions, deduplicate ──────
@@ -579,16 +380,16 @@ export class PrismaCallRepository implements CallRepository {
         if (options.length === 0) continue;
 
         dynamic.push({
+          id: disp.id,
           label: disp.name,
           disposition: disp.name,
           category: categoryName,
-          type: "metric",
           options,
         });
       }
     }
 
-    return { legacy, dynamic };
+    return { dynamic };
   }
 
   private flattenObjectiveValues(

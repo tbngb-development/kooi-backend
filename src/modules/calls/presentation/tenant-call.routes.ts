@@ -29,10 +29,6 @@ export function buildTenantCallRoutes(
     controller.getAvailableFilters,
   );
   router.get("/:id/transcript", controller.getTranscriptHandler);
-  router.get(
-    "/:id/extraction-response",
-    controller.getExtractionResponseHandler,
-  );
   router.get("/:id", controller.get);
 
   return router;

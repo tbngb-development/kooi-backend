@@ -12,9 +12,6 @@ export class ListCallsUseCase {
       campaignId: input.campaignId,
       leadId: input.leadId,
       status: input.status,
-      disposition: input.disposition,
-      leadTemperature: input.leadTemperature,
-      locationMatch: input.locationMatch,
       search: input.search,
       dateFrom: input.dateFrom,
       dateTo: input.dateTo,
@@ -23,8 +20,6 @@ export class ListCallsUseCase {
       page: input.page,
       limit: input.limit,
       dynamicFilters: input.dynamicFilters,
-      metricKey: input.metricKey,
-      metricValue: input.metricValue,
     });
   }
 }

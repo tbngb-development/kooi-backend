@@ -1,16 +1,11 @@
 import prisma from "../../../../shared/config/database/prisma";
-import { Prisma, type Disposition } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { DashboardRepository } from "../../application/interfaces/dashboard-repository.interface";
 import type {
   TenantOverviewOutput,
   CallTrendsOutput,
   SpendTrendsOutput,
   LeadFunnelOutput,
-  DispositionBreakdownOutput,
-  TemperatureDistributionOutput,
-  TopCampaignsOutput,
-  TopCampaignMetric,
-  RecentActivityOutput,
   DashboardFilters,
   TimeSeriesFilters,
   CallTrendBucket,
@@ -21,24 +16,6 @@ import {
   generateDateBuckets,
   toDateString,
 } from "../../domain/rules/date-range.rules";
-
-// ── Constants ───────────────────────────────────────────────────────────────
-
-const QUALIFYING_DISPOSITIONS: Disposition[] = [
-  "QUALIFIED_CONSULTANT_FOLLOWUP",
-  "SITE_VISIT_INTEREST",
-  "INTERESTED_SEND_DETAILS",
-  "INTERESTED_GENERAL",
-];
-
-const DISQUALIFYING_DISPOSITIONS: Disposition[] = [
-  "NOT_INTERESTED",
-  "DO_NOT_CALL",
-  "WRONG_NUMBER",
-  "ALREADY_PURCHASED",
-  "BROKER",
-  "CALL_ENDED_ABUSIVE",
-];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,11 +46,6 @@ interface RawSpendRow {
   bonus_spent: number;
 }
 
-interface RawGroupCount {
-  key: string;
-  count: number;
-}
-
 // ── Repository ──────────────────────────────────────────────────────────────
 
 export class PrismaDashboardRepository implements DashboardRepository {
@@ -98,8 +70,6 @@ export class PrismaDashboardRepository implements DashboardRepository {
       completedCalls,
       failedCalls,
       noAnswerCalls,
-      qualifiedCount,
-      notQualifiedCount,
       spendAgg,
     ] = await Promise.all([
       prisma.campaign.count({ where: { tenantId } }),
@@ -115,26 +85,7 @@ export class PrismaDashboardRepository implements DashboardRepository {
       prisma.call.count({ where: { ...callWhere, status: "COMPLETED" } }),
       prisma.call.count({ where: { ...callWhere, status: "FAILED" } }),
       prisma.call.count({ where: { ...callWhere, status: "NO_ANSWER" } }),
-      prisma.callAnalysis.count({
-        where: {
-          tenantId,
-          disposition: { in: QUALIFYING_DISPOSITIONS },
-          call: {
-            createdAt: { gte: dateFrom, lte: dateTo },
-            ...(campaignId ? { campaignId } : {}),
-          },
-        },
-      }),
-      prisma.callAnalysis.count({
-        where: {
-          tenantId,
-          disposition: { in: DISQUALIFYING_DISPOSITIONS },
-          call: {
-            createdAt: { gte: dateFrom, lte: dateTo },
-            ...(campaignId ? { campaignId } : {}),
-          },
-        },
-      }),
+
       prisma.call.aggregate({
         where: { ...callWhere, status: "COMPLETED" },
         _sum: { chargedAmount: true },
@@ -147,9 +98,6 @@ export class PrismaDashboardRepository implements DashboardRepository {
       campaigns: { total: totalCampaigns, active: activeCampaigns },
       leads: {
         total: totalLeads,
-        qualified: qualifiedCount,
-        notQualified: notQualifiedCount,
-        qualificationRate: safeRate(qualifiedCount, totalLeads),
       },
       calls: {
         total: totalCalls,
@@ -159,8 +107,6 @@ export class PrismaDashboardRepository implements DashboardRepository {
       },
       spend: {
         totalPaisa: totalSpend,
-        avgCostPerQualifiedLeadPaisa:
-          qualifiedCount > 0 ? Math.round(totalSpend / qualifiedCount) : 0,
       },
     };
   }
@@ -267,257 +213,37 @@ export class PrismaDashboardRepository implements DashboardRepository {
       ...(campaignId ? { campaignId } : {}),
     };
 
-    const [totalLeads, calledLeadIds, completedLeadIds, qualifiedLeadIds] =
-      await Promise.all([
-        prisma.lead.count({ where: leadWhere }),
+    const [totalLeads, calledLeadIds, completedLeadIds] = await Promise.all([
+      prisma.lead.count({ where: leadWhere }),
 
-        prisma.call
-          .findMany({
-            where: callWhere,
-            select: { leadId: true },
-            distinct: ["leadId"],
-          })
-          .then((rows) => new Set(rows.map((r) => r.leadId))),
+      prisma.call
+        .findMany({
+          where: callWhere,
+          select: { leadId: true },
+          distinct: ["leadId"],
+        })
+        .then((rows) => new Set(rows.map((r) => r.leadId))),
 
-        prisma.call
-          .findMany({
-            where: { ...callWhere, status: "COMPLETED" },
-            select: { leadId: true },
-            distinct: ["leadId"],
-          })
-          .then((rows) => new Set(rows.map((r) => r.leadId))),
-
-        prisma.call
-          .findMany({
-            where: {
-              ...callWhere,
-              callAnalysis: { disposition: { in: QUALIFYING_DISPOSITIONS } },
-            },
-            select: { leadId: true },
-            distinct: ["leadId"],
-          })
-          .then((rows) => new Set(rows.map((r) => r.leadId))),
-      ]);
+      prisma.call
+        .findMany({
+          where: { ...callWhere, status: "COMPLETED" },
+          select: { leadId: true },
+          distinct: ["leadId"],
+        })
+        .then((rows) => new Set(rows.map((r) => r.leadId))),
+    ]);
 
     const called = calledLeadIds.size;
     const completed = completedLeadIds.size;
-    const qualified = qualifiedLeadIds.size;
 
     return {
       totalLeads,
       calledLeads: called,
       completedLeads: completed,
-      qualifiedLeads: qualified,
       rates: {
         callRate: safeRate(called, totalLeads),
         completionRate: safeRate(completed, called),
-        qualificationRate: safeRate(qualified, completed),
       },
-    };
-  }
-
-  // ── Disposition Breakdown ───────────────────────────────────────────────
-
-  async getDispositionBreakdown(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<DispositionBreakdownOutput> {
-    const { dateFrom, dateTo, campaignId } = filters;
-
-    const rows = await prisma.$queryRaw<RawGroupCount[]>`
-      SELECT ca.disposition as key, COUNT(*)::int as count
-      FROM "CallAnalysis" ca
-      JOIN "Call" c ON c.id = ca."callId"
-      WHERE ca."tenantId" = ${tenantId}
-        AND ca.disposition IS NOT NULL
-        AND c."createdAt" >= ${dateFrom}
-        AND c."createdAt" <= ${dateTo}
-        ${campaignFilter(campaignId)}
-      GROUP BY ca.disposition
-      ORDER BY count DESC
-    `;
-
-    const total = rows.reduce((sum, r) => sum + r.count, 0);
-
-    return {
-      total,
-      data: rows.map((r) => ({
-        disposition: r.key,
-        count: r.count,
-        percentage: safeRate(r.count, total),
-      })),
-    };
-  }
-
-  // ── Temperature Distribution ────────────────────────────────────────────
-
-  async getTemperatureDistribution(
-    tenantId: string,
-    filters: DashboardFilters,
-  ): Promise<TemperatureDistributionOutput> {
-    const { dateFrom, dateTo, campaignId } = filters;
-
-    const rows = await prisma.$queryRaw<RawGroupCount[]>`
-      SELECT ca."leadTemperature" as key, COUNT(*)::int as count
-      FROM "CallAnalysis" ca
-      JOIN "Call" c ON c.id = ca."callId"
-      WHERE ca."tenantId" = ${tenantId}
-        AND ca."leadTemperature" IS NOT NULL
-        AND c."createdAt" >= ${dateFrom}
-        AND c."createdAt" <= ${dateTo}
-        ${campaignFilter(campaignId)}
-      GROUP BY ca."leadTemperature"
-      ORDER BY count DESC
-    `;
-
-    const total = rows.reduce((sum, r) => sum + r.count, 0);
-
-    return {
-      total,
-      data: rows.map((r) => ({
-        temperature: r.key,
-        count: r.count,
-        percentage: safeRate(r.count, total),
-      })),
-    };
-  }
-
-  // ── Top Campaigns ───────────────────────────────────────────────────────
-
-  async getTopCampaigns(
-    tenantId: string,
-    filters: DashboardFilters,
-    metric: TopCampaignMetric,
-    limit: number,
-  ): Promise<TopCampaignsOutput> {
-    const { dateFrom, dateTo, campaignId } = filters;
-
-    let orderByClause: Prisma.Sql;
-    switch (metric) {
-      case "qualified_leads":
-        orderByClause = Prisma.sql`qualified_count DESC`;
-        break;
-      case "total_calls":
-        orderByClause = Prisma.sql`call_count DESC`;
-        break;
-      case "total_spend":
-        orderByClause = Prisma.sql`total_spend DESC`;
-        break;
-    }
-
-    const rows = await prisma.$queryRaw<
-      { id: string; name: string; value: number }[]
-    >`
-      SELECT
-        cmp.id,
-        cmp.name,
-        CASE
-          WHEN ${Prisma.raw(`'${metric}'`)} = 'qualified_leads'
-            THEN COALESCE(qual.qualified_count, 0)::int
-          WHEN ${Prisma.raw(`'${metric}'`)} = 'total_calls'
-            THEN COALESCE(calls.call_count, 0)::int
-          ELSE COALESCE(spend.total_spend, 0)::int
-        END as value
-      FROM "Campaign" cmp
-      LEFT JOIN (
-        SELECT c."campaignId", COUNT(DISTINCT c."leadId") as qualified_count
-        FROM "Call" c
-        JOIN "CallAnalysis" ca ON ca."callId" = c.id
-        WHERE c."tenantId" = ${tenantId}
-          AND c."createdAt" >= ${dateFrom} AND c."createdAt" <= ${dateTo}
-          AND ca.disposition IN (${Prisma.join(QUALIFYING_DISPOSITIONS)})
-        GROUP BY c."campaignId"
-      ) qual ON qual."campaignId" = cmp.id
-      LEFT JOIN (
-        SELECT "campaignId", COUNT(*) as call_count
-        FROM "Call"
-        WHERE "tenantId" = ${tenantId}
-          AND "createdAt" >= ${dateFrom} AND "createdAt" <= ${dateTo}
-        GROUP BY "campaignId"
-      ) calls ON calls."campaignId" = cmp.id
-      LEFT JOIN (
-        SELECT "campaignId", COALESCE(SUM("chargedAmount"), 0) as total_spend
-        FROM "Call"
-        WHERE "tenantId" = ${tenantId}
-          AND "createdAt" >= ${dateFrom} AND "createdAt" <= ${dateTo}
-        GROUP BY "campaignId"
-      ) spend ON spend."campaignId" = cmp.id
-      WHERE cmp."tenantId" = ${tenantId}
-        AND cmp."createdAt" >= ${dateFrom}
-        AND cmp."createdAt" <= ${dateTo}
-        ${campaignId ? Prisma.sql`AND cmp.id = ${campaignId}` : Prisma.empty}
-      ORDER BY ${orderByClause}
-      LIMIT ${limit}
-    `;
-
-    return {
-      metric,
-      data: rows.map((r) => ({ id: r.id, name: r.name, value: r.value })),
-    };
-  }
-
-  // ── Recent Activity ─────────────────────────────────────────────────────
-
-  async getRecentActivity(tenantId: string): Promise<RecentActivityOutput> {
-    const [recentCalls, qualifiedAnalyses] = await Promise.all([
-      prisma.call.findMany({
-        where: { tenantId },
-        take: 20,
-        orderBy: { createdAt: "desc" },
-        include: {
-          lead: { select: { name: true, phone: true } },
-          campaign: { select: { name: true } },
-          callAnalysis: {
-            select: { disposition: true, leadTemperature: true },
-          },
-        },
-      }),
-      prisma.callAnalysis.findMany({
-        where: {
-          tenantId,
-          disposition: { in: QUALIFYING_DISPOSITIONS },
-        },
-        take: 10,
-        orderBy: { createdAt: "desc" },
-        include: {
-          call: {
-            select: {
-              leadId: true,
-              lead: { select: { name: true, phone: true } },
-              campaign: { select: { name: true } },
-            },
-          },
-        },
-      }),
-    ]);
-
-    return {
-      recentCalls: recentCalls.map((c) => ({
-        id: c.id,
-        bolnaCallId: c.bolnaCallId,
-        status: c.status,
-        duration: c.duration,
-        chargedAmountPaisa: c.chargedAmount,
-        startedAt: c.startedAt?.toISOString() ?? null,
-        createdAt: c.createdAt.toISOString(),
-        lead: c.lead,
-        campaign: c.campaign,
-        callAnalysis: c.callAnalysis
-          ? {
-              disposition: c.callAnalysis.disposition,
-              leadTemperature: c.callAnalysis.leadTemperature,
-            }
-          : null,
-      })),
-      qualifiedLeads: qualifiedAnalyses.map((qa) => ({
-        leadId: qa.call.leadId,
-        name: qa.call.lead.name,
-        phone: qa.call.lead.phone,
-        campaign: qa.call.campaign.name,
-        disposition: qa.disposition,
-        leadTemperature: qa.leadTemperature,
-        qualifiedAt: qa.createdAt.toISOString(),
-      })),
     };
   }
 }

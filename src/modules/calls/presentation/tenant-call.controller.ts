@@ -7,7 +7,6 @@ import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-c
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
-import type { GetCallExtractionResponseUseCase } from "../application/use-cases/get-call-extraction-response.use-case";
 import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
 
 export class TenantCallController {
@@ -16,7 +15,6 @@ export class TenantCallController {
     private readonly getCallDetailsUseCase: GetCallUseCase,
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
-    private readonly getCallExtractionResponseUseCase: GetCallExtractionResponseUseCase,
     private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
   ) {}
 
@@ -28,15 +26,13 @@ export class TenantCallController {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
       const query = req.query as unknown as ListCallsQuery;
+      console.log("list call query: ", query)
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
         campaignId: query.campaignId,
         leadId: query.leadId,
         status: query.status,
-        disposition: query.disposition,
-        leadTemperature: query.leadTemperature,
-        locationMatch: query.locationMatch,
         search: query.search,
         dateFrom: query.dateFrom,
         dateTo: query.dateTo,
@@ -45,8 +41,6 @@ export class TenantCallController {
         page: query.page,
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
-        metricKey: query.metricKey,
-        metricValue: query.metricValue,
       });
 
       sendSuccess(res, data);
@@ -104,24 +98,6 @@ export class TenantCallController {
         leadId: query.leadId,
       });
 
-      sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  // ── [NEW] Dedicated dynamic extraction response endpoint ─────────────────
-  getExtractionResponseHandler = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      const data = await this.getCallExtractionResponseUseCase.execute(
-        tenantId,
-        param(req, "id"),
-      );
       sendSuccess(res, data);
     } catch (err) {
       next(err);

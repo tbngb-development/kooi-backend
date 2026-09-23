@@ -10,9 +10,9 @@ import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.u
 import type { CreateCampaignUseCase } from "../application/use-cases/create-campaign.use-case";
 import type { ParseLeadsUseCase } from "../application/use-cases/parse-leads.use-case";
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
-import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
-import type { GetCampaignPerformanceV2UseCase } from "../application/use-cases/get-campaign-performance-v2.use-case";
 import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
+import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
+import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
 
 export class TenantCampaignController {
   constructor(
@@ -21,9 +21,9 @@ export class TenantCampaignController {
     private readonly createCampaignUseCase: CreateCampaignUseCase,
     private readonly parseLeadsUseCase: ParseLeadsUseCase,
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
-    private readonly getCampaignPerformanceUseCase: GetCampaignPerformanceUseCase,
-    private readonly getCampaignPerformanceV2UseCase: GetCampaignPerformanceV2UseCase,
     private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
+    private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
+    private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -168,38 +168,48 @@ export class TenantCampaignController {
     }
   };
 
-  performance = async (
+  extractionOverview = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
       const batchId = req.query.batchId as string | undefined;
-      const data = await this.getCampaignPerformanceUseCase.execute(
+
+      const data = await this.getExtractionOverviewUseCase.execute({
         tenantId,
-        param(req, "id"),
+        campaignId,
         batchId,
-      );
+      });
+
       sendSuccess(res, data);
     } catch (err) {
       next(err);
     }
   };
 
-  performanceV2 = async (
+  extractionInsights = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
       const batchId = req.query.batchId as string | undefined;
-      const data = await this.getCampaignPerformanceV2UseCase.execute(
+      const topN = req.query.topN
+        ? parseInt(req.query.topN as string, 10)
+        : undefined;
+
+      const data = await this.getExtractionInsightsUseCase.execute({
         tenantId,
-        param(req, "id"),
+        campaignId,
         batchId,
-      );
+        topN,
+      });
+
       sendSuccess(res, data);
     } catch (err) {
       next(err);

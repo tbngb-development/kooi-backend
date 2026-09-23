@@ -1,14 +1,3 @@
-import {
-  type ContactChannel,
-  type Disposition,
-  type ExtractionFlag,
-  type LeadTemperature,
-  type LocationMatch,
-  type PreferredNextAction,
-  type PurchasePurpose,
-  type PurchaseTimeline,
-} from "@prisma/client";
-
 export interface BolnaCallPayload {
   agent_id: string;
   recipient_phone_number: string;
@@ -269,15 +258,6 @@ export interface BolnaAgentResponse {
   agent_prompts: BolnaAgentPrompts;
 }
 
-export enum BolnaDataSection {
-  CALL_OUTCOME = "Call Outcome",
-  LEAD_QUALIFICATION = "Lead Qualification",
-  NEXT_ACTION_AND_CONTACT_PREFERENCE = "Next Action and Contact Preference",
-  FOLLOW_UP_SCHEDULE = "Follow-Up Schedule",
-  COMPLIANCE = "Compliance",
-  SUMMARY = "Summary",
-}
-
 export interface BolnaExtractedField {
   subjective: string | null;
   objective: string | null;
@@ -286,52 +266,6 @@ export interface BolnaExtractedField {
   reasoning_subjective: string | null;
   reasoning_objective: string | null;
   validation: string | null;
-}
-
-export interface BolnaExtractedData {
-  [BolnaDataSection.CALL_OUTCOME]?: {
-    disposition?: BolnaExtractedField;
-    lead_temperature?: BolnaExtractedField;
-  };
-  [BolnaDataSection.LEAD_QUALIFICATION]?: {
-    preferred_configuration?: BolnaExtractedField;
-    budget_range?: BolnaExtractedField;
-    purchase_timeline?: BolnaExtractedField;
-    purchase_purpose?: BolnaExtractedField;
-    location_match?: BolnaExtractedField;
-    customer_location_pref?: BolnaExtractedField;
-  };
-  [BolnaDataSection.NEXT_ACTION_AND_CONTACT_PREFERENCE]?: {
-    preferred_next_action?: BolnaExtractedField;
-    preferred_contact_channel?: BolnaExtractedField;
-  };
-  [BolnaDataSection.FOLLOW_UP_SCHEDULE]?: {
-    followup_schedule?: BolnaExtractedField;
-  };
-  [BolnaDataSection.COMPLIANCE]?: {
-    do_not_call?: BolnaExtractedField;
-    language_support_required?: BolnaExtractedField;
-  };
-  [BolnaDataSection.SUMMARY]?: {
-    call_summary?: BolnaExtractedField;
-  };
-}
-
-export interface ParsedCallAnalysis {
-  disposition: Disposition | null;
-  leadTemperature: LeadTemperature | null;
-  preferredConfiguration: string | null;
-  budgetRange: string | null;
-  purchaseTimeline: PurchaseTimeline | null;
-  purchasePurpose: PurchasePurpose | null;
-  locationMatch: LocationMatch | null;
-  customerLocationPref: string | null;
-  preferredNextAction: PreferredNextAction | null;
-  preferredContactChannel: ContactChannel | null;
-  followupSchedule: string | null;
-  doNotCall: ExtractionFlag | null;
-  languageSupportRequired: ExtractionFlag | null;
-  callSummary: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,7 +343,7 @@ export interface BolnaCategoryCreatePayload {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DYNAMIC EXTRACTION CONFIG (PlatformAgent.extractionConfig)
+// System Prompt Variable Config (Platform-agent config)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ExtractionMetricConfig {
@@ -425,11 +359,6 @@ export interface ExtractionResultConfig {
   disposition: string;
 }
 
-export interface ExtractionConfig {
-  metrics: ExtractionMetricConfig[];
-  results: ExtractionResultConfig[];
-}
-
 export interface RequiredVariable {
   name: string;
   label: string;
@@ -438,48 +367,18 @@ export interface RequiredVariable {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DYNAMIC EXTRACTION RESPONSE (CallAnalysis.extractionResponse)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface ExtractionMetricResponse {
-  label: string;
-  category: string;
-  disposition: string;
-  matchValue: string;
-  matched: boolean;
-  actualValue: string | null;
-}
-
-export interface ExtractionResultResponse {
-  label: string;
-  category: string;
-  disposition: string;
-  value: string | null;
-}
-
-export interface ExtractionResponse {
-  metrics: ExtractionMetricResponse[];
-  results: ExtractionResultResponse[];
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // DYNAMIC FILTER TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DynamicFilterOption {
+  id: string;
   label: string;
   disposition: string;
   category: string;
-  type: "metric" | "result";
   options: string[]; // objective option values for metrics, empty for results
 }
 
 export interface AvailableFiltersResponse {
-  legacy: {
-    disposition: string[];
-    leadTemperature: string[];
-    locationMatch: string[];
-  };
   dynamic: DynamicFilterOption[];
 }
 

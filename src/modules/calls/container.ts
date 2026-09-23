@@ -5,7 +5,6 @@ import { GetCallTranscriptUseCase } from "./application/use-cases/get-call-trans
 import { GetCallStatsUseCase } from "./application/use-cases/get-call-stats.use-case";
 import { TenantCallController } from "./presentation/tenant-call.controller";
 import { AdminCallController } from "./presentation/admin-call.controller";
-import { GetCallExtractionResponseUseCase } from "./application/use-cases/get-call-extraction-response.use-case";
 import { GetAvailableFiltersUseCase } from "./application/use-cases/get-available-filters.use-case";
 
 export interface CallModule {
@@ -19,9 +18,7 @@ export function buildCallModule(): CallModule {
   const getCall = new GetCallUseCase(repo);
   const getTranscript = new GetCallTranscriptUseCase(repo);
   const getStats = new GetCallStatsUseCase(repo);
-  const getCallExtractionResponseUseCase = new GetCallExtractionResponseUseCase(
-    repo,
-  );
+
   const getAvailableFilters = new GetAvailableFiltersUseCase(repo);
 
   return {
@@ -30,7 +27,6 @@ export function buildCallModule(): CallModule {
       getCall,
       getTranscript,
       getStats,
-      getCallExtractionResponseUseCase,
       getAvailableFilters,
     ),
     adminController: new AdminCallController(
@@ -38,7 +34,6 @@ export function buildCallModule(): CallModule {
       getCall,
       getTranscript,
       getStats,
-      getCallExtractionResponseUseCase,
       getAvailableFilters,
     ),
   };

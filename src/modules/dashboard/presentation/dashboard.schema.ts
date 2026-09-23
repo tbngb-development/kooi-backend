@@ -15,16 +15,8 @@ export const timeSeriesFiltersSchema = dashboardFiltersSchema.extend({
   granularity: z.enum(["daily", "weekly", "monthly"]).default("daily"),
 });
 
-export const topCampaignsQuerySchema = dashboardFiltersSchema.extend({
-  metric: z
-    .enum(["qualified_leads", "total_calls", "total_spend"])
-    .default("qualified_leads"),
-  limit: z.coerce.number().int().min(1).max(20).default(5),
-});
-
 export type DashboardFiltersQuery = z.infer<typeof dashboardFiltersSchema>;
 export type TimeSeriesFiltersQuery = z.infer<typeof timeSeriesFiltersSchema>;
-export type TopCampaignsQuery = z.infer<typeof topCampaignsQuerySchema>;
 
 // ── Admin Schemas ───────────────────────────────────────────────────────────
 

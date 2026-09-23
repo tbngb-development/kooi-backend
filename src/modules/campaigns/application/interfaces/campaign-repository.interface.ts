@@ -1,7 +1,10 @@
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
-import type { CampaignPerformanceV2Result } from "../dto/campaign.dto";
+import type {
+  ExtractionInsightResult,
+  ExtractionOverviewResult,
+} from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
   name: string;
@@ -33,19 +36,6 @@ export interface CampaignStatsResult {
   calls: Array<{ status: string; _count: number }>;
 }
 
-export interface CampaignPerformanceResult {
-  hotLeads: number;
-  callbacks: number;
-  siteVisits: number;
-  dnc: number;
-  totalCost: number;
-  costPerLead: number;
-  qualificationRate: string;
-  bestPickupTime: string;
-  bestConversionTime: string;
-  topBudget: string;
-  topConfiguration: string;
-}
 
 export interface CampaignListItem {
   id: string;
@@ -115,21 +105,21 @@ export interface CampaignRepository {
 
   getStats(tenantId: string, campaignId: string): Promise<CampaignStatsResult>;
 
-  getPerformance(
+  getExtractionOverview(
     tenantId: string,
     campaignId: string,
     batchId?: string,
-  ): Promise<CampaignPerformanceResult>;
+  ): Promise<ExtractionOverviewResult>;
 
-  getPerformanceV2(
+  getExtractionInsights(
     tenantId: string,
     campaignId: string,
     batchId?: string,
-  ): Promise<CampaignPerformanceV2Result>;
+    topN?: number,
+  ): Promise<ExtractionInsightResult>;
 
   findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
-
 }

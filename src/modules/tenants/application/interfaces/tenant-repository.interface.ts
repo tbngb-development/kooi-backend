@@ -14,11 +14,9 @@ export interface TenantStatsResult {
   stats: {
     totalUsers: number;
     totalLeads: number;
-    qualifiedLeads: number;
     totalCalls: number;
     completedCalls: number;
     activeCampaigns: number;
-    qualificationRate: number;
   };
 }
 

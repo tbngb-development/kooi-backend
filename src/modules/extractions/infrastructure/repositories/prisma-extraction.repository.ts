@@ -267,6 +267,8 @@ export class PrismaExtractionRepository implements ExtractionRepository {
         objectiveOptions:
           (data.objectiveOptions as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         description: data.description ?? null,
+        showInOverview: data.showInOverview ?? true,
+        showInInsights: data.showInInsights ?? false,
         // M2M: industries (optional at creation)
         ...(data.industryPackIds?.length && {
           industries: {
@@ -308,6 +310,10 @@ export class PrismaExtractionRepository implements ExtractionRepository {
     if (data.description !== undefined)
       updateData.description = data.description;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.showInOverview !== undefined)
+      updateData.showInOverview = data.showInOverview;
+    if (data.showInInsights !== undefined)
+      updateData.showInInsights = data.showInInsights;
 
     return prisma.extractionDisposition.update({
       where: { id },

@@ -11,7 +11,6 @@ import type { GetOrderStatusUseCase } from "../application/use-cases/get-order-s
 import type { CreatePlanUpgradeOrderUseCase } from "../application/use-cases/create-plan-upgrade-order.use-case";
 import type { VerifyPaymentInput } from "../application/dto/payment.dto";
 import { AppError } from "../../../shared/errors";
-import { env } from "../../../shared/config/env";
 
 export class TenantPaymentController {
   constructor(
@@ -30,15 +29,6 @@ export class TenantPaymentController {
     try {
       const { tenantId } = getTenantContext(req);
       const { purpose, amountPaisa, newPlanId } = req.body;
-
-      console.log("req body: ", req.body)
-
-      console.log("[Razorpay Init]", {
-        keyId: env.razorpay.keyId
-          ? `${env.razorpay.keyId.substring(0, 8)}...`
-          : "MISSING",
-        hasSecret: Boolean(env.razorpay.keySecret),
-      });
 
       switch (purpose) {
         case "PLAN_UPGRADE": {

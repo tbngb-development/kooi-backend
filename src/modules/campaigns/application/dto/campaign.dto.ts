@@ -61,19 +61,61 @@ export interface ParseLeadsOutput {
   };
 }
 
-// ── V2 Performance (Dynamic Extraction Metrics) ─────────────────────
+// ── Extraction Overview ──
 
-export interface PerformanceV2MetricBreakdown {
-  key: string;
-  label: string;
-  totalEvaluated: number;
-  matched: number;
-  matchRate: number;
-  actualValue: string;
-  matchValue: string;
-  actualValueBreakdown: Record<string, number>;
+export interface ExtractionOverviewInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
 }
 
-export interface CampaignPerformanceV2Result {
-  metrics: PerformanceV2MetricBreakdown[];
+export interface ExtractionOverviewDisposition {
+  dispositionId: string;
+  dispositionSlug: string;
+  dispositionName: string;
+  categoryName: string;
+  values: Array<{
+    value: string;
+    count: number;
+    percentage: number;
+  }>;
+  totalCount: number;
+}
+
+export interface ExtractionOverviewResult {
+  campaignId: string;
+  totalCalls: number;
+  dispositions: ExtractionOverviewDisposition[];
+}
+
+// ── Extraction Insights (Subjective) ──
+
+export interface ExtractionInsightInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+  topN?: number;
+}
+
+export interface ExtractionInsightValue {
+  value: string;
+  displayValue: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ExtractionInsightDisposition {
+  dispositionId: string;
+  dispositionSlug: string;
+  dispositionName: string;
+  categoryName: string;
+  uniqueValues: number;
+  totalCount: number;
+  topValues: ExtractionInsightValue[];
+}
+
+export interface ExtractionInsightResult {
+  campaignId: string;
+  totalCalls: number;
+  insights: ExtractionInsightDisposition[];
 }
