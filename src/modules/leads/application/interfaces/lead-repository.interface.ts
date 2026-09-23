@@ -1,7 +1,4 @@
-import {
-  type CallStatus,
-  type Disposition,
-} from "@prisma/client";
+import { type CallStatus } from "@prisma/client";
 import { type LeadEntityData } from "../../domain/entities/lead.entity";
 
 export interface ListLeadsFilters {
@@ -52,12 +49,6 @@ export interface DetailedLeadResult extends LeadEntityData {
     createdAt: Date;
     callAnalysis: {
       id: string;
-      disposition: Disposition | null;
-      leadTemperature: string | null;
-      preferredConfiguration: string | null;
-      budgetRange: string | null;
-      purchaseTimeline: string | null;
-      preferredNextAction: string | null;
     } | null;
   }>;
 }
@@ -69,9 +60,6 @@ export interface LeadStatsResult {
   called: number;
   failed: number;
   noAnswer: number;
-  doNotCall: number;
-  qualified: number;
-  qualificationRate: string;
 }
 
 export interface LeadRepository {

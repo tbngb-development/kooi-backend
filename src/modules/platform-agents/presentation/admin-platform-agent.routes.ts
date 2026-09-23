@@ -64,11 +64,10 @@ export function buildAdminPlatformAgentRoutes(
     controller.syncExtractionsToBolnaHandler,
   );
 
-  // ── [NEW] dynamic extraction config ────────────────────────────────────────
   router.patch(
     "/:id/extraction-config",
     validate(updateExtractionConfigSchema),
-    controller.updateExtractionConfigHandler,
+    controller.updatePlatformAgentVariablesHandler,
   );
 
   return router;

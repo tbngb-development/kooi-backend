@@ -21,8 +21,7 @@ import type { AssignDispositionToAgentUseCase } from "../application/use-cases/a
 import type { RemoveDispositionFromAgentUseCase } from "../application/use-cases/remove-disposition-from-agent.use-case";
 import type { GetAgentExtractionsUseCase } from "../application/use-cases/get-agent-extractions.use-case";
 import type { SyncExtractionsToBolnaUseCase } from "../application/use-cases/sync-extractions-to-bolna.use-case";
-// [NEW]
-import type { UpdateExtractionConfigUseCase } from "../application/use-cases/update-extraction-config.use-case";
+import type { UpdatePlatformAgentVariablesUseCase } from "../application/use-cases/update_platform-agent-variables";
 import { listPlatformAgentsQuerySchema } from "./platform-agent.schema";
 
 export class AdminPlatformAgentController {
@@ -43,8 +42,7 @@ export class AdminPlatformAgentController {
     private readonly removeDisposition: RemoveDispositionFromAgentUseCase,
     private readonly getAgentExtractions: GetAgentExtractionsUseCase,
     private readonly syncExtractionsToBolna: SyncExtractionsToBolnaUseCase,
-    // [NEW]
-    private readonly updateExtractionConfigUseCase: UpdateExtractionConfigUseCase,
+    private readonly updatePlatformAgentUseCase: UpdatePlatformAgentVariablesUseCase,
   ) {}
 
   register = async (
@@ -279,19 +277,18 @@ export class AdminPlatformAgentController {
     }
   };
 
-
-  updateExtractionConfigHandler = async (
+  updatePlatformAgentVariablesHandler = async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const data = await this.updateExtractionConfigUseCase.execute(
+      const data = await this.updatePlatformAgentUseCase.execute(
         param(req, "id"),
         req.body,
       );
       sendSuccess(res, {
-        message: "Platform agent extraction configuration updated successfully",
+        message: "Platform agent variables updated successfully",
         data,
       });
     } catch (err) {

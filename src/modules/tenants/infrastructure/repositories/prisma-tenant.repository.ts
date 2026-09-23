@@ -65,7 +65,6 @@ export class PrismaTenantRepository implements TenantRepository {
     const [
       totalUsers,
       totalLeads,
-      qualifiedLeads,
       totalCalls,
       completedCalls,
       activeCampaigns,
@@ -75,12 +74,6 @@ export class PrismaTenantRepository implements TenantRepository {
       }),
       prisma.lead.count({
         where: { tenantId: id },
-      }),
-      prisma.lead.count({
-        where: {
-          tenantId: id,
-          status: "QUALIFIED",
-        },
       }),
       prisma.call.count({
         where: { tenantId: id },
@@ -99,21 +92,14 @@ export class PrismaTenantRepository implements TenantRepository {
       }),
     ]);
 
-    const qualificationRate =
-      totalLeads === 0
-        ? 0
-        : Number(((qualifiedLeads / totalLeads) * 100).toFixed(2));
-
     return {
       tenant,
       stats: {
         totalUsers,
         totalLeads,
-        qualifiedLeads,
         totalCalls,
         completedCalls,
         activeCampaigns,
-        qualificationRate,
       },
     };
   }

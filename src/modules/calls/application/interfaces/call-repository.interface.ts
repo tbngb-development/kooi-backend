@@ -1,11 +1,5 @@
-import {
-  type Disposition,
-  type LeadTemperature,
-  type LocationMatch,
-} from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
 import type {
-  ExtractionResponse,
   AvailableFiltersResponse,
   DynamicFilterMap,
 } from "../../../../shared/types/bolna.types";
@@ -14,9 +8,6 @@ export interface ListCallsFilters {
   campaignId?: string;
   leadId?: string;
   status?: string;
-  disposition?: string;
-  leadTemperature?: string;
-  locationMatch?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -25,8 +16,6 @@ export interface ListCallsFilters {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
-  metricKey?: string; // e.g., "lead_temperature"
-  metricValue?: string; // e.g., "HOT"
 }
 
 export interface PaginatedCallsResult {
@@ -41,14 +30,21 @@ export interface PaginatedCallsResult {
         id: string;
         name: string;
       } | null;
-      callAnalysis: {
-        id: string;
-        disposition: Disposition | null;
-        leadTemperature: LeadTemperature | null;
-        preferredConfiguration: string | null;
-        budgetRange: string | null;
-        purchaseTimeline: string | null;
-      } | null;
+      extractionOverview: {
+        dispositionSlug: string;
+        objectiveValue: string;
+        dispositionName: string;
+        categoryName: string;
+        confidence: number | null;
+      }[];
+      extractionInsights: {
+        dispositionSlug: string;
+        dispositionName: string;
+        categoryName: string;
+        confidence: number | null;
+        subjectiveValue: string;
+        normalizedValue: string;
+      }[];
     }
   >;
   pagination: {
@@ -74,22 +70,8 @@ export interface DetailedCallResult extends CallEntityData {
   } | null;
   callAnalysis: {
     id: string;
-    disposition: Disposition | null;
-    leadTemperature: LeadTemperature | null;
-    preferredConfiguration: string | null;
-    budgetRange: string | null;
-    purchaseTimeline: string | null;
-    purchasePurpose: string | null;
-    locationMatch: LocationMatch | null;
-    customerLocationPref: string | null;
-    preferredNextAction: string | null;
-    preferredContactChannel: string | null;
-    followupSchedule: string | null;
-    doNotCall: string | null;
-    languageSupportRequired: string | null;
     dynamicExtractions: string | null;
     extractionResult: string | null;
-    extractionResponse: string | null;
   } | null;
 }
 
@@ -101,8 +83,6 @@ export interface CallTranscriptResult {
   recording: string | null;
   callAnalysis: {
     id: string;
-    disposition: Disposition | null;
-    leadTemperature: LeadTemperature | null;
   } | null;
 }
 
@@ -118,10 +98,6 @@ export interface CallStatsResult {
   noAnswer: number;
   busy: number;
   avgDuration: number;
-  qualifiedCount: number;
-  qualificationRate: string;
-  dispositionBreakdown: Record<string, number>;
-  temperatureBreakdown: Record<string, number>;
 }
 
 export interface CallRepository {
@@ -130,23 +106,16 @@ export interface CallRepository {
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult>;
   findById(tenantId: string, id: string): Promise<DetailedCallResult | null>;
+
   findTranscriptById(
     tenantId: string,
     id: string,
   ): Promise<CallTranscriptResult | null>;
+
   getStats(
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult>;
-
-  /**
-   * Fetches the computed dynamic extraction response for a call.
-   * Returns null if the call or its analysis does not exist.
-   */
-  getExtractionResponse(
-    tenantId: string,
-    callId: string,
-  ): Promise<ExtractionResponse | null>;
 
   getAvailableFilters(
     tenantId: string,

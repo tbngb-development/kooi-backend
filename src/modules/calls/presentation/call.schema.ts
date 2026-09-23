@@ -25,14 +25,8 @@ export const listCallsQuerySchema = z.object({
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
   status: z.string().optional(),
-  disposition: z.string().optional(),
-  leadTemperature: z.string().optional(),
-  locationMatch: z.string().optional(),
   search: z.string().optional(),
-  dateFrom: z
-    .string()
-    .datetime({ message: "Invalid dateFrom format" })
-    .optional(),
+  dateFrom: z.iso.datetime({ message: "Invalid dateFrom format" }).optional(),
   dateTo: z.string().datetime({ message: "Invalid dateTo format" }).optional(),
   sortBy: z.enum(["startedAt", "duration", "cost", "createdAt"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
@@ -42,9 +36,7 @@ export const listCallsQuerySchema = z.object({
   limit: z
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
-  dynamicFilters: dynamicFiltersSchema, // [NEW]
-  metricKey: z.string().min(1).max(100).optional(),
-  metricValue: z.string().min(1).max(200).optional(),
+  dynamicFilters: dynamicFiltersSchema,
 });
 
 export const getCallStatsQuerySchema = z.object({

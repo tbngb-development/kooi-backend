@@ -2,7 +2,6 @@ import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
-  CampaignPerformanceV2Result,
   ExtractionInsightResult,
   ExtractionOverviewResult,
 } from "../dto/campaign.dto";
@@ -37,19 +36,6 @@ export interface CampaignStatsResult {
   calls: Array<{ status: string; _count: number }>;
 }
 
-export interface CampaignPerformanceResult {
-  hotLeads: number;
-  callbacks: number;
-  siteVisits: number;
-  dnc: number;
-  totalCost: number;
-  costPerLead: number;
-  qualificationRate: string;
-  bestPickupTime: string;
-  bestConversionTime: string;
-  topBudget: string;
-  topConfiguration: string;
-}
 
 export interface CampaignListItem {
   id: string;
@@ -118,18 +104,6 @@ export interface CampaignRepository {
   incrementTotalLeads(campaignId: string, count: number): Promise<void>;
 
   getStats(tenantId: string, campaignId: string): Promise<CampaignStatsResult>;
-
-  getPerformance(
-    tenantId: string,
-    campaignId: string,
-    batchId?: string,
-  ): Promise<CampaignPerformanceResult>;
-
-  getPerformanceV2(
-    tenantId: string,
-    campaignId: string,
-    batchId?: string,
-  ): Promise<CampaignPerformanceV2Result>;
 
   getExtractionOverview(
     tenantId: string,

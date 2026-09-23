@@ -61,23 +61,6 @@ export interface ParseLeadsOutput {
   };
 }
 
-// ── V2 Performance (Dynamic Extraction Metrics) ─────────────────────
-
-export interface PerformanceV2MetricBreakdown {
-  key: string;
-  label: string;
-  totalEvaluated: number;
-  matched: number;
-  matchRate: number;
-  actualValue: string;
-  matchValue: string;
-  actualValueBreakdown: Record<string, number>;
-}
-
-export interface CampaignPerformanceV2Result {
-  metrics: PerformanceV2MetricBreakdown[];
-}
-
 // ── Extraction Overview ──
 
 export interface ExtractionOverviewInput {

@@ -40,12 +40,6 @@ export class AdminDashboardController {
     };
   }
 
-  private sendCsv(res: Response, csv: string, filename: string): void {
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.send(csv);
-  }
-
   // ── Endpoints ───────────────────────────────────────────────────────────
 
   overview = async (

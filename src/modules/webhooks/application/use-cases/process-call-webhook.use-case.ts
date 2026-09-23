@@ -4,32 +4,13 @@ import {
 } from "../interfaces/webhook-repository.interface";
 import { type WebhookCallPayload } from "../dto/webhook.dto";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
-import {
-  sanitizeEnum,
-  DISPOSITION_VALUES,
-  LEAD_TEMPERATURE_VALUES,
-  PURCHASE_TIMELINE_VALUES,
-  PURCHASE_PURPOSE_VALUES,
-  LOCATION_MATCH_VALUES,
-  PREFERRED_NEXT_ACTION_VALUES,
-  CONTACT_CHANNEL_VALUES,
-  EXTRACTION_FLAG_VALUES,
-} from "../../domain/rules/webhook-sanitizer";
 import type {
   CallHistoryItem,
-  ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
-
-import type {
-  ExtractionConfig,
-  ExtractionMetricResponse,
-  ExtractionResultResponse,
-  ExtractionResponse,
-} from "../../../../shared/types/bolna.types";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -249,7 +230,6 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
-    // [NEW] Map extracted_data to local dispositions AND build dynamic response
     try {
       const dynamicResult = await this.mapCallExtractions(
         call.id,
@@ -269,25 +249,15 @@ export class ProcessCallWebhookUseCase {
           call.tenantId,
           dynamicResult,
         );
-
-        await this.buildExtractionResponse(
-          call.id,
-          call.tenantId,
-          dynamicResult,
-        );
       }
     } catch (err) {
       // Best-effort — don't fail the webhook if extraction mapping fails
       console.error("[Webhook] Dynamic extraction mapping failed:", err);
     }
 
-    const parsed = this.parseExtractionData(payload.extracted_data);
-    const summary = parsed?.callSummary ?? null;
-
     // ── Step 1: Persist terminal state (Bolna cost in `cost` field) ──
     await this.webhookRepo.updateCallTerminalState(call.id, {
       status: "COMPLETED",
-      summary,
       transcript,
       transcriptMessages: messages.length > 0 ? messages : null,
       duration,
@@ -299,13 +269,6 @@ export class ProcessCallWebhookUseCase {
     });
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
-
-    if (parsed) {
-      await this.webhookRepo.upsertCallAnalysis(call.id, call.tenantId, parsed);
-      if (parsed.doNotCall === "YES") {
-        await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED", true);
-      }
-    }
 
     await this.webhookRepo.incrementTerminalStats(
       call.campaignId,
@@ -498,125 +461,6 @@ export class ProcessCallWebhookUseCase {
     });
 
     return dynamicResult;
-  }
-
-  /**
-   * Reads the PlatformAgent's extractionConfig and the just-computed
-   * dynamicExtractions to produce the { metrics, results } response.
-   * Stores the result in CallAnalysis.extractionResponse.
-   */
-  private async buildExtractionResponse(
-    callId: string,
-    tenantId: string,
-    dynamicResult: DynamicExtractionMap,
-  ): Promise<void> {
-    const agentConfig =
-      await this.webhookRepo.getExtractionConfigForCall(callId);
-
-    if (!agentConfig) return;
-
-    const config = agentConfig.extractionConfig as ExtractionConfig | null;
-    if (!config) return;
-
-    // Build a case-insensitive lookup of dynamic extractions
-    // Key: "category|disposition" (both lowercased)
-    const dynamicLookup = new Map<string, DynamicExtractionEntry>();
-    for (const [catName, dispositions] of Object.entries(dynamicResult)) {
-      for (const [dispName, entry] of Object.entries(dispositions)) {
-        const key = `${catName.toLowerCase()}|${dispName.toLowerCase()}`;
-        dynamicLookup.set(key, entry);
-      }
-    }
-
-    // ── Build metrics ───────────────────────────────────────────────────
-    const metrics: ExtractionMetricResponse[] = [];
-    for (const metric of config.metrics) {
-      const key = `${metric.category.toLowerCase()}|${metric.disposition.toLowerCase()}`;
-      const entry = dynamicLookup.get(key);
-
-      const actualValue = entry?.objective ?? null;
-      const matched =
-        actualValue !== null &&
-        actualValue.toLowerCase() === metric.matchValue.toLowerCase();
-
-      metrics.push({
-        label: metric.label,
-        category: metric.category,
-        disposition: metric.disposition,
-        matchValue: metric.matchValue,
-        matched,
-        actualValue,
-      });
-    }
-
-    // ── Build results ───────────────────────────────────────────────────
-    const results: ExtractionResultResponse[] = [];
-    for (const result of config.results) {
-      const key = `${result.category.toLowerCase()}|${result.disposition.toLowerCase()}`;
-      const entry = dynamicLookup.get(key);
-
-      results.push({
-        label: result.label,
-        category: result.category,
-        disposition: result.disposition,
-        value: entry?.subjective ?? null,
-      });
-    }
-
-    const response: ExtractionResponse = { metrics, results };
-
-    await this.materializeCallMetrics(callId, tenantId, metrics);
-
-    await this.webhookRepo.updateExtractionResponse(callId, tenantId, response);
-  }
-
-  /**
-   * Inserts one row per metric evaluation into CallMetric for fast
-   * aggregation and filtering. Idempotent — deletes old rows for this
-   * call before inserting (handles webhook retries safely).
-   */
-  private async materializeCallMetrics(
-    callId: string,
-    tenantId: string,
-    metrics: ExtractionMetricResponse[],
-  ): Promise<void> {
-    const validMetrics = metrics.filter(
-      (m) => m.actualValue != null && m.actualValue !== "",
-    );
-
-    if (validMetrics.length === 0) return;
-
-    // Fetch call metadata for denormalization
-    const call = await prisma.call.findUnique({
-      where: { id: callId },
-      select: { campaignId: true, batchId: true },
-    });
-
-    if (!call) return;
-
-    const toFilterKey = (label: string): string =>
-      label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
-
-    // Idempotent: remove previous metrics for this call (webhook retries)
-    await prisma.callMetric.deleteMany({ where: { callId } });
-
-    // Bulk insert all metric evaluations
-    await prisma.callMetric.createMany({
-      data: validMetrics.map((m) => ({
-        callId,
-        tenantId,
-        campaignId: call.campaignId,
-        batchId: call.batchId,
-        metricKey: toFilterKey(m.label),
-        metricLabel: m.label,
-        matched: m.matched,
-        actualValue: m.actualValue!,
-        matchValue: m.matchValue,
-      })),
-    });
   }
 
   /**
@@ -835,62 +679,4 @@ export class ProcessCallWebhookUseCase {
     }
   }
 
-  // ── Extractor Mapper ─────────────────────────────────────────────────────
-
-  private parseExtractionData(
-    extracted: Record<string, any> | null | undefined,
-  ): ParsedCallAnalysis | null {
-    if (!extracted) return null;
-
-    const obj = (field: any) => field?.objective?.trim() ?? null;
-    const subj = (field: any) => field?.subjective?.trim() ?? null;
-
-    const outcome = extracted["Call Outcome"];
-    const qualification = extracted["Lead Qualification"];
-    const nextAction = extracted["Next Action and Contact Preference"];
-    const followUp = extracted["Follow-Up Schedule"];
-    const compliance = extracted["Compliance"];
-    const summary = extracted["Summary"];
-
-    return {
-      disposition: sanitizeEnum(obj(outcome?.disposition), DISPOSITION_VALUES),
-      leadTemperature: sanitizeEnum(
-        obj(outcome?.lead_temperature),
-        LEAD_TEMPERATURE_VALUES,
-      ),
-      purchaseTimeline: sanitizeEnum(
-        obj(qualification?.purchase_timeline),
-        PURCHASE_TIMELINE_VALUES,
-      ),
-      purchasePurpose: sanitizeEnum(
-        obj(qualification?.purchase_purpose),
-        PURCHASE_PURPOSE_VALUES,
-      ),
-      locationMatch: sanitizeEnum(
-        obj(qualification?.location_match),
-        LOCATION_MATCH_VALUES,
-      ),
-      preferredNextAction: sanitizeEnum(
-        obj(nextAction?.preferred_next_action),
-        PREFERRED_NEXT_ACTION_VALUES,
-      ),
-      preferredContactChannel: sanitizeEnum(
-        obj(nextAction?.preferred_contact_channel),
-        CONTACT_CHANNEL_VALUES,
-      ),
-      doNotCall: sanitizeEnum(
-        obj(compliance?.do_not_call),
-        EXTRACTION_FLAG_VALUES,
-      ),
-      languageSupportRequired: sanitizeEnum(
-        obj(compliance?.language_support_required),
-        EXTRACTION_FLAG_VALUES,
-      ),
-      preferredConfiguration: subj(qualification?.preferred_configuration),
-      budgetRange: subj(qualification?.budget_range),
-      customerLocationPref: subj(qualification?.customer_location_pref),
-      followupSchedule: subj(followUp?.followup_schedule),
-      callSummary: subj(summary?.call_summary),
-    };
-  }
 }

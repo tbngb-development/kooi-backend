@@ -10,8 +10,6 @@ import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.u
 import type { CreateCampaignUseCase } from "../application/use-cases/create-campaign.use-case";
 import type { ParseLeadsUseCase } from "../application/use-cases/parse-leads.use-case";
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
-import type { GetCampaignPerformanceUseCase } from "../application/use-cases/get-campaign-performance.use-case";
-import type { GetCampaignPerformanceV2UseCase } from "../application/use-cases/get-campaign-performance-v2.use-case";
 import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
@@ -23,8 +21,6 @@ export class TenantCampaignController {
     private readonly createCampaignUseCase: CreateCampaignUseCase,
     private readonly parseLeadsUseCase: ParseLeadsUseCase,
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
-    private readonly getCampaignPerformanceUseCase: GetCampaignPerformanceUseCase,
-    private readonly getCampaignPerformanceV2UseCase: GetCampaignPerformanceV2UseCase,
     private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
     private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
     private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
@@ -165,44 +161,6 @@ export class TenantCampaignController {
       const data = await this.getCampaignStatsUseCase.execute(
         tenantId,
         param(req, "id"),
-      );
-      sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  performance = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const { tenantId } = this.getTenant(req);
-      const batchId = req.query.batchId as string | undefined;
-      const data = await this.getCampaignPerformanceUseCase.execute(
-        tenantId,
-        param(req, "id"),
-        batchId,
-      );
-      sendSuccess(res, data);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  performanceV2 = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const { tenantId } = this.getTenant(req);
-      const batchId = req.query.batchId as string | undefined;
-      const data = await this.getCampaignPerformanceV2UseCase.execute(
-        tenantId,
-        param(req, "id"),
-        batchId,
       );
       sendSuccess(res, data);
     } catch (err) {

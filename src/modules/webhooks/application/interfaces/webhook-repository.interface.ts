@@ -6,7 +6,6 @@ import {
 } from "@prisma/client";
 import type {
   CallHistoryItem,
-  ParsedCallAnalysis,
 } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
@@ -109,12 +108,6 @@ export interface WebhookRepository {
     doNotCall?: boolean,
   ): Promise<void>;
 
-  upsertCallAnalysis(
-    callId: string,
-    tenantId: string,
-    analysis: ParsedCallAnalysis,
-  ): Promise<void>;
-
   incrementTerminalStats(
     campaignId: string,
     batchId: string | null,
@@ -151,21 +144,4 @@ export interface WebhookRepository {
    */
   getAgentDispositionsForCall(callId: string): Promise<AgentDispositionMap>;
 
-  /**
-   * Resolves the PlatformAgent behind a call and returns its extractionConfig.
-   * Returns null if no agent or no config is found.
-   */
-  getExtractionConfigForCall(callId: string): Promise<{
-    platformAgentId: string;
-    extractionConfig: unknown;
-  } | null>;
-
-  /**
-   * Persists the computed { metrics, results } response on CallAnalysis.
-   */
-  updateExtractionResponse(
-    callId: string,
-    tenantId: string,
-    response: unknown,
-  ): Promise<void>;
 }

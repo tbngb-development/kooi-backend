@@ -5,10 +5,6 @@ import { GetDashboardOverviewUseCase } from "./application/use-cases/get-dashboa
 import { GetCallTrendsUseCase } from "./application/use-cases/get-call-trends.use-case";
 import { GetSpendTrendsUseCase } from "./application/use-cases/get-spend-trends.use-case";
 import { GetLeadFunnelUseCase } from "./application/use-cases/get-lead-funnel.use-case";
-import { GetDispositionBreakdownUseCase } from "./application/use-cases/get-disposition-breakdown.use-case";
-import { GetTemperatureDistributionUseCase } from "./application/use-cases/get-temperature-distribution.use-case";
-import { GetTopCampaignsUseCase } from "./application/use-cases/get-top-campaigns.use-case";
-import { GetRecentActivityUseCase } from "./application/use-cases/get-recent-activity.use-case";
 
 import { GetAdminOverviewUseCase } from "./application/use-cases/get-admin-overview.use-case";
 import { GetRevenueTrendsUseCase } from "./application/use-cases/get-revenue-trends.use-case";
@@ -34,10 +30,6 @@ export function buildDashboardModule(): DashboardModule {
       new GetCallTrendsUseCase(tenantRepo),
       new GetSpendTrendsUseCase(tenantRepo),
       new GetLeadFunnelUseCase(tenantRepo),
-      new GetDispositionBreakdownUseCase(tenantRepo),
-      new GetTemperatureDistributionUseCase(tenantRepo),
-      new GetTopCampaignsUseCase(tenantRepo),
-      new GetRecentActivityUseCase(tenantRepo),
     ),
     adminController: new AdminDashboardController(
       new GetAdminOverviewUseCase(adminRepo),

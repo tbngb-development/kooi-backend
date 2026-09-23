@@ -9,10 +9,8 @@ import type {
   LeadStatus,
   CampaignStatus,
 } from "@prisma/client";
-import type {
-  ParsedCallAnalysis,
-  CallHistoryItem,
-} from "../../../../shared/types/bolna.types";
+
+import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 
 const callSelectFields = {
   id: true,
@@ -293,48 +291,6 @@ export class PrismaWebhookRepository implements WebhookRepository {
     return batches.map((b) => b.status);
   }
 
-  async upsertCallAnalysis(
-    callId: string,
-    tenantId: string,
-    parsed: ParsedCallAnalysis,
-  ): Promise<void> {
-    await prisma.callAnalysis.upsert({
-      where: { callId },
-      create: {
-        callId,
-        tenantId,
-        disposition: parsed.disposition,
-        leadTemperature: parsed.leadTemperature,
-        preferredConfiguration: parsed.preferredConfiguration,
-        budgetRange: parsed.budgetRange,
-        purchaseTimeline: parsed.purchaseTimeline,
-        purchasePurpose: parsed.purchasePurpose,
-        locationMatch: parsed.locationMatch,
-        customerLocationPref: parsed.customerLocationPref,
-        preferredNextAction: parsed.preferredNextAction,
-        preferredContactChannel: parsed.preferredContactChannel,
-        followupSchedule: parsed.followupSchedule,
-        doNotCall: parsed.doNotCall,
-        languageSupportRequired: parsed.languageSupportRequired,
-      },
-      update: {
-        disposition: parsed.disposition,
-        leadTemperature: parsed.leadTemperature,
-        preferredConfiguration: parsed.preferredConfiguration,
-        budgetRange: parsed.budgetRange,
-        purchaseTimeline: parsed.purchaseTimeline,
-        purchasePurpose: parsed.purchasePurpose,
-        locationMatch: parsed.locationMatch,
-        customerLocationPref: parsed.customerLocationPref,
-        preferredNextAction: parsed.preferredNextAction,
-        preferredContactChannel: parsed.preferredContactChannel,
-        followupSchedule: parsed.followupSchedule,
-        doNotCall: parsed.doNotCall,
-        languageSupportRequired: parsed.languageSupportRequired,
-      },
-    });
-  }
-
   async getAgentDispositionsForCall(callId: string): Promise<{
     platformAgentId: string | null;
     dispositions: Array<{
@@ -445,23 +401,5 @@ export class PrismaWebhookRepository implements WebhookRepository {
       platformAgentId: agent.id,
       extractionConfig: agent.extractionConfig,
     };
-  }
-
-  async updateExtractionResponse(
-    callId: string,
-    tenantId: string,
-    response: unknown,
-  ): Promise<void> {
-    await prisma.callAnalysis.upsert({
-      where: { callId },
-      create: {
-        callId,
-        tenantId,
-        extractionResponse: response as any,
-      },
-      update: {
-        extractionResponse: response as any,
-      },
-    });
   }
 }

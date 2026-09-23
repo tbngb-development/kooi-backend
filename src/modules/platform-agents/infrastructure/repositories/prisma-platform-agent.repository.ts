@@ -2,15 +2,14 @@ import prisma from "../../../../shared/config/database/prisma";
 import type {
   Prisma,
   PlatformAgent,
-  AgentGender,
   AgentBolnaExtractionBinding,
 } from "@prisma/client";
 import type {
   AgentExtractionConfig,
-  ExtractionConfigUpdateData,
   PlatformAgentRepository,
   PlatformAgentWithCount,
   DispositionObjectiveOption,
+  UpdateAgentVariablesData,
 } from "../../application/interfaces/platform-agent-repository.interface";
 import type {
   RegisterPlatformAgentDTO,
@@ -37,8 +36,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       sortOrder: data.sortOrder ?? 0,
       isActive: true,
       bolnaApiKey: { connect: { id: data.bolnaApiKeyId } },
-      extractionConfig:
-        data.extractionConfig as unknown as Prisma.InputJsonValue,
       welcomeMessage: data.welcomeMessage ?? undefined,
       requiredVariables:
         data.requiredVariables as unknown as Prisma.InputJsonValue,
@@ -83,11 +80,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     if (data.isFeatured !== undefined) updateData.isFeatured = data.isFeatured;
     if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder;
 
-    // [NEW]
-    if (data.extractionConfig !== undefined) {
-      updateData.extractionConfig =
-        data.extractionConfig as unknown as Prisma.InputJsonValue;
-    }
     if (data.welcomeMessage !== undefined) {
       updateData.welcomeMessage = data.welcomeMessage;
     }
@@ -240,7 +232,6 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
                         id: true,
                         name: true,
                         slug: true,
-                        // [NEW] for extractionConfig validation
                         isObjective: true,
                         isSubjective: true,
                         objectiveOptions: true,
@@ -283,25 +274,15 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     };
   }
 
-  // ── [NEW] Extraction Config (JSON field) ────────────────────────────────
-
-  async updateExtractionConfig(
+  async updateAgentVariables(
     platformAgentId: string,
-    data: ExtractionConfigUpdateData,
+    data: UpdateAgentVariablesData,
   ): Promise<PlatformAgent> {
-    const updateData: Prisma.PlatformAgentUpdateInput = {
-      extractionConfig: data.extractionConfig as Prisma.InputJsonValue,
-    };
+    const updateData: Prisma.PlatformAgentUpdateInput = {};
 
-    if (data.welcomeMessage !== undefined) {
-      updateData.welcomeMessage = data.welcomeMessage;
-    }
     if (data.requiredVariables !== undefined) {
       updateData.requiredVariables =
         data.requiredVariables as Prisma.InputJsonValue;
-    }
-    if (data.gender !== undefined) {
-      updateData.gender = data.gender;
     }
 
     return prisma.platformAgent.update({

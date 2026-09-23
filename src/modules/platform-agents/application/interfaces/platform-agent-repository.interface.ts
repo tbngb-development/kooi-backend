@@ -2,7 +2,6 @@ import type {
   PlatformAgent,
   IndustryPack,
   AgentBolnaExtractionBinding,
-  AgentGender,
 } from "@prisma/client";
 import type {
   RegisterPlatformAgentDTO,
@@ -40,7 +39,6 @@ export interface AgentExtractionConfig {
       dispositionName: string;
       dispositionSlug: string;
       sortOrder: number;
-      // [NEW] needed for extractionConfig matchValue validation
       isObjective: boolean;
       isSubjective: boolean;
       objectiveOptions: DispositionObjectiveOption[] | null;
@@ -49,11 +47,8 @@ export interface AgentExtractionConfig {
   bolnaBindings: AgentBolnaExtractionBinding[];
 }
 
-export interface ExtractionConfigUpdateData {
-  extractionConfig: unknown;
-  welcomeMessage?: string | null;
+export interface UpdateAgentVariablesData {
   requiredVariables?: unknown;
-  gender?: AgentGender | null;
 }
 
 export interface PlatformAgentRepository {
@@ -94,10 +89,9 @@ export interface PlatformAgentRepository {
     platformAgentId: string,
   ): Promise<AgentExtractionConfig | null>;
 
-  // ── [NEW] Extraction Config (JSON field) ──────────────────────────────────
-  updateExtractionConfig(
+  updateAgentVariables(
     platformAgentId: string,
-    data: ExtractionConfigUpdateData,
+    data: UpdateAgentVariablesData,
   ): Promise<PlatformAgent>;
 
   // ── Bolna Bindings ────────────────────────────────────────────────────────

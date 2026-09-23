@@ -188,7 +188,7 @@ enum BatchStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEAD  (UNCHANGED)
+// LEAD  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Lead {
@@ -222,8 +222,6 @@ enum LeadStatus {
   PENDING
   CALLING
   CALLED
-  QUALIFIED
-  NOT_QUALIFIED
   NO_ANSWER
   FAILED
   STOPPED
@@ -267,15 +265,15 @@ model Call {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  callAnalysis CallAnalysis?
+  extractionOverview CallExtractionOverview[]
+  extractionInsights CallExtractionInsight[]
+
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   campaign     Campaign      @relation(fields: [campaignId], references: [id])
   lead         Lead          @relation(fields: [leadId], references: [id])
   batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
-  callAnalysis CallAnalysis?
-  callMetrics  CallMetric[] 
-  extractionOverview CallExtractionOverview[]
-  extractionInsights CallExtractionInsight[]
 
   @@index([tenantId])
   @@index([campaignId])
@@ -302,27 +300,8 @@ model CallAnalysis {
   callId   String @unique
   tenantId String
 
-  disposition             Disposition?
-  leadTemperature         LeadTemperature?
-  preferredConfiguration  String?
-  budgetRange             String?
-  purchaseTimeline        PurchaseTimeline?
-  purchasePurpose         PurchasePurpose?
-  locationMatch           LocationMatch?
-  customerLocationPref    String?
-  preferredNextAction     PreferredNextAction?
-  preferredContactChannel ContactChannel?
-  followupSchedule        String?
-  doNotCall               ExtractionFlag?
-  languageSupportRequired ExtractionFlag?
-
   dynamicExtractions Json?
   extractionResult   Json?
-
-  extractionResponse Json?
-
-  extractionDispositionId String?
-  extractionDisposition   ExtractionDisposition? @relation(fields: [extractionDispositionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -332,78 +311,7 @@ model CallAnalysis {
 
   @@index([tenantId])
   @@index([callId])
-  @@index([disposition])
-  @@index([leadTemperature])
-  @@index([extractionDispositionId]) 
-  @@index([extractionResponse], type: Gin)
-}
-
-enum Disposition {
-  INTERESTED_SEND_DETAILS
-  QUALIFIED_CONSULTANT_FOLLOWUP
-  SITE_VISIT_INTEREST
-  INTERESTED_GENERAL
-  FOLLOWUP_REQUESTED
-  NOT_INTERESTED
-  DO_NOT_CALL
-  WRONG_NUMBER
-  ALREADY_PURCHASED
-  BROKER
-  LANGUAGE_CALLBACK_REQUIRED
-  CALL_ENDED_BY_CUSTOMER
-  CALL_ENDED_ABUSIVE
-  NO_RESPONSE
-  CALL_DROPPED
-}
-
-enum LeadTemperature {
-  HOT
-  WARM
-  NURTURE
-  COLD
-  NOT_APPLICABLE
-}
-
-enum PurchaseTimeline {
-  WITHIN_3_MONTHS
-  WITHIN_6_MONTHS
-  WITHIN_1_YEAR
-  AFTER_1_YEAR
-  FLEXIBLE
-  NOT_SHARED
-}
-
-enum PurchasePurpose {
-  OWN_USE
-  INVESTMENT
-  BOTH
-  NOT_SHARED
-}
-
-enum PreferredNextAction {
-  SEND_DETAILS
-  CONSULTANT_CALL
-  SITE_VISIT
-  FOLLOWUP_CALL
-  NONE
-}
-
-enum ContactChannel {
-  WHATSAPP
-  EMAIL
-  NOT_ASKED
-}
-
-enum LocationMatch {
-  MATCH
-  MISMATCH
-  NOT_ASKED
-  NOT_MENTIONED
-}
-
-enum ExtractionFlag {
-  YES
-  NO
+  
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -766,29 +674,23 @@ model PlatformAgent {
   defaultConfig Json
   systemPrompt  String?
 
-  extractionConfig    Json?
   welcomeMessage      String?
   requiredVariables   Json?
   gender              AgentGender?
-
   isActive   Boolean @default(true)
   isFeatured Boolean @default(false)
   sortOrder  Int     @default(0)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   bolnaApiKeyId String
-  bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
-
   industryPackId String?
-  industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
   assistants Assistant[]
-
-  // M2M relations
   categories    PlatformAgentCategory[]
   bolnaBindings AgentBolnaExtractionBinding[]
+
+  bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
+  industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
   @@index([industryPackId])
   @@index([category])
@@ -801,19 +703,18 @@ enum AgentGender {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXTRACTION CATEGORY  [CHANGED — removed bolnaId, industry, platformAgentId]
+// EXTRACTION CATEGORY  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionCategory {
   id    String @id @default(uuid())
   slug  String @unique
-  name  String // [NEW] case-insensitive unique via raw SQL index
+  name  String 
   model String @default("gpt-4.1-mini")
 
   description String?
   isActive    Boolean @default(true)
 
-  // [NEW] M2M relations
   industries     ExtractionCategoryIndustry[]
   dispositions   ExtractionCategoryDisposition[]
   platformAgents PlatformAgentCategory[]
@@ -825,13 +726,13 @@ model ExtractionCategory {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXTRACTION DISPOSITION  [CHANGED — removed bolnaId, industry, categoryId]
+// EXTRACTION DISPOSITION 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExtractionDisposition {
   id           String  @id @default(uuid())
   slug         String  @unique
-  name         String // [NEW] case-insensitive unique via raw SQL index
+  name         String 
   question     String
   systemPrompt String?
   model        String  @default("gpt-4.1-mini")
@@ -842,15 +743,15 @@ model ExtractionDisposition {
   subjectiveTypeConfig Json?
   objectiveOptions     Json?
 
-  // [REMOVED] industry    Industry @default(GENERIC)
   description String?
   isActive    Boolean @default(true)
 
-  // [NEW] M2M relations
+  showInOverview Boolean @default(true)  // Include in campaign metrics overview?
+  showInInsights Boolean @default(false) // Include in free-text insights?
+
   industries    ExtractionDispositionIndustry[]
   categories    ExtractionCategoryDisposition[]
   bolnaBindings AgentBolnaExtractionBinding[]
-  callAnalyses  CallAnalysis[] // [NEW] reverse from CallAnalysis.extractionDispositionId
   callOverviews CallExtractionOverview[] 
   callInsights  CallExtractionInsight[]
 
@@ -861,13 +762,13 @@ model ExtractionDisposition {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INDUSTRY PACK  [CHANGED — removed industry enum field]
+// INDUSTRY PACK 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model IndustryPack {
   id          String  @id @default(uuid())
   slug        String  @unique
-  name        String // [NEW] case-insensitive unique via raw SQL index
+  name        String
   description String?
   icon        String?
 
@@ -880,7 +781,6 @@ model IndustryPack {
 
   platformAgents PlatformAgent[]
 
-  // [NEW] M2M relations
   extractionCategories   ExtractionCategoryIndustry[]
   extractionDispositions ExtractionDispositionIndustry[]
 
@@ -888,10 +788,10 @@ model IndustryPack {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// [NEW] JUNCTION TABLES
+// EXTRACTION JUNCTION TABLES
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Category ↔ Industry M2M ──────────────────────────────────────────────────
+// ── Category ↔ Industry  ──────────────────────────────────────────────────
 model ExtractionCategoryIndustry {
   categoryId     String
   industryPackId String
@@ -903,7 +803,7 @@ model ExtractionCategoryIndustry {
   @@index([industryPackId])
 }
 
-// ── Disposition ↔ Industry M2M ───────────────────────────────────────────────
+// ── Disposition ↔ Industry ───────────────────────────────────────────────
 model ExtractionDispositionIndustry {
   dispositionId  String
   industryPackId String
@@ -915,7 +815,7 @@ model ExtractionDispositionIndustry {
   @@index([industryPackId])
 }
 
-// ── Category ↔ Disposition M2M ───────────────────────────────────────────────
+// ── Category ↔ Disposition ───────────────────────────────────────────────
 model ExtractionCategoryDisposition {
   categoryId    String
   dispositionId String
@@ -928,7 +828,7 @@ model ExtractionCategoryDisposition {
   @@index([dispositionId])
 }
 
-// ── Agent ↔ Category M2M ────────────────────────────────────────────────────
+// ── Agent ↔ Category  ────────────────────────────────────────────────────
 model PlatformAgentCategory {
   platformAgentId String
   categoryId      String
@@ -956,31 +856,6 @@ model AgentBolnaExtractionBinding {
 
   @@unique([platformAgentId, dispositionId])
   @@index([bolnaAgentId])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CALL METRIC 
-// ─────────────────────────────────────────────────────────────────────────────
-
-model CallMetric {
-  id          String   @id @default(uuid())
-  callId      String
-  tenantId    String
-  campaignId  String
-  batchId     String?
-  metricKey   String
-  metricLabel String
-  matched     Boolean
-  actualValue String
-  matchValue  String
-  createdAt   DateTime @default(now())
-
-  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, campaignId, metricKey, actualValue])
-  @@index([tenantId, campaignId, metricKey, matched])
-  @@index([callId])
-  @@index([tenantId, batchId, metricKey])
 }
 
 

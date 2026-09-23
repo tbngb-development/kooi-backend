@@ -4,19 +4,16 @@ import type {
   CampaignRepository,
   CreateCampaignData,
   CampaignStatsResult,
-  CampaignPerformanceResult,
   CampaignListItem,
   AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import { type CampaignStatus } from "@prisma/client";
 import type {
-  CampaignPerformanceV2Result,
   ExtractionInsightDisposition,
   ExtractionInsightResult,
   ExtractionOverviewDisposition,
   ExtractionOverviewResult,
-  PerformanceV2MetricBreakdown,
 } from "../../application/dto/campaign.dto";
 
 export class PrismaCampaignRepository implements CampaignRepository {
@@ -206,252 +203,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
         _count: s._count,
       })),
     };
-  }
-
-  async getPerformance(
-    tenantId: string,
-    campaignId: string,
-    batchId?: string,
-  ): Promise<CampaignPerformanceResult> {
-    const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
-    });
-    if (!campaign) throw new Error("Campaign not found");
-
-    let completedLeads = campaign.completedLeads;
-    if (batchId) {
-      const batch = await prisma.leadBatch.findFirst({
-        where: { id: batchId, campaignId, tenantId },
-      });
-      if (!batch) throw new Error("Batch not found");
-      completedLeads = batch.completedLeads;
-    }
-
-    const QUALIFYING_DISPOSITIONS = [
-      "QUALIFIED_CONSULTANT_FOLLOWUP",
-      "SITE_VISIT_INTEREST",
-      "INTERESTED_SEND_DETAILS",
-      "INTERESTED_GENERAL",
-    ];
-
-    const analyses = await prisma.callAnalysis.findMany({
-      where: {
-        tenantId,
-        call: {
-          campaignId,
-          ...(batchId && { batchId }),
-        },
-      },
-      select: {
-        disposition: true,
-        leadTemperature: true,
-        preferredNextAction: true,
-        doNotCall: true,
-      },
-    });
-
-    const calls = await prisma.call.findMany({
-      where: {
-        campaignId,
-        tenantId,
-        ...(batchId && { batchId }),
-        startedAt: { not: null },
-      },
-      select: {
-        startedAt: true,
-        status: true,
-        callAnalysis: {
-          select: { disposition: true, leadTemperature: true },
-        },
-      },
-    });
-
-    const costAgg = await prisma.call.aggregate({
-      where: {
-        campaignId,
-        tenantId,
-        ...(batchId && { batchId }),
-        platformCost: { not: null },
-      },
-      _sum: { platformCost: true },
-    });
-
-    const totalCostInRupees = (costAgg._sum.platformCost ?? 0) / 100;
-
-    const hourlyStats: Record<
-      number,
-      { total: number; connected: number; qualified: number }
-    > = {};
-
-    for (const call of calls) {
-      if (!call.startedAt) continue;
-      const hour = new Date(call.startedAt).getHours();
-
-      if (!hourlyStats[hour]) {
-        hourlyStats[hour] = { total: 0, connected: 0, qualified: 0 };
-      }
-
-      hourlyStats[hour].total += 1;
-
-      if (call.status === "COMPLETED") {
-        hourlyStats[hour].connected += 1;
-      }
-
-      const disp = call.callAnalysis?.disposition;
-      const temp = call.callAnalysis?.leadTemperature;
-      if (
-        (disp && QUALIFYING_DISPOSITIONS.includes(disp)) ||
-        temp === "HOT" ||
-        temp === "WARM"
-      ) {
-        hourlyStats[hour].qualified += 1;
-      }
-    }
-
-    let bestPickupHour: number | null = null;
-    let maxPickupRate = 0;
-    let bestConversionHour: number | null = null;
-    let maxQualifiedCount = 0;
-
-    for (const [hStr, stat] of Object.entries(hourlyStats)) {
-      const hour = parseInt(hStr, 10);
-      const pickupRate = stat.total > 0 ? stat.connected / stat.total : 0;
-
-      if (pickupRate > maxPickupRate && stat.total >= 1) {
-        maxPickupRate = pickupRate;
-        bestPickupHour = hour;
-      }
-
-      if (stat.qualified > maxQualifiedCount) {
-        maxQualifiedCount = stat.qualified;
-        bestConversionHour = hour;
-      }
-    }
-
-    const formatHourWindow = (hour: number | null): string => {
-      if (hour === null) return "Insufficient Data";
-      const ampmStart = hour >= 12 ? "PM" : "AM";
-      const startHour12 = hour % 12 === 0 ? 12 : hour % 12;
-      const nextHour = (hour + 1) % 24;
-      const ampmEnd = nextHour >= 12 ? "PM" : "AM";
-      const endHour12 = nextHour % 12 === 0 ? 12 : nextHour % 12;
-      return `${startHour12}:00 ${ampmStart} - ${endHour12}:00 ${ampmEnd}`;
-    };
-
-    const hotLeads = analyses.filter((a) => a.leadTemperature === "HOT").length;
-    const callbacks = analyses.filter(
-      (a) =>
-        a.preferredNextAction === "CONSULTANT_CALL" ||
-        a.preferredNextAction === "FOLLOWUP_CALL",
-    ).length;
-    const siteVisits = analyses.filter(
-      (a) =>
-        a.disposition === "SITE_VISIT_INTEREST" ||
-        a.preferredNextAction === "SITE_VISIT",
-    ).length;
-    const dnc = analyses.filter((a) => a.doNotCall === "YES").length;
-
-    const withDisposition = analyses.filter((a) => a.disposition !== null);
-    const qualified = withDisposition.filter(
-      (a) => a.disposition && QUALIFYING_DISPOSITIONS.includes(a.disposition),
-    ).length;
-
-    const qualificationRate =
-      withDisposition.length > 0
-        ? ((qualified / withDisposition.length) * 100).toFixed(1)
-        : "0.0";
-
-    const costPerLead =
-      completedLeads > 0
-        ? parseFloat((totalCostInRupees / completedLeads).toFixed(2))
-        : 0;
-
-    return {
-      hotLeads,
-      callbacks,
-      siteVisits,
-      dnc,
-      totalCost: totalCostInRupees,
-      costPerLead,
-      qualificationRate,
-      bestPickupTime: formatHourWindow(bestPickupHour),
-      bestConversionTime: formatHourWindow(bestConversionHour),
-      topBudget: "N/A",
-      topConfiguration: "N/A",
-    };
-  }
-
-  async getPerformanceV2(
-    tenantId: string,
-    campaignId: string,
-    batchId?: string,
-  ): Promise<CampaignPerformanceV2Result> {
-    const rows = await prisma.callMetric.groupBy({
-      by: ["metricKey", "metricLabel", "actualValue", "matched", "matchValue"],
-      where: {
-        tenantId,
-        campaignId,
-        ...(batchId && { batchId }),
-      },
-      _count: true,
-    });
-
-    if (rows.length === 0) {
-      return { metrics: [] };
-    }
-
-    const metricMap = new Map<
-      string,
-      {
-        label: string;
-        totalEvaluated: number;
-        matched: number;
-        actualValue: string;
-        matchValue: string;
-        valueCounts: Record<string, number>;
-      }
-    >();
-
-    for (const row of rows) {
-      let acc = metricMap.get(row.metricKey);
-      if (!acc) {
-        acc = {
-          label: row.metricLabel,
-          actualValue: row.actualValue,
-          matchValue: row.matchValue,
-          totalEvaluated: 0,
-          matched: 0,
-          valueCounts: {},
-        };
-        metricMap.set(row.metricKey, acc);
-      }
-
-      const count = row._count;
-      acc.totalEvaluated += count;
-      if (row.matched) acc.matched += count;
-      acc.valueCounts[row.actualValue] = count;
-    }
-
-    const metrics: PerformanceV2MetricBreakdown[] = [];
-    for (const [key, acc] of metricMap) {
-      const matchRate =
-        acc.totalEvaluated > 0
-          ? parseFloat(((acc.matched / acc.totalEvaluated) * 100).toFixed(1))
-          : 0;
-
-      metrics.push({
-        key,
-        label: acc.label,
-        totalEvaluated: acc.totalEvaluated,
-        matched: acc.matched,
-        actualValue: acc.actualValue,
-        matchValue: acc.matchValue,
-        matchRate,
-        actualValueBreakdown: acc.valueCounts,
-      });
-    }
-
-    return { metrics };
   }
 
   async getExtractionOverview(
@@ -701,7 +452,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  // ── REMOVED checkBrochureConfirmed ──
 
   private toEntityData(campaign: {
     id: string;

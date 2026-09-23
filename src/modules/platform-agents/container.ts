@@ -25,7 +25,7 @@ import { GetAgentExtractionsUseCase } from "./application/use-cases/get-agent-ex
 import { SyncExtractionsToBolnaUseCase } from "./application/use-cases/sync-extractions-to-bolna.use-case";
 
 import { AdminPlatformAgentController } from "./presentation/admin-platform-agent.controller";
-import { UpdateExtractionConfigUseCase } from "./application/use-cases/update-extraction-config.use-case";
+import { UpdatePlatformAgentVariablesUseCase } from "./application/use-cases/update_platform-agent-variables";
 
 export interface PlatformAgentModule {
   adminController: AdminPlatformAgentController;
@@ -80,7 +80,7 @@ export function buildPlatformAgentModule(): PlatformAgentModule {
         extractionRepository,
         bolnaExtractionSyncService,
       ),
-      new UpdateExtractionConfigUseCase(repository),
+      new UpdatePlatformAgentVariablesUseCase(repository),
     ),
   };
 }
