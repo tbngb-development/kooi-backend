@@ -5,6 +5,7 @@ export interface RegisterTenantOwnerInput {
   password: string;
   termsAccepted: boolean;
   termsVersion: string;
+  otp: string;
 }
 
 export interface RegisterTenantOwnerOutput {

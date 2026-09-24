@@ -7,6 +7,7 @@ import type {
   LogoutBody,
   CreateInviteBody,
   AcceptInviteBody,
+  SendRegisterOtpBody,
 } from "./auth.schema";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import { AuthMapper } from "./auth.mapper";
@@ -39,6 +40,7 @@ import type {
   ResetPasswordBody,
   ChangePasswordBody,
 } from "./auth.schema";
+import type { SendRegisterOtpUseCase } from "../application/use-cases/send-register-otp.use-case";
 
 const DEFAULT_ACCESS_EXPIRY = 900;
 const DEFAULT_REFRESH_EXPIRY = 604800;
@@ -57,7 +59,21 @@ export class TenantAuthController {
     private readonly verifyForgotPasswordOtpUseCase: VerifyForgotPasswordOtpUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly changePasswordUseCase: ChangePasswordUseCase,
+    private readonly sendRegisterOtpUseCase: SendRegisterOtpUseCase,
   ) {}
+
+  sendRegisterOtp = async (
+    req: Request<unknown, unknown, SendRegisterOtpBody>,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const output = await this.sendRegisterOtpUseCase.execute(req.body);
+      sendSuccess(res, output, HttpStatus.OK);
+    } catch (err) {
+      next(err);
+    }
+  };
 
   register = async (
     req: Request<unknown, unknown, RegisterTenantOwnerBody>,
