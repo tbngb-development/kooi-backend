@@ -6,20 +6,44 @@ import type {
 import { type AuthRepository } from "../interfaces/auth-repository.interface";
 import { type PasswordService } from "../interfaces/password-service.interface";
 import { type TokenService } from "../interfaces/token-service.interface";
-import { EmailAlreadyExistsError } from "../../domain/errors/auth.errors";
+import { type OtpService } from "../interfaces/otp-service.interface"; // <-- Added
+import {
+  EmailAlreadyExistsError,
+  InvalidOtpError,
+  OtpMaxAttemptsError,
+} from "../../domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../domain/rules/password.rules";
+
+const OTP_PURPOSE = "register";
 
 export class RegisterTenantOwnerUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
+    private readonly otpService: OtpService,
   ) {}
 
   async execute(
     input: RegisterTenantOwnerInput,
   ): Promise<RegisterTenantOwnerOutput> {
-    // 1. Validate password strength
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    // 1. Verify OTP first (prevents resource consumption on incorrect codes)
+    const verification = await this.otpService.verify(
+      OTP_PURPOSE,
+      normalizedEmail,
+      input.otp,
+    );
+
+    if (verification.maxAttemptsExceeded) {
+      throw new OtpMaxAttemptsError();
+    }
+    if (!verification.valid) {
+      throw new InvalidOtpError();
+    }
+
+    // 2. Validate password strength
     const passwordValidation = validatePasswordStrength(input.password);
     if (!passwordValidation.isValid) {
       throw new ValidationError(
@@ -30,25 +54,29 @@ export class RegisterTenantOwnerUseCase {
       );
     }
 
-    // 2. Check existing user
-    const existingUser = await this.authRepository.findUserByEmail(input.email);
+    // 3. Check existing user
+    const existingUser =
+      await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new EmailAlreadyExistsError();
     }
 
-    // 3. Hash password
+    // 4. Hash password
     const passwordHash = await this.passwordService.hash(input.password);
 
-    // 4. Create tenant + user + membership in transaction
+    // 5. Create tenant + user + membership in transaction
     const result = await this.authRepository.registerTenantOwner({
       tenantName: input.tenantName,
-      tenantEmail: input.email,
-      userEmail: input.email,
+      tenantEmail: normalizedEmail,
+      userEmail: normalizedEmail,
       userName: input.name,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: input.termsVersion,
       passwordHash,
     });
 
-    // 5. Generate tokens
+    // 6. Generate tokens
     const accessToken = this.tokenService.generateAccessToken({
       userId: result.user.id,
       membershipId: result.membershipId,

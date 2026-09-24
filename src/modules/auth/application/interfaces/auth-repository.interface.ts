@@ -9,6 +9,9 @@ export interface RegisterTenantOwnerData {
   tenantEmail: string;
   userEmail: string;
   userName: string;
+  termsAccepted: boolean;
+  termsAcceptedAt: Date;
+  termsVersion: string;
   passwordHash: string;
 }
 

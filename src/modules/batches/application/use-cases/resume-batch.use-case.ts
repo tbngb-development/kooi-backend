@@ -1,8 +1,8 @@
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
 import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
-import type { BolnaBatchProvider } from "../../infrastructure/bolna-batch-provider.interface";
 import type { ResumeBatchOutput } from "../dto/batch.dto";
+import type { BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import {
   BatchNotFoundError,
   BatchOperationError,
@@ -56,6 +56,9 @@ export class ResumeBatchUseCase {
       fileName: `resume-${batchData.fileName ?? batchId}`,
       totalLeads: pendingLeads.length,
       retryConfig: batchData.retryConfig,
+      termsAccepted: batchData.termsAccepted,
+      termsAcceptedAt: new Date(),
+      termsVersion: batchData.termsVersion ?? "v1",
     });
 
     // Reassign leads
@@ -88,7 +91,7 @@ export class ResumeBatchUseCase {
     let bolnaBatchId: string;
     try {
       const result = await this.bolnaProvider.createBatch(tenantId, {
-       agentId: campaign.assistant.platformAgent.bolnaId,
+        agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `resume-${newBatch.id}.csv`,
         retryConfig: retryConfig as unknown as RetryConfig,

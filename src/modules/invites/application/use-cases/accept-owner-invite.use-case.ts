@@ -67,6 +67,9 @@ export class AcceptOwnerInviteUseCase {
       tenantEmail: invite.email,
       userEmail: invite.email,
       userName: input.name,
+      termsAccepted: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: input.termsVersion,
       passwordHash,
     });
 

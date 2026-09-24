@@ -90,6 +90,8 @@ export interface AcceptOwnerInviteInput {
   email: string;
   name: string;
   password: string;
+  termsAccepted: boolean;
+  termsVersion: string;
 }
 
 export interface AcceptOwnerInviteResponse {

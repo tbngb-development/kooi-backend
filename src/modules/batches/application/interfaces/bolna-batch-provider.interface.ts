@@ -1,5 +1,3 @@
-import type { RetryConfig } from "../../../shared/types/bolna.types";
-
 export interface BolnaBatchCreateParams {
   agentId: string;
   csvBuffer: Buffer;
@@ -22,8 +20,9 @@ import type {
   BolnaBatchScheduleResponse,
   BolnaBatchStatus,
   BolnaExecution,
-} from "../../../shared/types/bolna.types";
-import type { CreateBatchParams } from "../../../shared/config/external/bolna/bolna.client";
+  RetryConfig
+} from "../../../../shared/types/bolna.types";
+import type { CreateBatchParams } from "../../../../shared/config/external/bolna/bolna.client";
 
 export interface BolnaBatchProvider {
   createBatch(

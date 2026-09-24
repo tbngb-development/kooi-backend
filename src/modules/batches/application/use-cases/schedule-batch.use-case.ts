@@ -1,7 +1,6 @@
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
-import type { BolnaBatchProvider } from "../../infrastructure/bolna-batch-provider.interface";
 import type { CheckBalanceForBatchUseCase } from "../../../wallet/application/use-cases/check-balance-for-batch.use-case";
 import {
   BatchNotFoundError,
@@ -14,6 +13,7 @@ import {
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
 import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
+import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 
 export class ScheduleBatchUseCase {
   constructor(

@@ -105,7 +105,27 @@ export class TenantBatchController {
       const runImmediately =
         req.body.runImmediately === "true" || req.body.runImmediately === true;
 
-      // 3. Delegate execution
+      // 2b. Resolve terms acceptance (multipart sends strings)
+      const termsAccepted =
+        req.body.termsAccepted === "true" || req.body.termsAccepted === true;
+      const termsVersion = req.body.termsVersion as string | undefined;
+
+      if (!termsAccepted) {
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          error: "You must accept the Terms & Conditions to upload leads.",
+        });
+        return;
+      }
+
+      if (!termsVersion || termsVersion.trim().length === 0) {
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          error: "termsVersion is required.",
+        });
+        return;
+      }
+
       const data = await this.createBatchUseCase.execute({
         tenantId,
         campaignId,
@@ -114,6 +134,8 @@ export class TenantBatchController {
         retryConfig,
         scheduledAt,
         runImmediately,
+        termsAccepted: true,
+        termsVersion: termsVersion.trim(),
       });
 
       sendSuccess(res, data, HttpStatus.CREATED);

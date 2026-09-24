@@ -13,6 +13,10 @@ const nameSchema = z
   .max(100, "Name too long")
   .trim();
 
+export const sendRegisterOtpSchema = z.object({
+  email: emailSchema,
+});
+
 export const registerTenantOwnerSchema = z.object({
   tenantName: z
     .string()
@@ -22,6 +26,14 @@ export const registerTenantOwnerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   name: nameSchema,
+  termsAccepted: z.literal(true, {
+    message: "You must accept the Terms & Conditions to continue.",
+  }),
+  termsVersion: z.string().min(1, "Terms version is required").max(20),
+  otp: z
+    .string()
+    .length(6, "Verification code must be 6 digits")
+    .regex(/^\d{6}$/, "Verification code must be numeric"),
 });
 
 export const loginSchema = z.object({
@@ -97,6 +109,7 @@ export const changePasswordSchema = z
     path: ["newPassword"],
   });
 
+export type SendRegisterOtpBody = z.infer<typeof sendRegisterOtpSchema>;
 export type RegisterTenantOwnerBody = z.infer<typeof registerTenantOwnerSchema>;
 export type LoginBody = z.infer<typeof loginSchema>;
 export type SelectTenantBody = z.infer<typeof selectTenantSchema>;

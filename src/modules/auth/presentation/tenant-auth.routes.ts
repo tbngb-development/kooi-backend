@@ -15,6 +15,7 @@ import {
   verifyForgotPasswordOtpSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  sendRegisterOtpSchema,
 } from "./auth.schema";
 
 export function buildTenantAuthRoutes(
@@ -25,6 +26,13 @@ export function buildTenantAuthRoutes(
   const router = Router();
 
   // Public routes
+
+  router.post(
+    "/register/send-otp",
+    validate(sendRegisterOtpSchema),
+    controller.sendRegisterOtp,
+  );
+
   router.post(
     "/register",
     validate(registerTenantOwnerSchema),

@@ -23,6 +23,9 @@ export interface LeadBatchEntityData {
   calledLeads: number;
   completedLeads: number;
   failedLeads: number;
+  termsAccepted: boolean;
+  termsAcceptedAt: Date | null;
+  termsVersion: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

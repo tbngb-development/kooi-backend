@@ -1,4 +1,4 @@
-import type { BolnaBatchProvider } from "./bolna-batch-provider.interface";
+import type { BolnaBatchProvider } from "../application/interfaces/bolna-batch-provider.interface";
 import type { IBolnaClientFactory } from "../../../shared/config/external/bolna/bolna-client.factory";
 import type { CreateBatchParams } from "../../../shared/config/external/bolna/bolna.client";
 
