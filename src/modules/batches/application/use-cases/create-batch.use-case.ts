@@ -2,7 +2,6 @@ import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
-import type { BolnaBatchProvider } from "../../infrastructure/bolna-batch-provider.interface";
 import type { CreateBatchInput, CreateBatchOutput } from "../dto/batch.dto";
 import {
   CampaignNotFoundError,
@@ -32,6 +31,7 @@ import {
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
 import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
+import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 
 export class CreateBatchUseCase {
   constructor(
@@ -39,7 +39,7 @@ export class CreateBatchUseCase {
     private readonly campaignRepo: CampaignRepository,
     private readonly storage: FileStorageProvider,
     private readonly bolnaProvider: BolnaBatchProvider,
-    private readonly planRepo: PlanRepository, // [INJECTED]
+    private readonly planRepo: PlanRepository, 
   ) {}
 
   async execute(input: CreateBatchInput): Promise<CreateBatchOutput> {

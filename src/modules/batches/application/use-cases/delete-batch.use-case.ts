@@ -1,10 +1,10 @@
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
-import type { BolnaBatchProvider } from "../../infrastructure/bolna-batch-provider.interface";
 import {
   BatchNotFoundError,
   BatchActiveDeleteError,
 } from "../../domain/errors/batch.errors";
 import { isBatchActive } from "../../domain/entities/batch-status.rules";
+import type { BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 
 export class DeleteBatchUseCase {
   constructor(

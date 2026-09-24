@@ -1,11 +1,11 @@
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
-import type { BolnaBatchProvider } from "../../infrastructure/bolna-batch-provider.interface";
 import {
   BatchNotFoundError,
   BatchOperationError,
 } from "../../domain/errors/batch.errors";
 import { isBatchTerminal } from "../../domain/entities/batch-status.rules";
+import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 
 export class StopBatchUseCase {
   constructor(
@@ -43,7 +43,7 @@ export class StopBatchUseCase {
     });
 
     // 3. Mark all never-dialed leads in this batch as STOPPED
-  await this.batchRepo.markPendingLeadsAsStopped(batchId,'MANUAL');
+    await this.batchRepo.markPendingLeadsAsStopped(batchId, "MANUAL");
 
     // 4. Recalculate campaign status
     await this.checkAndUpdateCampaignStatus(campaignId);
