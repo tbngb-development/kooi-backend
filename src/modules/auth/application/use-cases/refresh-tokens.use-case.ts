@@ -29,8 +29,10 @@ export class RefreshTokensUseCase {
       throw new RefreshTokenInvalidError();
     }
 
-    // 3. Check revocation
+    // 3. REUSE DETECTION: If this token was already revoked,
+    //    someone is replaying a stolen token. Kill the entire family.
     if (storedToken.revokedAt !== null) {
+      await this.authRepository.revokeRefreshTokenFamily(storedToken.familyId);
       throw new RefreshTokenInvalidError();
     }
 
@@ -70,12 +72,16 @@ export class RefreshTokensUseCase {
       );
     }
 
-    // 8. Generate new refresh token
-    const refreshTokenData = this.tokenService.generateRefreshToken(user.id);
+    // 8. Generate new refresh token INHERITING the same family
+    const refreshTokenData = this.tokenService.generateRefreshTokenForFamily(
+      user.id,
+      storedToken.familyId, // ← Same family chain
+    );
 
     await this.authRepository.saveRefreshToken({
       tokenHash: refreshTokenData.tokenHash,
       userId: user.id,
+      familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
     });
 

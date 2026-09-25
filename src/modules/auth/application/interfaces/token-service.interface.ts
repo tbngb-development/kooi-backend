@@ -22,16 +22,25 @@ export interface TenantTokenContext {
 
 export interface TokenService {
   generateAccessToken(context: TenantTokenContext): string;
-  generateBaseAccessToken(
-    userId: string,
-    isPlatformAdmin: boolean,
-  ): string;
+  generateBaseAccessToken(userId: string, isPlatformAdmin: boolean): string;
   generateAdminAccessToken(userId: string): string;
   generateRefreshToken(userId: string): {
     rawToken: string;
     tokenHash: string;
+    familyId: string;
     expiresIn: number;
   };
+
+  generateRefreshTokenForFamily(
+    userId: string,
+    familyId: string,
+  ): {
+    rawToken: string;
+    tokenHash: string;
+    familyId: string;
+    expiresIn: number;
+  };
+
   generateInviteToken(
     tenantId: string,
     role: TenantRole,

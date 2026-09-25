@@ -194,6 +194,7 @@ export class PrismaAuthRepository implements AuthRepository {
       data: {
         tokenHash: data.tokenHash,
         userId: data.userId,
+        familyId: data.familyId,
         expiresAt: data.expiresAt,
       },
     });
@@ -203,6 +204,7 @@ export class PrismaAuthRepository implements AuthRepository {
   async findRefreshToken(tokenHash: string): Promise<{
     id: string;
     userId: string;
+    familyId: string;
     expiresAt: Date;
     revokedAt: Date | null;
   } | null> {
@@ -211,6 +213,7 @@ export class PrismaAuthRepository implements AuthRepository {
       select: {
         id: true,
         userId: true,
+        familyId: true,
         expiresAt: true,
         revokedAt: true,
       },
@@ -224,11 +227,30 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
+  async revokeRefreshTokenFamily(familyId: string): Promise<void> {
+    await prisma.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async revokeAllUserRefreshTokens(userId: string): Promise<void> {
     await prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+  
+  async cleanupExpiredRefreshTokens(olderThanDays: number): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - olderThanDays);
+
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        OR: [{ expiresAt: { lt: cutoff } }, { revokedAt: { lt: cutoff } }],
+      },
+    });
+    return result.count;
   }
 
   async updateUserPassword(
