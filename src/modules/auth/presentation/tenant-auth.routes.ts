@@ -17,6 +17,12 @@ import {
   changePasswordSchema,
   sendRegisterOtpSchema,
 } from "./auth.schema";
+import {
+  loginLimiter,
+  registerLimiter,
+  otpRequestLimiter,
+  otpCooldownLimiter,
+} from "../../../shared/middleware/rate-limiters";
 
 export function buildTenantAuthRoutes(
   controller: TenantAuthController,
@@ -26,37 +32,46 @@ export function buildTenantAuthRoutes(
   const router = Router();
 
   // Public routes
-
   router.post(
     "/register/send-otp",
+    otpCooldownLimiter, // Must wait 60s
+    otpRequestLimiter, // Max 3 per 10 mins
     validate(sendRegisterOtpSchema),
     controller.sendRegisterOtp,
   );
 
   router.post(
     "/register",
+    registerLimiter, // Max 5 creations per hour
     validate(registerTenantOwnerSchema),
     controller.register,
   );
-  router.post("/login", validate(loginSchema), controller.login);
+
   router.post(
-    "/accept-invite",
-    validate(acceptInviteSchema),
-    controller.acceptInvite,
+    "/login",
+    loginLimiter, // Max 10 per 15 mins
+    validate(loginSchema),
+    controller.login,
   );
 
   router.post(
     "/forgot-password",
+    otpCooldownLimiter, // Must wait 60s
+    otpRequestLimiter, // Max 3 per 10 mins
     validate(forgotPasswordSchema),
     controller.forgotPassword,
   );
+
   router.post(
     "/forgot-password/verify-otp",
+    loginLimiter,
     validate(verifyForgotPasswordOtpSchema),
     controller.verifyForgotPasswordOtp,
   );
+
   router.post(
     "/reset-password",
+    loginLimiter,
     validate(resetPasswordSchema),
     controller.resetPassword,
   );
@@ -81,12 +96,19 @@ export function buildTenantAuthRoutes(
     controller.selectTenant,
   );
   router.get("/profile", authenticate.any(), controller.profile);
+
   router.post(
     "/invites",
     authenticate.tenant(),
     authorize.tenantRoles("OWNER", "ADMIN"),
     validate(createInviteSchema),
     controller.createInvite,
+  );
+
+  router.post(
+    "/accept-invite",
+    validate(acceptInviteSchema),
+    controller.acceptInvite,
   );
 
   return router;
