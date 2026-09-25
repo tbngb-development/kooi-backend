@@ -6,10 +6,7 @@ import { ForbiddenError } from "../errors/forbidden.error";
 import { AuthMessages } from "../constants/messages";
 import { COOKIE_ACCESS_TOKEN } from "../constants/cookies";
 import { BEARER_PREFIX, HEADER_AUTHORIZATION } from "../constants/headers";
-import type {
-  AuthContext,
-  TenantAuthContext,
-} from "../types";
+import type { AuthContext, TenantAuthContext } from "../types";
 
 export class AuthenticateMiddleware {
   constructor(
@@ -62,6 +59,7 @@ export class AuthenticateMiddleware {
   private async resolveContext(req: Request): Promise<AuthContext> {
     let token: string | undefined;
 
+    // 1. Extract token from Cookie or Bearer Header
     if (req.cookies?.[COOKIE_ACCESS_TOKEN]) {
       token = req.cookies[COOKIE_ACCESS_TOKEN] as string;
     }
@@ -80,39 +78,46 @@ export class AuthenticateMiddleware {
       throw new UnauthorizedError(AuthMessages.TOKEN_NOT_PROVIDED);
     }
 
+    // 2. Cryptographically verify JWT signature & expiration
     const payload = this.tokenService.verifyAccessToken(token);
+
+    // 3. SINGLE DB QUERY: Fetch user and all memberships
     const user = await this.authRepository.findUserById(payload.userId);
     if (!user) {
       throw new UnauthorizedError(AuthMessages.USER_NOT_FOUND);
     }
 
-    if (
-      payload.type === "tenant" &&
-      payload.tenantId &&
-      payload.membershipId &&
-      payload.tenantRole
-    ) {
-      const membership = await this.authRepository.findMembership(
-        payload.userId,
-        payload.tenantId,
+    // Security Check: Deactivated users fail immediately
+    if (!user.isActive) {
+      throw new ForbiddenError("Your account has been deactivated.");
+    }
+
+    // 4. TENANT SCOPE: Resolved 100% IN-MEMORY (0 extra DB queries)
+    if (payload.type === "tenant" && payload.tenantId) {
+      const membership = user.memberships.find(
+        (m) => m.tenantId === payload.tenantId,
       );
-      if (!membership)
+
+      if (!membership) {
         throw new UnauthorizedError(AuthMessages.MEMBERSHIP_NOT_FOUND);
-      if (!membership.tenantActive)
+      }
+      if (!membership.tenantActive) {
         throw new ForbiddenError(AuthMessages.TENANT_INACTIVE);
+      }
 
       return {
         type: "tenant",
         userId: user.id,
         email: user.email,
-        membershipId: payload.membershipId,
-        tenantId: payload.tenantId,
-        tenantRole: payload.tenantRole,
-        isPlatformAdmin: payload.isPlatformAdmin,
+        membershipId: membership.id,
+        tenantId: membership.tenantId,
+        tenantRole: membership.role,
+        isPlatformAdmin: user.isPlatformAdmin,
       };
     }
 
-    if (payload.type === "admin" && payload.isPlatformAdmin) {
+    // 5. PLATFORM ADMIN SCOPE: Verified against fresh DB user
+    if (payload.type === "admin" && user.isPlatformAdmin) {
       return {
         type: "admin",
         userId: user.id,
@@ -121,11 +126,12 @@ export class AuthenticateMiddleware {
       };
     }
 
+    // 6. BASE (UNSCOPED) CONTEXT
     return {
       type: "base",
       userId: user.id,
       email: user.email,
-      isPlatformAdmin: payload.isPlatformAdmin,
+      isPlatformAdmin: user.isPlatformAdmin,
     };
   }
 }
