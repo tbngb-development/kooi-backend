@@ -85,7 +85,7 @@ model RefreshToken {
   id        String    @id @default(uuid())
   tokenHash String    @unique
   userId    String
-  familyId  String? 
+  familyId  String 
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())

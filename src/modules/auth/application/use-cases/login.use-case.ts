@@ -14,7 +14,7 @@ export class LoginUseCase {
   ) {}
 
   async execute(input: LoginInput): Promise<LoginOutput> {
-    // 1. Find user
+    // 1. Find and validate user status
     const user = await this.authRepository.findUserByEmail(input.email);
     if (!user) {
       throw new InvalidCredentialsError();
@@ -22,7 +22,7 @@ export class LoginUseCase {
 
     if (!user.isActive) {
       throw new ForbiddenError(
-        `Your account has been deactivated by the platform administrator. Please contact the support team for assistance.`,
+        "Your account has been deactivated. Please contact support.",
       );
     }
 
@@ -35,8 +35,8 @@ export class LoginUseCase {
       throw new InvalidCredentialsError();
     }
 
-    // 3. Build memberships list
-    const memberships: MembershipInfo[] = user.memberships
+    // 3. Collect active memberships
+    const activeMemberships: MembershipInfo[] = user.memberships
       .filter((m) => m.tenantActive)
       .map((m) => ({
         membershipId: m.id,
@@ -45,71 +45,43 @@ export class LoginUseCase {
         role: m.role,
       }));
 
-    const userResponse = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      isPlatformAdmin: user.isPlatformAdmin,
-    };
+    // 4. Resolve Target Membership
+    let selectedMembership: MembershipInfo | null = null;
+    let requiresTenantSelection = false;
 
-    // 4. Determine token strategy
-    const activeMemberships = memberships;
-
-    // Case A: tenantId explicitly provided
     if (input.tenantId) {
-      const membership = activeMemberships.find(
-        (m) => m.tenantId === input.tenantId,
-      );
-      if (!membership) {
+      // Explicit tenant requested
+      selectedMembership =
+        activeMemberships.find((m) => m.tenantId === input.tenantId) ?? null;
+      if (!selectedMembership) {
         throw new InvalidCredentialsError();
       }
-      return this.buildTokenResponse(
-        user.id,
-        user.isPlatformAdmin,
-        membership,
-        memberships,
-        userResponse,
-      );
+    } else if (activeMemberships.length === 1) {
+      // Auto-select single membership (UX optimization)
+      selectedMembership = activeMemberships[0];
+    } else {
+      // 0 or >1 memberships (user must select tenant next)
+      requiresTenantSelection = true;
     }
 
-    // Case B: Single membership — auto-select
-    if (activeMemberships.length === 1) {
-      return this.buildTokenResponse(
-        user.id,
-        user.isPlatformAdmin,
-        activeMemberships[0],
-        memberships,
-        userResponse,
-      );
-    }
-
-    // Case C: Zero memberships but platform admin
-    if (activeMemberships.length === 0 && user.isPlatformAdmin) {
-      const accessToken = this.tokenService.generateAdminAccessToken(user.id);
-      const refreshTokenData = this.tokenService.generateRefreshToken(user.id);
-      await this.authRepository.saveRefreshToken({
-        tokenHash: refreshTokenData.tokenHash,
+    // 5. Generate appropriate Access Token
+    let accessToken: string;
+    if (selectedMembership) {
+      accessToken = this.tokenService.generateAccessToken({
         userId: user.id,
-        familyId: refreshTokenData.familyId,
-        expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+        membershipId: selectedMembership.membershipId,
+        tenantId: selectedMembership.tenantId,
+        tenantRole: selectedMembership.role,
+        isPlatformAdmin: user.isPlatformAdmin,
       });
-
-      return {
-        accessToken,
-        refreshToken: refreshTokenData.rawToken,
-        accessTokenExpiresIn: 900,
-        refreshTokenExpiresIn: refreshTokenData.expiresIn,
-        requiresTenantSelection: false,
-        user: userResponse,
-        memberships,
-      };
+    } else {
+      accessToken = this.tokenService.generateBaseAccessToken(
+        user.id,
+        user.isPlatformAdmin,
+      );
     }
 
-    // Case D: Multiple memberships — require selection
-    const baseAccessToken = this.tokenService.generateBaseAccessToken(
-      user.id,
-      user.isPlatformAdmin,
-    );
+    // 6. Generate and save Refresh Token (Single place!)
     const refreshTokenData = this.tokenService.generateRefreshToken(user.id);
     await this.authRepository.saveRefreshToken({
       tokenHash: refreshTokenData.tokenHash,
@@ -119,48 +91,18 @@ export class LoginUseCase {
     });
 
     return {
-      accessToken: baseAccessToken,
-      refreshToken: refreshTokenData.rawToken,
-      accessTokenExpiresIn: 900,
-      refreshTokenExpiresIn: refreshTokenData.expiresIn,
-      requiresTenantSelection: true,
-      user: userResponse,
-      memberships,
-    };
-  }
-
-  private async buildTokenResponse(
-    userId: string,
-    isPlatformAdmin: boolean,
-    membership: MembershipInfo,
-    memberships: MembershipInfo[],
-    userResponse: LoginOutput["user"],
-  ): Promise<LoginOutput> {
-    const accessToken = this.tokenService.generateAccessToken({
-      userId,
-      membershipId: membership.membershipId,
-      tenantId: membership.tenantId,
-      tenantRole: membership.role,
-      isPlatformAdmin,
-    });
-
-    const refreshTokenData = this.tokenService.generateRefreshToken(userId);
-
-    await this.authRepository.saveRefreshToken({
-      tokenHash: refreshTokenData.tokenHash,
-      userId,
-      familyId: refreshTokenData.familyId,
-      expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
-    });
-
-    return {
       accessToken,
       refreshToken: refreshTokenData.rawToken,
       accessTokenExpiresIn: 900,
       refreshTokenExpiresIn: refreshTokenData.expiresIn,
-      requiresTenantSelection: false,
-      user: userResponse,
-      memberships,
+      requiresTenantSelection,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isPlatformAdmin: user.isPlatformAdmin,
+      },
+      memberships: activeMemberships,
     };
   }
 }
