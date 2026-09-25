@@ -26,7 +26,6 @@ export class TenantCallController {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
       const query = req.query as unknown as ListCallsQuery;
-      console.log("list call query: ", query)
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
