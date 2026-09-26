@@ -172,6 +172,7 @@ export class TenantAuthController {
       );
       sendSuccess(res, AuthMapper.toRefreshResponse(), HttpStatus.OK);
     } catch (err) {
+      this.clearTokenCookies(res);
       next(err);
     }
   };

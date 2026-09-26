@@ -1,11 +1,16 @@
-import type { Request, RequestHandler } from "express";
+import type { Request, Response, RequestHandler } from "express";
 import type { TokenService } from "../../modules/auth/application/interfaces/token-service.interface";
 import type { AuthRepository } from "../../modules/auth/application/interfaces/auth-repository.interface";
 import { UnauthorizedError } from "../errors/unauthorized.error";
 import { ForbiddenError } from "../errors/forbidden.error";
 import { AuthMessages } from "../constants/messages";
-import { COOKIE_ACCESS_TOKEN } from "../constants/cookies";
+import {
+  COOKIE_ACCESS_TOKEN,
+  COOKIE_REFRESH_TOKEN,
+  getCookieSameSite,
+} from "../constants/cookies";
 import { BEARER_PREFIX, HEADER_AUTHORIZATION } from "../constants/headers";
+import { env } from "../config/env";
 import type { AuthContext, TenantAuthContext } from "../types";
 
 export class AuthenticateMiddleware {
@@ -15,9 +20,9 @@ export class AuthenticateMiddleware {
   ) {}
 
   any(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         (req as Request & { user: AuthContext }).user = context;
         next();
       } catch (err) {
@@ -27,9 +32,9 @@ export class AuthenticateMiddleware {
   }
 
   tenant(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         if (context.type !== "tenant") {
           throw new ForbiddenError(AuthMessages.MULTIPLE_TENANTS);
         }
@@ -42,9 +47,9 @@ export class AuthenticateMiddleware {
   }
 
   admin(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         if (!context.isPlatformAdmin) {
           throw new ForbiddenError(AuthMessages.NOT_PLATFORM_ADMIN);
         }
@@ -56,10 +61,12 @@ export class AuthenticateMiddleware {
     };
   }
 
-  private async resolveContext(req: Request): Promise<AuthContext> {
+  private async resolveContext(
+    req: Request,
+    res: Response,
+  ): Promise<AuthContext> {
     let token: string | undefined;
 
-    // 1. Extract token from Cookie or Bearer Header
     if (req.cookies?.[COOKIE_ACCESS_TOKEN]) {
       token = req.cookies[COOKIE_ACCESS_TOKEN] as string;
     }
@@ -78,21 +85,24 @@ export class AuthenticateMiddleware {
       throw new UnauthorizedError(AuthMessages.TOKEN_NOT_PROVIDED);
     }
 
-    // 2. Cryptographically verify JWT signature & expiration
     const payload = this.tokenService.verifyAccessToken(token);
 
-    // 3. SINGLE DB QUERY: Fetch user and all memberships
+    // Single DB query: fetch user & memberships
     const user = await this.authRepository.findUserById(payload.userId);
     if (!user) {
+      this.clearCookies(res);
       throw new UnauthorizedError(AuthMessages.USER_NOT_FOUND);
     }
 
-    // Security Check: Deactivated users fail immediately
+    // CRITICAL: Deactivated user must return 401 and wipe cookies
     if (!user.isActive) {
-      throw new ForbiddenError("Your account has been deactivated.");
+      this.clearCookies(res);
+      throw new UnauthorizedError(
+        "Your account has been deactivated. Please contact support.",
+      );
     }
 
-    // 4. TENANT SCOPE: Resolved 100% IN-MEMORY (0 extra DB queries)
+    // Tenant context
     if (payload.type === "tenant" && payload.tenantId) {
       const membership = user.memberships.find(
         (m) => m.tenantId === payload.tenantId,
@@ -116,7 +126,7 @@ export class AuthenticateMiddleware {
       };
     }
 
-    // 5. PLATFORM ADMIN SCOPE: Verified against fresh DB user
+    // Platform admin context
     if (payload.type === "admin" && user.isPlatformAdmin) {
       return {
         type: "admin",
@@ -126,12 +136,20 @@ export class AuthenticateMiddleware {
       };
     }
 
-    // 6. BASE (UNSCOPED) CONTEXT
     return {
       type: "base",
       userId: user.id,
       email: user.email,
       isPlatformAdmin: user.isPlatformAdmin,
     };
+  }
+
+  private clearCookies(res: Response): void {
+    const isProduction = env.nodeEnv === "production";
+    const sameSite = getCookieSameSite(isProduction);
+    const opts = { httpOnly: true, secure: isProduction, sameSite, path: "/" };
+
+    res.clearCookie(COOKIE_ACCESS_TOKEN, opts);
+    res.clearCookie(COOKIE_REFRESH_TOKEN, opts);
   }
 }

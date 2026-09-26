@@ -50,6 +50,11 @@ export class RefreshTokensUseCase {
       throw new NotFoundError("User");
     }
 
+    //Block de-activated users from acquiring new sessions
+    if (!user.isActive) {
+      throw new RefreshTokenInvalidError();
+    }
+
     // 7. Determine token type based on user's memberships
     const activeMemberships = user.memberships.filter((m) => m.tenantActive);
 
