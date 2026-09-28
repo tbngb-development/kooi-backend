@@ -1,13 +1,13 @@
 import { AuthMessages } from "../../../../shared/constants";
 import { ForbiddenError, ValidationError } from "../../../../shared/errors";
-import type {
-  AcceptInviteInput,
-  AcceptInviteOutput,
-} from "../dto/invite.dto";
+import type { AcceptInviteInput, AcceptInviteOutput } from "../dto/invite.dto";
 import { type AuthRepository } from "../interfaces/auth-repository.interface";
 import { type PasswordService } from "../interfaces/password-service.interface";
 import { type TokenService } from "../interfaces/token-service.interface";
-import { AlreadyMemberError, InvalidInviteError } from "../../domain/errors/auth.errors";
+import {
+  AlreadyMemberError,
+  InvalidInviteError,
+} from "../../domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../domain/rules/password.rules";
 
 export class AcceptInviteUseCase {
@@ -121,6 +121,7 @@ export class AcceptInviteUseCase {
     await this.authRepository.saveRefreshToken({
       tokenHash: refreshTokenData.tokenHash,
       userId,
+      familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
     });
 

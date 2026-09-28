@@ -42,6 +42,7 @@ export const listCategoriesQuerySchema = z.object({
 
 export const createDispositionSchema = z.object({
   name: z.string().min(1).max(100),
+  displayName: z.string().min(1).max(150),
   question: z.string().min(1).max(1000),
   systemPrompt: z.string().max(2000).optional(),
   model: z.enum(SUPPORTED_MODELS).optional(),
@@ -75,6 +76,7 @@ export const createDispositionSchema = z.object({
 
 export const updateDispositionSchema = z.object({
   name: z.string().min(1).max(100).optional(),
+  displayName: z.string().min(1).max(150).optional(),
   question: z.string().min(1).max(1000).optional(),
   systemPrompt: z.string().max(2000).optional(),
   model: z.enum(SUPPORTED_MODELS).optional(),

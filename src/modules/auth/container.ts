@@ -19,6 +19,7 @@ import { ChangePasswordUseCase } from "./application/use-cases/change-password.u
 import { TenantAuthController } from "./presentation/tenant-auth.controller";
 import { AdminAuthController } from "./presentation/admin-auth.controller";
 import { SendRegisterOtpUseCase } from "./application/use-cases/send-register-otp.use-case";
+import { AdminLoginUseCase } from "./application/use-cases/admin-login.use-case";
 
 export interface AuthModule {
   tenantController: TenantAuthController;
@@ -44,6 +45,11 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     emailService,
   } = deps;
 
+  const adminLoginUseCase = new AdminLoginUseCase(
+    authRepository,
+    passwordService,
+    tokenService,
+  );
   const loginUseCase = new LoginUseCase(
     authRepository,
     passwordService,
@@ -98,7 +104,7 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     ),
 
     adminController: new AdminAuthController(
-      loginUseCase,
+      adminLoginUseCase,
       logoutUsecase,
       forgotPasswordUseCase,
       verifyForgotPasswordOtpUseCase,

@@ -85,6 +85,7 @@ model RefreshToken {
   id        String    @id @default(uuid())
   tokenHash String    @unique
   userId    String
+  familyId  String 
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -92,6 +93,7 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([familyId]) 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -744,6 +746,7 @@ model ExtractionDisposition {
   id           String  @id @default(uuid())
   slug         String  @unique
   name         String 
+  displayName  String
   question     String
   systemPrompt String?
   model        String  @default("gpt-4.1-mini")

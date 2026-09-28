@@ -32,6 +32,7 @@ export interface CreateMembershipData {
 export interface SaveRefreshTokenData {
   tokenHash: string;
   userId: string;
+  familyId: string;
   expiresAt: Date;
 }
 
@@ -61,13 +62,21 @@ export interface AuthRepository {
 
   // Refresh tokens
   saveRefreshToken(data: SaveRefreshTokenData): Promise<string>;
+
   findRefreshToken(tokenHash: string): Promise<{
     id: string;
     userId: string;
+    familyId: string;
     expiresAt: Date;
     revokedAt: Date | null;
   } | null>;
   revokeRefreshToken(tokenId: string): Promise<void>;
+
+  revokeRefreshTokenFamily(familyId: string): Promise<void>;
+
   revokeAllUserRefreshTokens(userId: string): Promise<void>;
+
+  cleanupExpiredRefreshTokens(olderThanDays: number): Promise<number>;
+
   updateUserPassword(userId: string, passwordHash: string): Promise<void>;
 }

@@ -10,6 +10,11 @@ import {
   changePasswordSchema,
   logoutSchema,
 } from "./auth.schema";
+import {
+  adminLoginLimiter,
+  otpRequestLimiter,
+  otpCooldownLimiter,
+} from "../../../shared/middleware/rate-limiters";
 
 export function buildAdminAuthRoutes(
   controller: AdminAuthController,
@@ -18,19 +23,32 @@ export function buildAdminAuthRoutes(
   const router = Router();
 
   // Public admin auth routes
-  router.post("/login", validate(adminLoginSchema), controller.login);
+  router.post(
+    "/login",
+    adminLoginLimiter,
+    validate(adminLoginSchema),
+    controller.login,
+  );
+
+  // Email-bombing & cooldown limiters placed before business logic
   router.post(
     "/forgot-password",
+    otpCooldownLimiter, // Must wait 60s
+    otpRequestLimiter, // Max 3 per 10 mins
     validate(forgotPasswordSchema),
     controller.forgotPassword,
   );
+
   router.post(
     "/forgot-password/verify-otp",
+    adminLoginLimiter, // Reuses the strict login limiter window for brute-forcing OTPs
     validate(verifyForgotPasswordOtpSchema),
     controller.verifyForgotPasswordOtp,
   );
+
   router.post(
     "/reset-password",
+    adminLoginLimiter,
     validate(resetPasswordSchema),
     controller.resetPassword,
   );

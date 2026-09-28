@@ -1,7 +1,14 @@
 import jwt, { type SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
-import { type TenantTokenContext, type TokenService } from "../../application/interfaces/token-service.interface";
-import { type AccessTokenPayload, type InviteTokenPayload, type RefreshTokenPayload } from "../../../../shared/types";
+import {
+  type TenantTokenContext,
+  type TokenService,
+} from "../../application/interfaces/token-service.interface";
+import {
+  type AccessTokenPayload,
+  type InviteTokenPayload,
+  type RefreshTokenPayload,
+} from "../../../../shared/types";
 import { env } from "../../../../shared/config/env";
 import { type TenantRole } from "@prisma/client";
 import { UnauthorizedError } from "../../../../shared/errors";
@@ -62,6 +69,42 @@ export class JwtTokenService implements TokenService {
   generateRefreshToken(userId: string): {
     rawToken: string;
     tokenHash: string;
+    familyId: string;
+    expiresIn: number;
+  } {
+    const rawToken = crypto.randomBytes(64).toString("hex");
+    const tokenHash = this.hashToken(rawToken);
+    const familyId = crypto.randomUUID();
+
+    const expirySeconds = this.parseExpiryToSeconds(env.jwt.refreshExpiry);
+
+    const payload: RefreshTokenPayload = {
+      userId,
+      tokenId: tokenHash,
+      type: "refresh",
+    };
+
+    const options: SignOptions = {
+      expiresIn: env.jwt.refreshExpiry as SignOptions["expiresIn"],
+    };
+
+    const signedToken = jwt.sign(payload, env.jwt.secret, options);
+
+    return {
+      rawToken: signedToken,
+      tokenHash,
+      familyId,
+      expiresIn: expirySeconds,
+    };
+  }
+
+  generateRefreshTokenForFamily(
+    userId: string,
+    familyId: string,
+  ): {
+    rawToken: string;
+    tokenHash: string;
+    familyId: string;
     expiresIn: number;
   } {
     const rawToken = crypto.randomBytes(64).toString("hex");
@@ -84,6 +127,7 @@ export class JwtTokenService implements TokenService {
     return {
       rawToken: signedToken,
       tokenHash,
+      familyId, // ← Inherits existing family
       expiresIn: expirySeconds,
     };
   }

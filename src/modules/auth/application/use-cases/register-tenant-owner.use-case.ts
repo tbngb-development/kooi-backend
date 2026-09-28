@@ -92,6 +92,7 @@ export class RegisterTenantOwnerUseCase {
     await this.authRepository.saveRefreshToken({
       tokenHash: refreshTokenData.tokenHash,
       userId: result.user.id,
+      familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
     });
 

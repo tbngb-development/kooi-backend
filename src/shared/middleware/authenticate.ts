@@ -1,15 +1,17 @@
-import type { Request, RequestHandler } from "express";
+import type { Request, Response, RequestHandler } from "express";
 import type { TokenService } from "../../modules/auth/application/interfaces/token-service.interface";
 import type { AuthRepository } from "../../modules/auth/application/interfaces/auth-repository.interface";
 import { UnauthorizedError } from "../errors/unauthorized.error";
 import { ForbiddenError } from "../errors/forbidden.error";
 import { AuthMessages } from "../constants/messages";
-import { COOKIE_ACCESS_TOKEN } from "../constants/cookies";
+import {
+  COOKIE_ACCESS_TOKEN,
+  COOKIE_REFRESH_TOKEN,
+  getCookieSameSite,
+} from "../constants/cookies";
 import { BEARER_PREFIX, HEADER_AUTHORIZATION } from "../constants/headers";
-import type {
-  AuthContext,
-  TenantAuthContext,
-} from "../types";
+import { env } from "../config/env";
+import type { AuthContext, TenantAuthContext } from "../types";
 
 export class AuthenticateMiddleware {
   constructor(
@@ -18,9 +20,9 @@ export class AuthenticateMiddleware {
   ) {}
 
   any(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         (req as Request & { user: AuthContext }).user = context;
         next();
       } catch (err) {
@@ -30,9 +32,9 @@ export class AuthenticateMiddleware {
   }
 
   tenant(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         if (context.type !== "tenant") {
           throw new ForbiddenError(AuthMessages.MULTIPLE_TENANTS);
         }
@@ -45,9 +47,9 @@ export class AuthenticateMiddleware {
   }
 
   admin(): RequestHandler {
-    return async (req, _res, next) => {
+    return async (req, res, next) => {
       try {
-        const context = await this.resolveContext(req);
+        const context = await this.resolveContext(req, res);
         if (!context.isPlatformAdmin) {
           throw new ForbiddenError(AuthMessages.NOT_PLATFORM_ADMIN);
         }
@@ -59,7 +61,10 @@ export class AuthenticateMiddleware {
     };
   }
 
-  private async resolveContext(req: Request): Promise<AuthContext> {
+  private async resolveContext(
+    req: Request,
+    res: Response,
+  ): Promise<AuthContext> {
     let token: string | undefined;
 
     if (req.cookies?.[COOKIE_ACCESS_TOKEN]) {
@@ -81,38 +86,48 @@ export class AuthenticateMiddleware {
     }
 
     const payload = this.tokenService.verifyAccessToken(token);
+
+    // Single DB query: fetch user & memberships
     const user = await this.authRepository.findUserById(payload.userId);
     if (!user) {
+      this.clearCookies(res);
       throw new UnauthorizedError(AuthMessages.USER_NOT_FOUND);
     }
 
-    if (
-      payload.type === "tenant" &&
-      payload.tenantId &&
-      payload.membershipId &&
-      payload.tenantRole
-    ) {
-      const membership = await this.authRepository.findMembership(
-        payload.userId,
-        payload.tenantId,
+    // CRITICAL: Deactivated user must return 401 and wipe cookies
+    if (!user.isActive) {
+      this.clearCookies(res);
+      throw new UnauthorizedError(
+        "Your account has been deactivated. Please contact support.",
       );
-      if (!membership)
+    }
+
+    // Tenant context
+    if (payload.type === "tenant" && payload.tenantId) {
+      const membership = user.memberships.find(
+        (m) => m.tenantId === payload.tenantId,
+      );
+
+      if (!membership) {
         throw new UnauthorizedError(AuthMessages.MEMBERSHIP_NOT_FOUND);
-      if (!membership.tenantActive)
+      }
+      if (!membership.tenantActive) {
         throw new ForbiddenError(AuthMessages.TENANT_INACTIVE);
+      }
 
       return {
         type: "tenant",
         userId: user.id,
         email: user.email,
-        membershipId: payload.membershipId,
-        tenantId: payload.tenantId,
-        tenantRole: payload.tenantRole,
-        isPlatformAdmin: payload.isPlatformAdmin,
+        membershipId: membership.id,
+        tenantId: membership.tenantId,
+        tenantRole: membership.role,
+        isPlatformAdmin: user.isPlatformAdmin,
       };
     }
 
-    if (payload.type === "admin" && payload.isPlatformAdmin) {
+    // Platform admin context
+    if (payload.type === "admin" && user.isPlatformAdmin) {
       return {
         type: "admin",
         userId: user.id,
@@ -125,7 +140,16 @@ export class AuthenticateMiddleware {
       type: "base",
       userId: user.id,
       email: user.email,
-      isPlatformAdmin: payload.isPlatformAdmin,
+      isPlatformAdmin: user.isPlatformAdmin,
     };
+  }
+
+  private clearCookies(res: Response): void {
+    const isProduction = env.nodeEnv === "production";
+    const sameSite = getCookieSameSite(isProduction);
+    const opts = { httpOnly: true, secure: isProduction, sameSite, path: "/" };
+
+    res.clearCookie(COOKIE_ACCESS_TOKEN, opts);
+    res.clearCookie(COOKIE_REFRESH_TOKEN, opts);
   }
 }

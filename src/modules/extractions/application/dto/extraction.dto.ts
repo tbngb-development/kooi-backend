@@ -32,6 +32,7 @@ export interface ListCategoriesFilters {
 
 export interface CreateDispositionDTO {
   name: string;
+  displayName: string; 
   question: string;
   systemPrompt?: string;
   model?: string;
@@ -48,6 +49,7 @@ export interface CreateDispositionDTO {
 
 export interface UpdateDispositionDTO {
   name?: string;
+  displayName?: string; 
   question?: string;
   systemPrompt?: string;
   model?: string;

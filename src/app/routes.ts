@@ -46,13 +46,6 @@ export function buildRoutes(c: AppContainer): Router {
     });
   });
 
-  // ── Public Webhooks ─────────────────────────────────────────────────────
-  router.use("/webhooks", buildWebhookRoutes(c.webhooks.controller));
-
-  router.use(
-    "/webhooks/razorpay",
-    buildRazorpayWebhookRoutes(c.payments.webhookController),
-  );
 
   // ── Tenant API v1 (Scoped workspace actions) ─────────────────────────────
   router.use(
@@ -122,7 +115,7 @@ export function buildRoutes(c: AppContainer): Router {
     buildTenantPaymentRoutes(c.payments.tenantController, c.authenticate),
   );
 
-  // ── Admin API v1 (Cross-tenant platform overrides) ──────────────────────
+  // ── Admin API v1  ──────────────────────
   router.use(
     "/v1/admin/auth",
     buildAdminAuthRoutes(c.auth.adminController, c.authenticate),
