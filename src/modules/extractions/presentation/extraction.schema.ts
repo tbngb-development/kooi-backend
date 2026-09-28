@@ -40,82 +40,137 @@ export const listCategoriesQuerySchema = z.object({
 
 // ── Disposition Schemas ──────────────────────────────────────────────────────
 
-export const createDispositionSchema = z.object({
-  name: z.string().min(1).max(100),
-  displayName: z.string().min(1).max(150),
-  question: z.string().min(1).max(1000),
-  systemPrompt: z.string().max(2000).optional(),
-  model: z.enum(SUPPORTED_MODELS).optional(),
-  isSubjective: z.boolean().optional(),
-  isObjective: z.boolean().optional(),
-  subjectiveType: z
-    .enum(["text", "timestamp", "numeric", "boolean", "email", "regex"])
-    .optional(),
-  subjectiveTypeConfig: z
-    .object({
-      pattern: z.string(),
-      description: z.string().optional(),
-    })
-    .nullable()
-    .optional(),
-  objectiveOptions: z
-    .array(
-      z.object({
-        value: z.string(),
-        condition: z.string(),
-        sub_options: z.array(z.any()).optional(),
-      }),
-    )
-    .nullable()
-    .optional(),
-  description: z.string().max(500).optional(),
-  industryPackIds: z.array(z.string().uuid()).optional(),
-  showInOverview: z.boolean().optional(),
-  showInInsights: z.boolean().optional(),
-});
+export const createDispositionSchema = z
+  .object({
+    name: z.string().min(1).max(100),
+    displayName: z.string().min(1).max(150),
+    tag: z.string().max(50).optional(),
+    question: z.string().min(1).max(1000),
+    systemPrompt: z.string().max(2000).optional(),
+    model: z.enum(SUPPORTED_MODELS).optional(),
+    isSubjective: z.boolean().optional().default(false), // Defaults to false
+    isObjective: z.boolean().optional().default(false), // Defaults to false
+    subjectiveType: z
+      .enum(["text", "timestamp", "numeric", "boolean", "email", "regex"])
+      .optional(),
+    subjectiveTypeConfig: z
+      .object({
+        pattern: z.string(),
+        description: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
+    objectiveOptions: z
+      .array(
+        z.object({
+          value: z.string(),
+          condition: z.string(),
+          sub_options: z.array(z.any()).optional(),
+        }),
+      )
+      .nullable()
+      .optional(),
+    description: z.string().max(500).optional(),
+    industryPackIds: z.array(z.string().uuid()).optional(),
+    showInOverview: z.boolean().optional().default(false), // Changed default to false
+    showInInsights: z.boolean().optional().default(false), // Changed default to false
+  })
+  .superRefine((data, ctx) => {
+    // Business Rule Check: showInOverview depends on isObjective
+    if (data.showInOverview && !data.isObjective) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["showInOverview"],
+        message: "showInOverview can only be true if isObjective is true",
+      });
+    }
+    // Business Rule Check: showInInsights depends on isSubjective
+    if (data.showInInsights && !data.isSubjective) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["showInInsights"],
+        message: "showInInsights can only be true if isSubjective is true",
+      });
+    }
+  });
 
-export const updateDispositionSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  displayName: z.string().min(1).max(150).optional(),
-  question: z.string().min(1).max(1000).optional(),
-  systemPrompt: z.string().max(2000).optional(),
-  model: z.enum(SUPPORTED_MODELS).optional(),
-  isSubjective: z.boolean().optional(),
-  isObjective: z.boolean().optional(),
-  subjectiveType: z
-    .enum(["text", "timestamp", "numeric", "boolean", "email", "regex"])
-    .optional(),
-  subjectiveTypeConfig: z
-    .object({
-      pattern: z.string(),
-      description: z.string().optional(),
-    })
-    .nullable()
-    .optional(),
-  objectiveOptions: z
-    .array(
-      z.object({
-        value: z.string(),
-        condition: z.string(),
-        sub_options: z.array(z.any()).optional(),
-      }),
-    )
-    .nullable()
-    .optional(),
-  description: z.string().max(500).optional(),
-  isActive: z.boolean().optional(),
-  showInOverview: z.boolean().optional(),
-  showInInsights: z.boolean().optional(),
-});
+export const updateDispositionSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    displayName: z.string().min(1).max(150).optional(),
+    tag: z.string().max(50).nullable().optional(),
+    question: z.string().min(1).max(1000).optional(),
+    systemPrompt: z.string().max(2000).optional(),
+    model: z.enum(SUPPORTED_MODELS).optional(),
+    isSubjective: z.boolean().optional(),
+    isObjective: z.boolean().optional(),
+    subjectiveType: z
+      .enum(["text", "timestamp", "numeric", "boolean", "email", "regex"])
+      .optional(),
+    subjectiveTypeConfig: z
+      .object({
+        pattern: z.string(),
+        description: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
+    objectiveOptions: z
+      .array(
+        z.object({
+          value: z.string(),
+          condition: z.string(),
+          sub_options: z.array(z.any()).optional(),
+        }),
+      )
+      .nullable()
+      .optional(),
+    description: z.string().max(500).optional(),
+    isActive: z.boolean().optional(),
+    showInOverview: z.boolean().optional(),
+    showInInsights: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Validate request conflicts (e.g. updating isObjective=false and showInOverview=true together)
+    if (data.showInOverview === true && data.isObjective === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["showInOverview"],
+        message: "showInOverview can only be true if isObjective is true",
+      });
+    }
+    if (data.showInInsights === true && data.isSubjective === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["showInInsights"],
+        message: "showInInsights can only be true if isSubjective is true",
+      });
+    }
+  });
 
 export const listDispositionsQuerySchema = z.object({
+  // Filters
   industryPackId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   platformAgentId: z.string().uuid().optional(),
+  tag: z.string().optional(),
   isActive: z.preprocess(
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),
   ),
+
+  // Search
+  search: z.string().trim().optional(),
+
+  // Sorting
+  sortBy: z
+    .enum(["name", "displayName", "tag", "createdAt", "updatedAt"])
+    .optional()
+    .default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+
+  // Pagination
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
 });
 
 // ── M2M Schemas ──────────────────────────────────────────────────────────────
