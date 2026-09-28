@@ -4,9 +4,7 @@ import {
 } from "../interfaces/webhook-repository.interface";
 import { type WebhookCallPayload } from "../dto/webhook.dto";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
-import type {
-  CallHistoryItem,
-} from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
@@ -521,11 +519,12 @@ export class ProcessCallWebhookUseCase {
     const dispositionIds = [
       ...new Set(objectiveEntries.map((e) => e.dispositionId)),
     ];
+
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds } , showInOverview: true},
-      select: { id: true, name: true },
+      where: { id: { in: dispositionIds }, showInOverview: true },
+      select: { id: true, displayName: true },
     });
-    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.displayName]));
 
     // Idempotent: remove previous overview rows for this call (webhook retries)
     await prisma.callExtractionOverview.deleteMany({ where: { callId } });
@@ -604,11 +603,12 @@ export class ProcessCallWebhookUseCase {
     if (!call) return;
 
     const dispositionIds = Array.from(seenDispositions);
+
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds } , showInInsights: true,},
-      select: { id: true, name: true },
+      where: { id: { in: dispositionIds }, showInInsights: true },
+      select: { id: true, displayName: true },
     });
-    const nameMap = new Map(dispositions.map((d) => [d.id, d.name]));
+    const nameMap = new Map(dispositions.map((d) => [d.id, d.displayName]));
 
     await prisma.callExtractionInsight.deleteMany({ where: { callId } });
 
@@ -678,5 +678,4 @@ export class ProcessCallWebhookUseCase {
       }
     }
   }
-
 }

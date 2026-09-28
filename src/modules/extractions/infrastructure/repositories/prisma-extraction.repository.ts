@@ -255,6 +255,7 @@ export class PrismaExtractionRepository implements ExtractionRepository {
       data: {
         slug,
         name: data.name.trim(),
+        displayName: data.displayName.trim(),
         question: data.question,
         systemPrompt: data.systemPrompt ?? null,
         model: data.model ?? "gpt-4.1-mini",
@@ -291,6 +292,11 @@ export class PrismaExtractionRepository implements ExtractionRepository {
       updateData.name = data.name.trim();
       updateData.slug = generateSlug(data.name);
     }
+
+    if (data.displayName !== undefined) {
+      updateData.displayName = data.displayName.trim(); 
+    }
+
     if (data.question !== undefined) updateData.question = data.question;
     if (data.systemPrompt !== undefined)
       updateData.systemPrompt = data.systemPrompt;

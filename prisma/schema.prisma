@@ -746,6 +746,7 @@ model ExtractionDisposition {
   id           String  @id @default(uuid())
   slug         String  @unique
   name         String 
+  displayName  String
   question     String
   systemPrompt String?
   model        String  @default("gpt-4.1-mini")

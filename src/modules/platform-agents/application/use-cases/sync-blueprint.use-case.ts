@@ -63,6 +63,7 @@ export class SyncBlueprintUseCase {
           if (!localDisp) {
             localDisp = await this.extractionRepository.createDisposition({
               name: disp.name,
+              displayName: disp.name,
               question: disp.question,
               systemPrompt: disp.system_prompt ?? undefined,
               model: disp.model ?? "gpt-4.1-mini",
