@@ -256,6 +256,7 @@ export class PrismaExtractionRepository implements ExtractionRepository {
         slug,
         name: data.name.trim(),
         displayName: data.displayName.trim(),
+        tag: data.tag ? data.tag.trim().toLowerCase() : null,
         question: data.question,
         systemPrompt: data.systemPrompt ?? null,
         model: data.model ?? "gpt-4.1-mini",
@@ -294,7 +295,11 @@ export class PrismaExtractionRepository implements ExtractionRepository {
     }
 
     if (data.displayName !== undefined) {
-      updateData.displayName = data.displayName.trim(); 
+      updateData.displayName = data.displayName.trim();
+    }
+
+    if (data.tag !== undefined) {
+      updateData.tag = data.tag ? data.tag.trim().toLowerCase() : null; // ← Added
     }
 
     if (data.question !== undefined) updateData.question = data.question;
@@ -369,6 +374,13 @@ export class PrismaExtractionRepository implements ExtractionRepository {
 
     if (filters.isActive !== undefined) {
       where.isActive = filters.isActive;
+    }
+
+    if (filters.tag !== undefined && filters.tag.trim() !== "") {
+      where.tag = {
+        contains: filters.tag.trim(),
+        mode: "insensitive",
+      };
     }
     if (filters.industryPackId !== undefined) {
       where.industries = {

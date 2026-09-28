@@ -8,6 +8,7 @@ export class ListDispositionsUseCase {
   async execute(
     filters: ListDispositionsFilters,
   ): Promise<ExtractionDisposition[]> {
+    console.log("list disposition Query: ", filters)
     return this.repository.listDispositions(filters);
   }
 }

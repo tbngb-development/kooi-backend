@@ -747,6 +747,7 @@ model ExtractionDisposition {
   slug         String  @unique
   name         String 
   displayName  String
+  tag          String? 
   question     String
   systemPrompt String?
   model        String  @default("gpt-4.1-mini")
@@ -773,6 +774,7 @@ model ExtractionDisposition {
   updatedAt DateTime @updatedAt
 
   @@index([slug])
+  @@index([tag])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

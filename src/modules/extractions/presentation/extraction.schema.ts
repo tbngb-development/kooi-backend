@@ -43,6 +43,7 @@ export const listCategoriesQuerySchema = z.object({
 export const createDispositionSchema = z.object({
   name: z.string().min(1).max(100),
   displayName: z.string().min(1).max(150),
+  tag: z.string().max(50).optional(),
   question: z.string().min(1).max(1000),
   systemPrompt: z.string().max(2000).optional(),
   model: z.enum(SUPPORTED_MODELS).optional(),
@@ -77,6 +78,7 @@ export const createDispositionSchema = z.object({
 export const updateDispositionSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   displayName: z.string().min(1).max(150).optional(),
+  tag: z.string().max(50).nullable().optional(),
   question: z.string().min(1).max(1000).optional(),
   systemPrompt: z.string().max(2000).optional(),
   model: z.enum(SUPPORTED_MODELS).optional(),
@@ -112,6 +114,7 @@ export const listDispositionsQuerySchema = z.object({
   industryPackId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   platformAgentId: z.string().uuid().optional(),
+  tag: z.string().optional(),
   isActive: z.preprocess(
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),

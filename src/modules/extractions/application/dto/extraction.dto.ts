@@ -32,7 +32,8 @@ export interface ListCategoriesFilters {
 
 export interface CreateDispositionDTO {
   name: string;
-  displayName: string; 
+  displayName: string;
+  tag?: string;
   question: string;
   systemPrompt?: string;
   model?: string;
@@ -49,7 +50,8 @@ export interface CreateDispositionDTO {
 
 export interface UpdateDispositionDTO {
   name?: string;
-  displayName?: string; 
+  displayName?: string;
+  tag?: string | null;
   question?: string;
   systemPrompt?: string;
   model?: string;
@@ -68,8 +70,8 @@ export interface ListDispositionsFilters {
   industryPackId?: string;
   categoryId?: string;
   isActive?: boolean;
-  /** Filter by platform agent assignment */
   platformAgentId?: string;
+  tag?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
