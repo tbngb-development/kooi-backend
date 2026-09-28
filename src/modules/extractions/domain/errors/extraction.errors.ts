@@ -108,3 +108,9 @@ export class ExtractionSyncError extends AppError {
     );
   }
 }
+
+export class InvalidExtractionConfigurationError extends AppError {
+  constructor(message: string) {
+    super(HttpStatus.BAD_REQUEST, message, "INVALID_EXTRACTION_CONFIGURATION");
+  }
+}

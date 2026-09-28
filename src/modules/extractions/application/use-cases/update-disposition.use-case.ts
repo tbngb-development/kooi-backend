@@ -5,6 +5,7 @@ import {
   ExtractionDispositionNotFoundError,
   DuplicateExtractionDispositionNameError,
   DuplicateExtractionDispositionSlugError,
+  InvalidExtractionConfigurationError, // ← Imported
 } from "../../domain/errors/extraction.errors";
 import { generateSlug } from "../../domain/rules/slug-generator";
 
@@ -38,7 +39,47 @@ export class UpdateDispositionUseCase {
       }
     }
 
-    // 3. Update
+    // 3. Compute resulting rule states
+    const nextIsObjective =
+      dto.isObjective !== undefined ? dto.isObjective : existing.isObjective;
+    const nextIsSubjective =
+      dto.isSubjective !== undefined ? dto.isSubjective : existing.isSubjective;
+
+    // Automatic update cascade: force flag false if root extraction method is disabled
+    let finalShowInOverview =
+      dto.showInOverview !== undefined
+        ? dto.showInOverview
+        : existing.showInOverview;
+    if (!nextIsObjective) {
+      finalShowInOverview = false;
+    }
+
+    let finalShowInInsights =
+      dto.showInInsights !== undefined
+        ? dto.showInInsights
+        : existing.showInInsights;
+    if (!nextIsSubjective) {
+      finalShowInInsights = false;
+    }
+
+    // Explicit payload validation assertions
+    if (finalShowInOverview && !nextIsObjective) {
+      throw new InvalidExtractionConfigurationError(
+        "showInOverview can only be true if isObjective is true",
+      );
+    }
+
+    if (finalShowInInsights && !nextIsSubjective) {
+      throw new InvalidExtractionConfigurationError(
+        "showInInsights can only be true if isSubjective is true",
+      );
+    }
+
+    // Align request payload values with computed outcomes
+    dto.showInOverview = finalShowInOverview;
+    dto.showInInsights = finalShowInInsights;
+
+    // 4. Update
     return this.repository.updateDisposition(id, dto);
   }
 }
