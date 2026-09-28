@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   AuthRepository,
@@ -194,7 +195,7 @@ export class PrismaAuthRepository implements AuthRepository {
       data: {
         tokenHash: data.tokenHash,
         userId: data.userId,
-        familyId: data.familyId,
+        familyId: data.familyId ?? randomUUID(),
         expiresAt: data.expiresAt,
       },
     });
