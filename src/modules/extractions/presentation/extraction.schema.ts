@@ -111,6 +111,7 @@ export const updateDispositionSchema = z.object({
 });
 
 export const listDispositionsQuerySchema = z.object({
+  // Filters
   industryPackId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   platformAgentId: z.string().uuid().optional(),
@@ -119,6 +120,20 @@ export const listDispositionsQuerySchema = z.object({
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),
   ),
+
+  // Search
+  search: z.string().trim().optional(),
+
+  // Sorting
+  sortBy: z
+    .enum(["name", "displayName", "tag", "createdAt", "updatedAt"])
+    .optional()
+    .default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+
+  // Pagination
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
 });
 
 // ── M2M Schemas ──────────────────────────────────────────────────────────────

@@ -120,7 +120,7 @@ export interface ExtractionRepository {
   ): Promise<ExtractionDisposition | null>;
   listDispositions(
     filters: ListDispositionsFilters,
-  ): Promise<ExtractionDisposition[]>;
+  ): Promise<{ items: ExtractionDisposition[]; total: number }>;
   deleteDisposition(id: string): Promise<void>;
 
   // ── Dispositions: M2M Industries ──────────────────────────────────────────

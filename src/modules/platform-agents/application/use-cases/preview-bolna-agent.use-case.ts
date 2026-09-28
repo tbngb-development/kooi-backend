@@ -40,7 +40,8 @@ export class PreviewBolnaAgentUseCase {
     const agent = await bolnaClient.agents.verify(bolnaId);
 
     // 2. Check if already imported locally
-    const existingPA = await this.platformAgentRepository.findByBolnaId(bolnaId);
+    const existingPA =
+      await this.platformAgentRepository.findByBolnaId(bolnaId);
 
     // 3. Fetch remote extractions for this agent (if any)
     // eslint-disable-next-line no-useless-assignment
@@ -55,12 +56,12 @@ export class PreviewBolnaAgentUseCase {
     // 4. Fetch local categories and dispositions to detect already imported status
     const [localCategories, localDispositions] = await Promise.all([
       this.extractionRepository.listCategories({}),
-      this.extractionRepository.listDispositions({}),
+      this.extractionRepository.listDispositions({ limit: 1000 }),
     ]);
 
     const existingCategorySlugs = new Set(localCategories.map((c) => c.slug));
     const existingDispositionSlugs = new Set(
-      localDispositions.map((d) => d.slug),
+      localDispositions.items.map((d) => d.slug),
     );
 
     return BolnaDiscoveryMapper.toBlueprintPreview({

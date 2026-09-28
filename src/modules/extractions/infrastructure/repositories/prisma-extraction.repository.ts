@@ -369,9 +369,10 @@ export class PrismaExtractionRepository implements ExtractionRepository {
 
   async listDispositions(
     filters: ListDispositionsFilters,
-  ): Promise<ExtractionDisposition[]> {
+  ): Promise<{ items: ExtractionDisposition[]; total: number }> {
     const where: Prisma.ExtractionDispositionWhereInput = {};
 
+    // 1. Boolean & Tag filters
     if (filters.isActive !== undefined) {
       where.isActive = filters.isActive;
     }
@@ -382,13 +383,27 @@ export class PrismaExtractionRepository implements ExtractionRepository {
         mode: "insensitive",
       };
     }
+
+    // 2. Search filter across name, displayName, slug, tag, and question
+    if (filters.search !== undefined && filters.search.trim() !== "") {
+      const searchTerm = filters.search.trim();
+      where.OR = [
+        { name: { contains: searchTerm, mode: "insensitive" } },
+        { displayName: { contains: searchTerm, mode: "insensitive" } },
+        { slug: { contains: searchTerm, mode: "insensitive" } },
+        { tag: { contains: searchTerm, mode: "insensitive" } },
+        { question: { contains: searchTerm, mode: "insensitive" } },
+      ];
+    }
+
+    // 3. Industry Pack filter
     if (filters.industryPackId !== undefined) {
       where.industries = {
         some: { industryPackId: filters.industryPackId },
       };
     }
 
-    // Handle category and/or platform agent filtering through the category M2M chain
+    // 4. Category and Platform Agent filters
     if (
       filters.categoryId !== undefined &&
       filters.platformAgentId !== undefined
@@ -419,10 +434,31 @@ export class PrismaExtractionRepository implements ExtractionRepository {
       };
     }
 
-    return prisma.extractionDisposition.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }],
-    });
+    // 5. Pagination calculation
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit =
+      filters.limit && filters.limit > 0 ? Math.min(filters.limit, 1000) : 20;
+    const skip = (page - 1) * limit;
+
+    // 6. Sorting
+    const sortBy = filters.sortBy ?? "createdAt";
+    const sortOrder = filters.sortOrder ?? "desc";
+    const orderBy: Prisma.ExtractionDispositionOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
+
+    // 7. Parallel fetch items & total count
+    const [items, total] = await prisma.$transaction([
+      prisma.extractionDisposition.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      prisma.extractionDisposition.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   async deleteDisposition(id: string): Promise<void> {

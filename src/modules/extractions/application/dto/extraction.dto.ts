@@ -2,6 +2,8 @@
 // CATEGORIES
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { ExtractionDisposition } from "@prisma/client";
+
 export interface CreateCategoryDTO {
   name: string;
   model?: string;
@@ -67,11 +69,31 @@ export interface UpdateDispositionDTO {
 }
 
 export interface ListDispositionsFilters {
+  // Filters
   industryPackId?: string;
   categoryId?: string;
-  isActive?: boolean;
   platformAgentId?: string;
   tag?: string;
+  isActive?: boolean;
+
+  // Search
+  search?: string;
+
+  // Sorting
+  sortBy?: "name" | "displayName" | "tag" | "createdAt" | "updatedAt";
+  sortOrder?: "asc" | "desc";
+
+  // Pagination
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedDispositionsResult {
+  items: ExtractionDisposition[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
