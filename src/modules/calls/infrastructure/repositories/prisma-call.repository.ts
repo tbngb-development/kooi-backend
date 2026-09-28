@@ -247,8 +247,6 @@ export class PrismaCallRepository implements CallRepository {
         callAnalysis: {
           select: {
             id: true,
-            disposition: true,
-            leadTemperature: true,
           },
         },
       },
