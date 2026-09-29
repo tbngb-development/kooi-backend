@@ -228,7 +228,7 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
-    try {
+          try {
       const dynamicResult = await this.mapCallExtractions(
         call.id,
         call.tenantId,
@@ -449,12 +449,10 @@ export class ProcessCallWebhookUseCase {
         tenantId,
         extractionResult: extractedData as InputJsonValue,
         dynamicExtractions: dynamicResult as unknown as InputJsonValue,
-        extractionDispositionId: primaryDispositionId,
       },
       update: {
         extractionResult: extractedData as InputJsonValue,
         dynamicExtractions: dynamicResult as unknown as InputJsonValue,
-        extractionDispositionId: primaryDispositionId,
       },
     });
 
