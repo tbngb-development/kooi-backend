@@ -2,6 +2,7 @@ import prisma from "../../../../shared/config/database/prisma";
 import type {
   WebhookRepository,
   ResolvedCallContext,
+  AgentDispositionMap,
 } from "../../application/interfaces/webhook-repository.interface";
 import type {
   CallStatus,
@@ -291,16 +292,9 @@ export class PrismaWebhookRepository implements WebhookRepository {
     return batches.map((b) => b.status);
   }
 
-  async getAgentDispositionsForCall(callId: string): Promise<{
-    platformAgentId: string | null;
-    dispositions: Array<{
-      id: string;
-      name: string;
-      slug: string;
-      isObjective: boolean;
-      isSubjective: boolean;
-    }>;
-  }> {
+  async getAgentDispositionsForCall(
+    callId: string,
+  ): Promise<AgentDispositionMap> {
     const call = await prisma.call.findUnique({
       where: { id: callId },
       select: {
@@ -321,6 +315,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
                                   select: {
                                     id: true,
                                     name: true,
+                                    displayName: true,
                                     slug: true,
                                     isObjective: true,
                                     isSubjective: true,
@@ -351,6 +346,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
       {
         id: string;
         name: string;
+        displayName: string;
         slug: string;
         isObjective: boolean;
         isSubjective: boolean;

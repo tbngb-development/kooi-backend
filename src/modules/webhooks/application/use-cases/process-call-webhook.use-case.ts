@@ -12,6 +12,7 @@ import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
+  localDispositionDisplayName: string | null;
   localDispositionSlug: string | null;
   subjective: string | null;
   objective: string | null;
@@ -228,7 +229,7 @@ export class ProcessCallWebhookUseCase {
           payload.duration ??
           null);
 
-          try {
+    try {
       const dynamicResult = await this.mapCallExtractions(
         call.id,
         call.tenantId,
@@ -368,12 +369,19 @@ export class ProcessCallWebhookUseCase {
     // Build lookup — all dispositions come through categories now
     const dispositionLookup = new Map<
       string,
-      { id: string; slug: string; isObjective: boolean; isSubjective: boolean } // ← UPDATED
+      {
+        id: string;
+        slug: string;
+        displayName: string;
+        isObjective: boolean;
+        isSubjective: boolean;
+      }
     >();
     for (const disp of agentMap.dispositions) {
       const entry = {
         id: disp.id,
         slug: disp.slug,
+        displayName: disp.displayName,
         isObjective: disp.isObjective,
         isSubjective: disp.isSubjective,
       };
@@ -401,6 +409,7 @@ export class ProcessCallWebhookUseCase {
         const entry: DynamicExtractionEntry = {
           localDispositionId: localDisp?.id ?? null,
           localDispositionSlug: localDisp?.slug ?? null,
+          localDispositionDisplayName: localDisp?.displayName ?? null,
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
           isObjective: localDisp?.isObjective ?? false,

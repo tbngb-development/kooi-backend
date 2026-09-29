@@ -4,9 +4,7 @@ import {
   type BatchStatus,
   type CampaignStatus,
 } from "@prisma/client";
-import type {
-  CallHistoryItem,
-} from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
   id: string;
@@ -41,6 +39,7 @@ export interface AgentDispositionMap {
   dispositions: {
     id: string;
     name: string;
+    displayName: string;
     slug: string;
     isObjective: boolean;
     isSubjective: boolean;
@@ -143,5 +142,4 @@ export interface WebhookRepository {
    * Returns null dispositions array if no platform agent is linked.
    */
   getAgentDispositionsForCall(callId: string): Promise<AgentDispositionMap>;
-
 }
