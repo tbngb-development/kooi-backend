@@ -528,7 +528,7 @@ export class ProcessCallWebhookUseCase {
     ];
 
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds }, showInOverview: true },
+      where: { id: { in: dispositionIds } },
       select: { id: true, displayName: true },
     });
     const nameMap = new Map(dispositions.map((d) => [d.id, d.displayName]));
@@ -612,7 +612,7 @@ export class ProcessCallWebhookUseCase {
     const dispositionIds = Array.from(seenDispositions);
 
     const dispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds }, showInInsights: true },
+      where: { id: { in: dispositionIds } },
       select: { id: true, displayName: true },
     });
     const nameMap = new Map(dispositions.map((d) => [d.id, d.displayName]));
