@@ -89,7 +89,7 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
     const created = await this.extractionProvider.createDisposition(
       {
         agent_id: agentId,
-        category_id: categoryId, 
+        category_id: categoryId,
         name: disposition.name,
         question: disposition.question,
         system_prompt: disposition.systemPrompt,
@@ -140,6 +140,19 @@ export class BolnaExtractionSyncServiceImpl implements BolnaExtractionSyncServic
         dispositionId,
         bolnaApiKeyId,
       );
+      return null;
+    } catch (err: any) {
+      return err.message;
+    }
+  }
+
+  // ── Remove category (best-effort) ───────────────────────────────────────
+  async removeCategoryFromBolna(
+    categoryId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<string | null> {
+    try {
+      await this.extractionProvider.deleteCategory(categoryId, bolnaApiKeyId);
       return null;
     } catch (err: any) {
       return err.message;

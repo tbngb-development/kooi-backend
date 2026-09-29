@@ -85,4 +85,9 @@ export interface BolnaExtractionSyncService {
     dispositionId: string,
     bolnaApiKeyId?: string,
   ): Promise<string | null>;
+
+  removeCategoryFromBolna(
+    categoryId: string,
+    bolnaApiKeyId?: string,
+  ): Promise<string | null>;
 }
