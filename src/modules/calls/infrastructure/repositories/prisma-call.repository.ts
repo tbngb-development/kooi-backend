@@ -190,7 +190,13 @@ export class PrismaCallRepository implements CallRepository {
             description: true,
           },
         },
-        callAnalysis: true,
+        callAnalysis: {
+          select: {
+            id: true,
+            dynamicExtractions: true,
+            extractionResult: true,
+          },
+        },
       },
     });
 
