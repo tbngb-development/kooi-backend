@@ -245,12 +245,23 @@ export class PrismaCampaignRepository implements CampaignRepository {
       return { campaignId, totalCalls: 0, dispositions: [] };
     }
 
+    // Filter out dispositions where showInOverview is false
+    const dispositionIds = [...new Set(rows.map((r) => r.dispositionId))];
+    const visibleDispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds }, showInOverview: true }, // ← Filter at READ time
+      select: { id: true },
+    });
+    const visibleIds = new Set(visibleDispositions.map((d) => d.id));
+
+    const filteredRows = rows.filter((r) => visibleIds.has(r.dispositionId));
+
     // Get total unique calls for percentage calculation
     const totalCallsResult = await prisma.callExtractionOverview.findMany({
       where: {
         tenantId,
         campaignId,
         ...(batchId && { batchId }),
+        dispositionId: { in: Array.from(visibleIds) },
       },
       select: { callId: true },
       distinct: ["callId"],
@@ -270,7 +281,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }
     >();
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       let acc = dispositionMap.get(row.dispositionId);
       if (!acc) {
         acc = {
@@ -346,12 +357,26 @@ export class PrismaCampaignRepository implements CampaignRepository {
       return { campaignId, totalCalls: 0, insights: [] };
     }
 
+    const dispositionIds = [...new Set(rows.map((r) => r.dispositionId))];
+    const visibleDispositions = await prisma.extractionDisposition.findMany({
+      where: { id: { in: dispositionIds }, showInInsights: true },
+      select: { id: true },
+    });
+    const visibleIds = new Set(visibleDispositions.map((d) => d.id));
+
+    const filteredRows = rows.filter((r) => visibleIds.has(r.dispositionId));
+
+    if (filteredRows.length === 0) {
+      return { campaignId, totalCalls: 0, insights: [] };
+    }
+
     // Total unique calls with any insight data
     const totalCallsResult = await prisma.callExtractionInsight.findMany({
       where: {
         tenantId,
         campaignId,
         ...(batchId && { batchId }),
+        dispositionId: { in: Array.from(visibleIds) },
       },
       select: { callId: true },
       distinct: ["callId"],
@@ -370,7 +395,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }
     >();
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       let acc = dispositionMap.get(row.dispositionId);
       if (!acc) {
         acc = {
@@ -451,7 +476,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
     };
   }
-
 
   private toEntityData(campaign: {
     id: string;
