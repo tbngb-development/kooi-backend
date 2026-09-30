@@ -19,6 +19,7 @@ import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import { env } from "../../../../shared/config/env";
 import { MaxLeadsPerBatchExceededError } from "../../../batches/domain/errors/batch.errors";
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ParseLeadsUseCase {
   constructor(
@@ -26,6 +27,7 @@ export class ParseLeadsUseCase {
     private readonly batchRepo: BatchRepository,
     private readonly planRepo: PlanRepository,
     private readonly walletRepo: WalletRepository,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(input: ParseLeadsInput): Promise<ParseLeadsOutput> {
@@ -143,6 +145,19 @@ export class ParseLeadsUseCase {
       newLeads.length,
       activePlan,
     );
+
+    this.logger?.info("Leads parsed", {
+      action: "campaign.parse_leads",
+      tenantId: input.tenantId,
+      campaignId: input.campaignId,
+      totalRows: rows.length,
+      validIndian: indianRows.length,
+      invalid: missingPhoneCount,
+      nonIndian: nonIndianNumbers.length,
+      inFileDuplicates: inFileDuplicateNumbers.length,
+      dbDuplicates: dbDuplicateNumbers.length,
+      readyToImport: newLeads.length,
+    });
 
     return {
       total: rows.length,

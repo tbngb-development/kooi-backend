@@ -9,12 +9,14 @@ import {
   InvalidInviteError,
 } from "../../domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../domain/rules/password.rules";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class AcceptInviteUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: AcceptInviteInput): Promise<AcceptInviteOutput> {
@@ -25,6 +27,10 @@ export class AcceptInviteUseCase {
 
     // 2. Email must match invite
     if (invitePayload.email.toLowerCase() !== input.email.toLowerCase()) {
+      this.logger.warn("Invite acceptance failed — email mismatch", {
+        action: "invite.accept",
+        tenantId: invitePayload.tenantId,
+      });
       throw new ForbiddenError(AuthMessages.INVITE_EMAIL_MISMATCH);
     }
 
@@ -33,6 +39,10 @@ export class AcceptInviteUseCase {
       invitePayload.tenantId,
     );
     if (!tenantActive) {
+      this.logger.warn("Invite acceptance failed — tenant inactive", {
+        action: "invite.accept",
+        tenantId: invitePayload.tenantId,
+      });
       throw new InvalidInviteError();
     }
 
@@ -53,6 +63,11 @@ export class AcceptInviteUseCase {
         invitePayload.tenantId,
       );
       if (alreadyMember) {
+        this.logger.warn("Invite acceptance failed — already a member", {
+          action: "invite.accept",
+          userId: existingUser.id,
+          tenantId: invitePayload.tenantId,
+        });
         throw new AlreadyMemberError();
       }
 
@@ -123,6 +138,14 @@ export class AcceptInviteUseCase {
       userId,
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+    });
+
+    this.logger.info("Invite accepted", {
+      action: "invite.accept",
+      userId,
+      tenantId: invitePayload.tenantId,
+      membershipId,
+      newUser: !existingUser,
     });
 
     return {

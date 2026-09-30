@@ -11,6 +11,7 @@ import type {
   ActivateFreeOnboardingInput,
   ActivateFreeOnboardingResult,
 } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 /**
  * Activates a tenant plan with ₹0 onboarding fee.
@@ -29,6 +30,7 @@ export class ActivateFreeOnboardingUseCase {
     private readonly planRepo: PlanRepository,
     private readonly walletRepo: WalletRepository,
     private readonly autoAssignKey: AutoAssignKeyUseCase,
+    private readonly logger: Logger,
   ) {}
 
   async execute(
@@ -67,7 +69,10 @@ export class ActivateFreeOnboardingUseCase {
     try {
       await this.autoAssignKey.execute(input.tenantId);
     } catch (err) {
-      console.error("[FreeOnboarding] auto-assign Bolna key failed:", err);
+      this.logger.error("Free onboarding — auto-assign Bolna key failed", err, {
+        action: "payment.free_onboarding.auto_assign_key",
+        tenantId: input.tenantId,
+      });
       // Non-fatal: key can be assigned later by admin
     }
 
@@ -87,6 +92,14 @@ export class ActivateFreeOnboardingUseCase {
         bonusExpiresAt,
       });
     }
+
+    this.logger.info("Free onboarding activated", {
+      action: "payment.free_onboarding",
+      tenantId: input.tenantId,
+      planVersionId: effectiveTerms.planVersionId,
+      includedBalancePaisa: effectiveTerms.includedBalance,
+      adminUserId: input.adminUserId,
+    });
 
     return {
       tenantId: input.tenantId,

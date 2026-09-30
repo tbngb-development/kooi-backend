@@ -12,11 +12,13 @@ import {
 import { BEARER_PREFIX, HEADER_AUTHORIZATION } from "../constants/headers";
 import { env } from "../config/env";
 import type { AuthContext, TenantAuthContext } from "../types";
+import type { Logger } from "../logging/logger.interface";
 
 export class AuthenticateMiddleware {
   constructor(
     private readonly tokenService: TokenService,
     private readonly authRepository: AuthRepository,
+    private readonly logger?: Logger,
   ) {}
 
   any(): RequestHandler {
@@ -36,6 +38,11 @@ export class AuthenticateMiddleware {
       try {
         const context = await this.resolveContext(req, res);
         if (context.type !== "tenant") {
+          this.logger?.warn("Tenant auth required but non-tenant context", {
+            action: "auth.middleware.tenant_required",
+            userId: context.userId,
+            contextType: context.type,
+          });
           throw new ForbiddenError(AuthMessages.MULTIPLE_TENANTS);
         }
         (req as Request & { user: TenantAuthContext }).user = context;
@@ -51,6 +58,13 @@ export class AuthenticateMiddleware {
       try {
         const context = await this.resolveContext(req, res);
         if (!context.isPlatformAdmin) {
+          this.logger?.warn(
+            "Admin auth required but user is not platform admin",
+            {
+              action: "auth.middleware.admin_required",
+              userId: context.userId,
+            },
+          );
           throw new ForbiddenError(AuthMessages.NOT_PLATFORM_ADMIN);
         }
         (req as Request & { user: AuthContext }).user = context;
@@ -90,12 +104,21 @@ export class AuthenticateMiddleware {
     // Single DB query: fetch user & memberships
     const user = await this.authRepository.findUserById(payload.userId);
     if (!user) {
+      this.logger?.warn("Token valid but user not found in DB", {
+        action: "auth.middleware.user_not_found",
+        userId: payload.userId,
+      });
       this.clearCookies(res);
       throw new UnauthorizedError(AuthMessages.USER_NOT_FOUND);
     }
 
     // CRITICAL: Deactivated user must return 401 and wipe cookies
     if (!user.isActive) {
+      this.logger?.warn("Deactivated user attempted access", {
+        action: "auth.middleware.deactivated_user",
+        userId: user.id,
+        email: user.email,
+      });
       this.clearCookies(res);
       throw new UnauthorizedError(
         "Your account has been deactivated. Please contact support.",
@@ -109,9 +132,19 @@ export class AuthenticateMiddleware {
       );
 
       if (!membership) {
+        this.logger?.warn("Tenant membership not found for user", {
+          action: "auth.middleware.membership_not_found",
+          userId: user.id,
+          tenantId: payload.tenantId,
+        });
         throw new UnauthorizedError(AuthMessages.MEMBERSHIP_NOT_FOUND);
       }
       if (!membership.tenantActive) {
+        this.logger?.warn("Inactive tenant access attempt", {
+          action: "auth.middleware.tenant_inactive",
+          userId: user.id,
+          tenantId: membership.tenantId,
+        });
         throw new ForbiddenError(AuthMessages.TENANT_INACTIVE);
       }
 

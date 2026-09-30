@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser"; // <-- Added
-import { errorHandler } from "../shared/middleware/error-handler";
+import { createErrorHandler } from "../shared/middleware/error-handler";
 import { env } from "../shared/config/env";
 import { buildContainer } from "./container";
 import { buildRoutes } from "./routes";
@@ -10,6 +10,7 @@ import { HttpStatus } from "../shared/constants/http-status";
 import { sendError } from "../shared/utils/response";
 import { buildRazorpayWebhookRoutes } from "../modules/payments/presentation/razorpay-webhook.routes";
 import { buildWebhookRoutes } from "../modules/webhooks/presentation/webhook.routes";
+import { createRequestLogger } from "../shared/middleware/request-logger";
 
 export function buildApp(container = buildContainer()): Express {
   const app = express();
@@ -29,13 +30,8 @@ export function buildApp(container = buildContainer()): Express {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-  // Simple request logger
-  app.use((req, _res, next) => {
-    if (env.isDev) {
-      console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    }
-    next();
-  });
+  // Structured request logger (replaces inline console.log)
+  app.use(createRequestLogger(container.logger));
 
   // ── 2. WEBHOOK ROUTES ──────
   app.use(
@@ -70,7 +66,7 @@ export function buildApp(container = buildContainer()): Express {
     );
   });
 
-  app.use(errorHandler);
+  app.use(createErrorHandler(container.logger));
 
   return app;
 }

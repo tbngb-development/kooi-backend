@@ -6,13 +6,14 @@ import type {
 import { type AuthRepository } from "../interfaces/auth-repository.interface";
 import { type PasswordService } from "../interfaces/password-service.interface";
 import { type TokenService } from "../interfaces/token-service.interface";
-import { type OtpService } from "../interfaces/otp-service.interface"; // <-- Added
+import { type OtpService } from "../interfaces/otp-service.interface";
 import {
   EmailAlreadyExistsError,
   InvalidOtpError,
   OtpMaxAttemptsError,
 } from "../../domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../domain/rules/password.rules";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 const OTP_PURPOSE = "register";
 
@@ -22,6 +23,7 @@ export class RegisterTenantOwnerUseCase {
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly otpService: OtpService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(
@@ -37,9 +39,17 @@ export class RegisterTenantOwnerUseCase {
     );
 
     if (verification.maxAttemptsExceeded) {
+      this.logger.warn("Registration OTP max attempts exceeded", {
+        action: "register.tenant_owner",
+        email: normalizedEmail,
+      });
       throw new OtpMaxAttemptsError();
     }
     if (!verification.valid) {
+      this.logger.warn("Registration OTP invalid", {
+        action: "register.tenant_owner",
+        email: normalizedEmail,
+      });
       throw new InvalidOtpError();
     }
 
@@ -58,6 +68,10 @@ export class RegisterTenantOwnerUseCase {
     const existingUser =
       await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
+      this.logger.warn("Registration failed — email already exists", {
+        action: "register.tenant_owner",
+        email: normalizedEmail,
+      });
       throw new EmailAlreadyExistsError();
     }
 
@@ -94,6 +108,13 @@ export class RegisterTenantOwnerUseCase {
       userId: result.user.id,
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+    });
+
+    this.logger.info("Tenant owner registered", {
+      action: "register.tenant_owner",
+      userId: result.user.id,
+      tenantId: result.tenantId,
+      membershipId: result.membershipId,
     });
 
     return {

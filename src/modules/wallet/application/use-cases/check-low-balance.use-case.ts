@@ -5,12 +5,14 @@ import type { IEmailService } from "../../../../shared/config/external/email/ema
 import { lowBalanceEmailHtml } from "../../../../shared/config/external/email/templates/low-balance.template";
 import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
 import prisma from "../../../../shared/config/database/prisma";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class CheckLowBalanceUseCase {
   constructor(
     private readonly walletRepo: WalletRepository,
     private readonly planRepo: PlanRepository,
     private readonly email: IEmailService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: { tenantId: string }): Promise<void> {
@@ -37,6 +39,13 @@ export class CheckLowBalanceUseCase {
             balancePaisa: availableBalance, // Corrected parameter name
             thresholdPaisa: plan.lowBalanceThreshold,
           }),
+        });
+
+        this.logger.warn("Low balance threshold triggered", {
+          action: "wallet.low_balance",
+          tenantId: input.tenantId,
+          balancePaisa: availableBalance,
+          thresholdPaisa: plan.lowBalanceThreshold,
         });
       }
     }

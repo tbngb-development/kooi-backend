@@ -12,6 +12,7 @@ import type {
   CompletePaymentInput,
   CompletePaymentResult,
 } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 /**
  * Completes a payment after Razorpay verification (manual or webhook).
@@ -29,6 +30,7 @@ export class CompletePaymentUseCase {
     private readonly autoAssignKey: AutoAssignKeyUseCase,
     private readonly email: IEmailService,
     private readonly tenantEmailRepo: TenantEmailRepository,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: CompletePaymentInput): Promise<CompletePaymentResult> {
@@ -40,6 +42,12 @@ export class CompletePaymentUseCase {
 
     // 2. Idempotency: already processed
     if (recharge.status === "SUCCESS") {
+      this.logger.info("Payment already processed (idempotent hit)", {
+        action: "payment.complete",
+        orderId: input.razorpayOrderId,
+        rechargeId: recharge.id,
+        tenantId: recharge.tenantId,
+      });
       return {
         alreadyProcessed: true,
         rechargeId: recharge.id,
@@ -71,6 +79,16 @@ export class CompletePaymentUseCase {
       recharge.purpose,
     );
 
+    this.logger.info("Payment completed", {
+      action: "payment.complete",
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      rechargeId: recharge.id,
+      tenantId: recharge.tenantId,
+      amountPaisa: recharge.amount,
+      purpose: recharge.purpose,
+    });
+
     return {
       alreadyProcessed: false,
       rechargeId: recharge.id,
@@ -82,9 +100,11 @@ export class CompletePaymentUseCase {
 
   private async processOnboarding(recharge: Recharge): Promise<void> {
     if (!recharge.tenantPlanId) {
-      console.error(
-        `[Payment] ONBOARDING recharge ${recharge.id} has no tenantPlanId`,
-      );
+      this.logger.error("ONBOARDING recharge missing tenantPlanId", undefined, {
+        action: "payment.onboarding",
+        rechargeId: recharge.id,
+        tenantId: recharge.tenantId,
+      });
       return;
     }
 
@@ -122,7 +142,10 @@ export class CompletePaymentUseCase {
     try {
       await this.autoAssignKey.execute(recharge.tenantId);
     } catch (err) {
-      console.error("[Payment] auto-assign Bolna key failed:", err);
+      this.logger.error("Auto-assign Bolna key failed", err, {
+        action: "payment.onboarding.auto_assign_key",
+        tenantId: recharge.tenantId,
+      });
     }
 
     // Credit initial plan bonus
@@ -200,9 +223,15 @@ export class CompletePaymentUseCase {
       });
     }
 
-    console.log(
-      `[Payment] Plan upgrade complete for tenant ${recharge.tenantId} to ${targetPlanName} (v${targetVersion.version}) | Bonus delta credited: ₹${(bonusDelta / 100).toFixed(2)}`,
-    );
+    this.logger.info("Plan upgrade complete", {
+      action: "payment.plan_upgrade",
+      tenantId: recharge.tenantId,
+      rechargeId: recharge.id,
+      targetPlanVersionId: targetVersionId,
+      targetPlanName,
+      targetVersion: targetVersion.version,
+      bonusDeltaPaisa: bonusDelta,
+    });
   }
 
   private async processTopup(recharge: Recharge): Promise<void> {
@@ -238,7 +267,10 @@ export class CompletePaymentUseCase {
         }),
       });
     } catch (err) {
-      console.error("[Payment] receipt email failed:", err);
+      this.logger.error("Payment receipt email failed", err, {
+        action: "payment.receipt_email",
+        tenantId,
+      });
     }
   }
 }

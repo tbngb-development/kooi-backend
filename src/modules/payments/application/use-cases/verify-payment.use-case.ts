@@ -9,6 +9,7 @@ import type {
   VerifyPaymentInput,
   CompletePaymentResult,
 } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 /**
  * Client-side payment verification (tenant calls this after Razorpay checkout).
@@ -19,6 +20,7 @@ export class VerifyPaymentUseCase {
     private readonly payments: IPaymentProvider,
     private readonly rechargeRepo: RechargeRepository,
     private readonly completePayment: CompletePaymentUseCase,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: VerifyPaymentInput): Promise<CompletePaymentResult> {
@@ -34,7 +36,21 @@ export class VerifyPaymentUseCase {
       paymentId: input.razorpayPaymentId,
       signature: input.razorpaySignature,
     });
-    if (!isValid) throw new InvalidSignatureError();
+    if (!isValid) {
+      this.logger.warn("Payment signature verification failed", {
+        action: "payment.verify",
+        orderId: input.razorpayOrderId,
+        tenantId: recharge.tenantId,
+      });
+      throw new InvalidSignatureError();
+    }
+
+    this.logger.info("Payment signature verified", {
+      action: "payment.verify",
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      tenantId: recharge.tenantId,
+    });
 
     // 3. Delegate to CompletePayment (idempotent)
     return this.completePayment.execute(input);

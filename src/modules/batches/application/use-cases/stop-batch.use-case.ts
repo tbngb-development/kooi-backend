@@ -6,12 +6,14 @@ import {
 } from "../../domain/errors/batch.errors";
 import { isBatchTerminal } from "../../domain/entities/batch-status.rules";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class StopBatchUseCase {
   constructor(
     private readonly batchRepo: BatchRepository,
     private readonly campaignRepo: CampaignRepository,
     private readonly bolnaProvider: BolnaBatchProvider,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(tenantId: string, campaignId: string, batchId: string) {
@@ -33,7 +35,13 @@ export class StopBatchUseCase {
       try {
         await this.bolnaProvider.stopBatch(tenantId, batchData.bolnaBatchId);
       } catch (err) {
-        console.warn("[StopBatch] Bolna stop error:", err);
+        this.logger?.warn("Bolna stop batch error", {
+          action: "batch.stop.bolna_error",
+          tenantId,
+          batchId,
+          bolnaBatchId: batchData.bolnaBatchId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -47,6 +55,13 @@ export class StopBatchUseCase {
 
     // 4. Recalculate campaign status
     await this.checkAndUpdateCampaignStatus(campaignId);
+
+    this.logger?.info("Batch stopped", {
+      action: "batch.stop",
+      tenantId,
+      campaignId,
+      batchId,
+    });
 
     return {
       batch: updatedBatch,

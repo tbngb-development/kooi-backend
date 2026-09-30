@@ -12,6 +12,7 @@ import {
   OnboardingFeeNotZeroError,
 } from "../../domain/errors/payment.errors";
 import type { CreateOrderResult } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 /**
  * Creates a Razorpay order for plan onboarding payment.
@@ -25,6 +26,7 @@ export class CreateOnboardingOrderUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly rechargeRepo: RechargeRepository,
     private readonly payments: IPaymentProvider,
+    private readonly logger: Logger,
   ) {}
 
   async execute(tenantId: string): Promise<CreateOrderResult> {
@@ -71,6 +73,15 @@ export class CreateOnboardingOrderUseCase {
       status: "INITIATED",
       razorpayOrderId: order.orderId,
       tenantPlanId: tenantPlan.id,
+    });
+
+    this.logger.info("Onboarding order created", {
+      action: "payment.create_onboarding_order",
+      orderId: order.orderId,
+      rechargeId: recharge.id,
+      tenantId,
+      planVersionId: effectiveTerms.planVersionId,
+      amountPaisa: effectiveTerms.onboardingFee,
     });
 
     return {

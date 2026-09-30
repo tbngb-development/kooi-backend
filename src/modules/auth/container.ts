@@ -4,6 +4,8 @@ import type { PasswordService } from "./application/interfaces/password-service.
 import type { OtpService } from "./application/interfaces/otp-service.interface";
 import type { PasswordResetTokenService } from "./application/interfaces/password-reset-token.service.interface";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { Logger } from "../../shared/logging/logger.interface";
+
 import { RegisterTenantOwnerUseCase } from "./application/use-cases/register-tenant-owner.use-case";
 import { LoginUseCase } from "./application/use-cases/login.use-case";
 import { SelectTenantUseCase } from "./application/use-cases/select-tenant.use-case";
@@ -33,6 +35,7 @@ export interface AuthModuleDeps {
   otpService: OtpService;
   passwordResetTokenService: PasswordResetTokenService;
   emailService: IEmailService;
+  logger: Logger;
 }
 
 export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
@@ -45,41 +48,49 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     emailService,
   } = deps;
 
+  const log = deps.logger.child({ module: "auth" });
+
   const adminLoginUseCase = new AdminLoginUseCase(
     authRepository,
     passwordService,
     tokenService,
+    log,
   );
   const loginUseCase = new LoginUseCase(
     authRepository,
     passwordService,
     tokenService,
+    log,
   );
 
   const forgotPasswordUseCase = new ForgotPasswordUseCase(
     authRepository,
     otpService,
     emailService,
+    log,
   );
 
   const verifyForgotPasswordOtpUseCase = new VerifyForgotPasswordOtpUseCase(
     authRepository,
     otpService,
     passwordResetTokenService,
+    log,
   );
 
   const resetPasswordUseCase = new ResetPasswordUseCase(
     authRepository,
     passwordService,
     passwordResetTokenService,
+    log,
   );
 
   const changePasswordUseCase = new ChangePasswordUseCase(
     authRepository,
     passwordService,
+    log,
   );
 
-  const logoutUsecase = new LogoutUseCase(authRepository, tokenService);
+  const logoutUsecase = new LogoutUseCase(authRepository, tokenService, log);
 
   return {
     tenantController: new TenantAuthController(
@@ -88,19 +99,25 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
         passwordService,
         tokenService,
         otpService,
+        log,
       ),
       loginUseCase,
-      new SelectTenantUseCase(authRepository, tokenService),
-      new RefreshTokensUseCase(authRepository, tokenService),
+      new SelectTenantUseCase(authRepository, tokenService, log),
+      new RefreshTokensUseCase(authRepository, tokenService, log),
       new GetProfileUseCase(authRepository),
-      new CreateInviteUseCase(tokenService),
-      new AcceptInviteUseCase(authRepository, passwordService, tokenService),
+      new CreateInviteUseCase(tokenService, log),
+      new AcceptInviteUseCase(
+        authRepository,
+        passwordService,
+        tokenService,
+        log,
+      ),
       logoutUsecase,
       forgotPasswordUseCase,
       verifyForgotPasswordOtpUseCase,
       resetPasswordUseCase,
       changePasswordUseCase,
-      new SendRegisterOtpUseCase(authRepository, otpService, emailService),
+      new SendRegisterOtpUseCase(authRepository, otpService, emailService, log),
     ),
 
     adminController: new AdminAuthController(

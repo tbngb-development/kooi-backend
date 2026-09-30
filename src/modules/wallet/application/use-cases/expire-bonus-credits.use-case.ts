@@ -2,6 +2,7 @@ import type { WalletRepository } from "../interfaces/wallet-repository.interface
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { IEmailService } from "../../../../shared/config/external/email/email.interface";
 import { bonusExpiredEmailHtml } from "../../../../shared/config/external/email/templates/bonus-expired.template";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface BonusExpiryResult {
   processed: number;
@@ -24,6 +25,7 @@ export class ExpireBonusCreditsUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly planRepo: PlanRepository,
     private readonly email: IEmailService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(): Promise<BonusExpiryResult> {
@@ -33,9 +35,10 @@ export class ExpireBonusCreditsUseCase {
       return { processed: 0, skipped: 0, failed: 0 };
     }
 
-    console.log(
-      `[BonusExpiry] Found ${expiredWallets.length} wallet(s) with expired bonus`,
-    );
+    this.logger.info("Bonus expiry sweep started", {
+      action: "wallet.bonus_expiry.sweep_start",
+      walletCount: expiredWallets.length,
+    });
 
     let processed = 0;
     let skipped = 0;
@@ -55,10 +58,10 @@ export class ExpireBonusCreditsUseCase {
         try {
           await this.planRepo.recordBonusExpiredEvent(wallet.tenantId);
         } catch (err) {
-          console.error(
-            `[BonusExpiry] Failed to record plan event for tenant ${wallet.tenantId}:`,
-            err,
-          );
+          this.logger.error("Failed to record bonus expired plan event", err, {
+            action: "wallet.bonus_expiry.plan_event_failed",
+            tenantId: wallet.tenantId,
+          });
           // Do not increment failed — the financial operation succeeded
         }
 
@@ -76,25 +79,28 @@ export class ExpireBonusCreditsUseCase {
             html,
           });
         } catch (err) {
-          console.error(
-            `[BonusExpiry] Failed to send email for tenant ${wallet.tenantId}:`,
-            err,
-          );
+          this.logger.error("Failed to send bonus expiry email", err, {
+            action: "wallet.bonus_expiry.email_failed",
+            tenantId: wallet.tenantId,
+          });
         }
 
         processed++;
       } catch (err) {
-        console.error(
-          `[BonusExpiry] Failed to expire bonus for tenant ${wallet.tenantId}:`,
-          err,
-        );
+        this.logger.error("Failed to expire bonus for tenant", err, {
+          action: "wallet.bonus_expiry.tenant_failed",
+          tenantId: wallet.tenantId,
+        });
         failed++;
       }
     }
 
-    console.log(
-      `[BonusExpiry] Complete — processed: ${processed}, skipped: ${skipped}, failed: ${failed}`,
-    );
+    this.logger.info("Bonus expiry sweep completed", {
+      action: "wallet.bonus_expiry.sweep_complete",
+      processed,
+      skipped,
+      failed,
+    });
 
     return { processed, skipped, failed };
   }

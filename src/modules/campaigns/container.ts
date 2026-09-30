@@ -12,23 +12,32 @@ import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prism
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
 import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/get-campaign-extraction-overview.use-case";
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
+import type { Logger } from "../../shared/logging/logger.interface";
+
+export interface CampaignModuleDeps {
+  logger: Logger;
+}
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
 }
 
-export function buildCampaignModule(): CampaignModule {
+export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const campaignRepo = new PrismaCampaignRepository();
   const batchRepo = new PrismaBatchRepository();
   const planRepo = new PrismaPlanRepository();
   const walletRepo = new PrismaWalletRepository();
+  const log = deps?.logger?.child({ module: "campaign" });
 
   const listCampaigns = new ListCampaignsUseCase(campaignRepo);
   const getCampaign = new GetCampaignUseCase(campaignRepo);
   const getCampaignStats = new GetCampaignStatsUseCase(campaignRepo);
 
-  const extractVariables = new ExtractCampaignVariablesUseCase(campaignRepo);
+  const extractVariables = new ExtractCampaignVariablesUseCase(
+    campaignRepo,
+    log,
+  );
 
   const getExtractionOverview = new GetCampaignExtractionOverviewUseCase(
     campaignRepo,
@@ -41,8 +50,8 @@ export function buildCampaignModule(): CampaignModule {
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,
-      new CreateCampaignUseCase(campaignRepo, planRepo),
-      new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo),
+      new CreateCampaignUseCase(campaignRepo, planRepo, log),
+      new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo, log),
       getCampaignStats,
       extractVariables,
       getExtractionOverview,

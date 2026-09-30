@@ -5,6 +5,7 @@ import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.error
 import { AppError } from "../../../../shared/errors";
 import { HttpStatus } from "../../../../shared/constants";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface CreateUpgradeOrderInput {
   tenantId: string;
@@ -33,6 +34,7 @@ export class CreateUpgradeOrderUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly rechargeRepo: RechargeRepository,
     private readonly payments: IPaymentProvider,
+    private readonly logger: Logger,
   ) {}
 
   async execute(
@@ -97,6 +99,16 @@ export class CreateUpgradeOrderUseCase {
       status: "INITIATED",
       razorpayOrderId: order.orderId,
       tenantPlanId: tenantPlan?.id ?? null,
+    });
+
+    this.logger.info("Plan upgrade order created", {
+      action: "payment.create_upgrade_order",
+      orderId: order.orderId,
+      rechargeId: recharge.id,
+      tenantId: input.tenantId,
+      fromPlanVersionId: currentPlan.planVersionId,
+      toPlanVersionId: newVersion.id,
+      feeDifferencePaisa: difference,
     });
 
     return {

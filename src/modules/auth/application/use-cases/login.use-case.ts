@@ -5,22 +5,33 @@ import { type PasswordService } from "../interfaces/password-service.interface";
 import { type TokenService } from "../interfaces/token-service.interface";
 import { InvalidCredentialsError } from "../../domain/errors/auth.errors";
 import { ForbiddenError } from "../../../../shared/errors";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class LoginUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: LoginInput): Promise<LoginOutput> {
     // 1. Find and validate user status
     const user = await this.authRepository.findUserByEmail(input.email);
     if (!user) {
+      this.logger.warn("Login failed — user not found", {
+        action: "login",
+        email: input.email,
+      });
       throw new InvalidCredentialsError();
     }
 
     if (!user.isActive) {
+      this.logger.warn("Login failed — account deactivated", {
+        action: "login",
+        userId: user.id,
+        email: input.email,
+      });
       throw new ForbiddenError(
         "Your account has been deactivated. Please contact support.",
       );
@@ -32,6 +43,11 @@ export class LoginUseCase {
       user.passwordHash,
     );
     if (!isValidPassword) {
+      this.logger.warn("Login failed — invalid password", {
+        action: "login",
+        userId: user.id,
+        email: input.email,
+      });
       throw new InvalidCredentialsError();
     }
 
@@ -50,17 +66,19 @@ export class LoginUseCase {
     let requiresTenantSelection = false;
 
     if (input.tenantId) {
-      // Explicit tenant requested
       selectedMembership =
         activeMemberships.find((m) => m.tenantId === input.tenantId) ?? null;
       if (!selectedMembership) {
+        this.logger.warn("Login failed — tenant not in memberships", {
+          action: "login",
+          userId: user.id,
+          requestedTenantId: input.tenantId,
+        });
         throw new InvalidCredentialsError();
       }
     } else if (activeMemberships.length === 1) {
-      // Auto-select single membership (UX optimization)
       selectedMembership = activeMemberships[0];
     } else {
-      // 0 or >1 memberships (user must select tenant next)
       requiresTenantSelection = true;
     }
 
@@ -81,13 +99,20 @@ export class LoginUseCase {
       );
     }
 
-    // 6. Generate and save Refresh Token (Single place!)
+    // 6. Generate and save Refresh Token
     const refreshTokenData = this.tokenService.generateRefreshToken(user.id);
     await this.authRepository.saveRefreshToken({
       tokenHash: refreshTokenData.tokenHash,
       userId: user.id,
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+    });
+
+    this.logger.info("Login successful", {
+      action: "login",
+      userId: user.id,
+      tenantId: selectedMembership?.tenantId,
+      requiresTenantSelection,
     });
 
     return {

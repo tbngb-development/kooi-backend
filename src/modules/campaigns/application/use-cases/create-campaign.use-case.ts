@@ -8,11 +8,13 @@ import {
   MaxActiveCampaignsReachedError,
 } from "../../domain/errors/campaign.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class CreateCampaignUseCase {
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly planRepo: PlanRepository,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
@@ -27,6 +29,12 @@ export class CreateCampaignUseCase {
     ) {
       const activeCount = await this.planRepo.countActiveCampaigns(tenantId);
       if (activeCount >= activePlan.maxActiveCampaigns) {
+        this.logger?.warn("Max active campaigns reached", {
+          action: "campaign.create",
+          tenantId,
+          activeCount,
+          limit: activePlan.maxActiveCampaigns,
+        });
         throw new MaxActiveCampaignsReachedError(activePlan.maxActiveCampaigns);
       }
     }
@@ -66,10 +74,19 @@ export class CreateCampaignUseCase {
     }
 
     // 6. Create campaign
-    return this.campaignRepo.create(tenantId, {
+    const campaign = await this.campaignRepo.create(tenantId, {
       ...input,
       variables: cleaned,
       defaultRetryConfig: finalRetryConfig,
     });
+
+    this.logger?.info("Campaign created", {
+      action: "campaign.create",
+      tenantId,
+      campaignId: campaign.id,
+      assistantId: input.assistantId,
+    });
+
+    return campaign;
   }
 }

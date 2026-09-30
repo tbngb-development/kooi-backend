@@ -4,6 +4,7 @@ import { calculateCallCost } from "../../../plans/domain/rules/billing-calculato
 import { InsufficientBalanceError } from "../../domain/errors/wallet.errors";
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 const ESTIMATED_AVG_CALL_SEC = 90;
 
@@ -18,6 +19,7 @@ export class CheckBalanceForBatchUseCase {
   constructor(
     private readonly walletRepo: WalletRepository,
     private readonly planRepo: PlanRepository,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: {
@@ -43,9 +45,27 @@ export class CheckBalanceForBatchUseCase {
 
     // Require at least 50% buffer to schedule the batch
     if (availableBalance < Math.floor(estimatedCost * 0.5)) {
+      this.logger.warn("Insufficient balance for batch", {
+        action: "wallet.check_balance_batch",
+        tenantId: input.tenantId,
+        leadCount: input.leadCount,
+        balancePaisa: availableBalance,
+        estimatedCostPaisa: estimatedCost,
+        requiredMinimumPaisa: Math.floor(estimatedCost * 0.5),
+      });
       throw new InsufficientBalanceError(
         `Insufficient balance. You need at least ₹${(Math.floor(estimatedCost * 0.5) / 100).toFixed(2)} to launch ${input.leadCount} leads.`,
       );
+    }
+
+    if (availableBalance < estimatedCost) {
+      this.logger.warn("Low balance warning for batch", {
+        action: "wallet.check_balance_batch",
+        tenantId: input.tenantId,
+        leadCount: input.leadCount,
+        balancePaisa: availableBalance,
+        estimatedCostPaisa: estimatedCost,
+      });
     }
 
     return {

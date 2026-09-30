@@ -14,6 +14,7 @@ import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
 import { env } from "../../../../shared/config/env";
 import type { LeadRow } from "../../../leads/infrastructure/leadParser";
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ResumeBatchUseCase {
   constructor(
@@ -21,6 +22,7 @@ export class ResumeBatchUseCase {
     private readonly campaignRepo: CampaignRepository,
     private readonly storage: FileStorageProvider,
     private readonly bolnaProvider: BolnaBatchProvider,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(
@@ -106,6 +108,16 @@ export class ResumeBatchUseCase {
 
     const updatedBatch = await this.batchRepo.update(newBatch.id, {
       bolnaBatchId,
+    });
+
+    this.logger?.info("Batch resumed", {
+      action: "batch.resume",
+      tenantId,
+      campaignId,
+      originalBatchId: batchId,
+      newBatchId: newBatch.id,
+      bolnaBatchId,
+      remainingLeads: pendingLeads.length,
     });
 
     return {

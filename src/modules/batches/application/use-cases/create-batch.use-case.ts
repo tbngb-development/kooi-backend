@@ -30,8 +30,12 @@ import {
   toBolnaISO,
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
-import { ScheduledCampaignConflictError, TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
+import {
+  ScheduledCampaignConflictError,
+  TenantPlanNotFoundError,
+} from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class CreateBatchUseCase {
   constructor(
@@ -40,6 +44,7 @@ export class CreateBatchUseCase {
     private readonly storage: FileStorageProvider,
     private readonly bolnaProvider: BolnaBatchProvider,
     private readonly planRepo: PlanRepository,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(input: CreateBatchInput): Promise<CreateBatchOutput> {
@@ -77,12 +82,11 @@ export class CreateBatchUseCase {
         activePlan.maxActiveCampaigns !== null &&
         activePlan.maxActiveCampaigns !== undefined
       ) {
-        // Verify time overlap against other scheduled/running campaigns
         const conflictCount =
           await this.planRepo.countConcurrentCampaignsAtTime(
             input.tenantId,
             targetScheduledDate,
-            input.campaignId, // Exclude this campaign
+            input.campaignId,
           );
 
         if (conflictCount >= activePlan.maxActiveCampaigns) {
@@ -100,7 +104,6 @@ export class CreateBatchUseCase {
         }
       }
     } else if (input.runImmediately) {
-      // If immediate run is requested, check if it pushes the concurrent active campaign limit
       if (
         campaign.status !== "RUNNING" &&
         activePlan?.maxActiveCampaigns !== null &&
@@ -181,7 +184,7 @@ export class CreateBatchUseCase {
       }
     }
 
-    // 10. Create batch initially as CREATED (will flip state on successful Bolna scheduling)
+    // 10. Create batch initially as CREATED
     const batch = await this.batchRepo.create({
       campaignId: input.campaignId,
       tenantId: input.tenantId,
@@ -215,7 +218,11 @@ export class CreateBatchUseCase {
         `kooi/${input.tenantId}/campaigns/${input.campaignId}/batches/${batch.id}`,
       );
     } catch (err) {
-      console.error("[CreateBatch] Original file upload failed:", err);
+      this.logger?.error("Original file upload failed", err, {
+        action: "batch.create.upload_failed",
+        tenantId: input.tenantId,
+        batchId: batch.id,
+      });
     }
 
     // 12. Transform to Bolna CSV in memory
@@ -292,6 +299,16 @@ export class CreateBatchUseCase {
         startedAt: new Date(),
       });
     }
+
+    this.logger?.info("Batch created", {
+      action: "batch.create",
+      tenantId: input.tenantId,
+      campaignId: input.campaignId,
+      batchId: batch.id,
+      bolnaBatchId,
+      totalLeads: newLeads.length,
+      status: finalStatus,
+    });
 
     // Generate readable response helper string for UI
     let message = "Batch uploaded and staged successfully.";

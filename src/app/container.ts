@@ -73,8 +73,11 @@ import {
   type IndustryPackModule,
 } from "../modules/industry-packs/container";
 import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
+import type { Logger } from "../shared/logging/logger.interface";
+import { createLogger } from "../shared/config/logging/winston.logger";
 
 export interface AppContainer {
+  logger: Logger;
   auth: AuthModule;
   assistants: AssistantModule;
   tenants: TenantModule;
@@ -106,16 +109,21 @@ export interface AppContainer {
 }
 
 export function buildContainer(): AppContainer {
+  const logger = createLogger();
+
   // ── Infrastructure ──────────────────────────────────────────────────
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
-  const email = new ResendEmailService();
+  const email = new ResendEmailService(logger.child({ module: "email" }));
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
 
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
-  const bolnaClientFactory = new BolnaClientFactory(apiKeyRepository);
+  const bolnaClientFactory = new BolnaClientFactory(
+    apiKeyRepository,
+    logger.child({ module: "bolna-factory" }),
+  );
 
   const assistantModule = buildAssistantModule({
     bolnaClientFactory,
@@ -133,6 +141,7 @@ export function buildContainer(): AppContainer {
     otpService,
     passwordResetTokenService,
     emailService: email,
+    logger,
   });
 
   // ── Core Commercial Foundation ──────────────────────────────────────
@@ -145,6 +154,7 @@ export function buildContainer(): AppContainer {
     planRepository: plans.repository,
     bolnaClientFactory,
     email,
+    logger,
   });
 
   // ── Payments (depends on wallet + plans + bolna key auto-assign) ─────
@@ -153,6 +163,7 @@ export function buildContainer(): AppContainer {
     planRepository: plans.repository,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
+    logger,
   });
 
   // ── Invites ─────────────────────────────────────────────────────────
@@ -169,6 +180,7 @@ export function buildContainer(): AppContainer {
 
   // ── Assembled Domain Modules ────────────────────────────────────────
   return {
+    logger,
     auth,
     assistants: buildAssistantModule({ bolnaClientFactory }),
     tenants: buildTenantModule(),
@@ -183,6 +195,7 @@ export function buildContainer(): AppContainer {
     users: buildUserModule({ passwordService }),
     webhooks: buildWebhookModule({
       debitWalletForCall: wallet.useCases.debitWalletForCall,
+      logger,
     }),
     platformAgents: buildPlatformAgentModule(),
     extractions: buildExtractionModule(),

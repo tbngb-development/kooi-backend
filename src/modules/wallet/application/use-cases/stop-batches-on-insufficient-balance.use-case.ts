@@ -3,12 +3,14 @@ import type { PlanRepository } from "../../../plans/application/interfaces/plan-
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
 import { evaluateCreditLimit } from "../../domain/rules/credit-limit.rules";
 import prisma from "../../../../shared/config/database/prisma";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class StopBatchesOnInsufficientBalanceUseCase {
   constructor(
     private readonly walletRepo: WalletRepository,
     private readonly planRepo: PlanRepository,
     private readonly bolnaClientFactory: IBolnaClientFactory,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: { tenantId: string }): Promise<void> {
@@ -48,9 +50,11 @@ export class StopBatchesOnInsufficientBalanceUseCase {
 
     if (runningBatches.length === 0) return;
 
-    console.log(
-      `[CreditLimit] Stopping ${runningBatches.length} batches for tenant ${input.tenantId}.`,
-    );
+    this.logger.warn("Stopping batches — credit limit reached", {
+      action: "wallet.stop_batches",
+      tenantId: input.tenantId,
+      batchCount: runningBatches.length,
+    });
 
     const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
 
@@ -71,7 +75,11 @@ export class StopBatchesOnInsufficientBalanceUseCase {
           data: { status: "STOPPED", stoppedReason: "LOW_BALANCE" },
         });
       } catch (err) {
-        console.error(`[CreditLimit] Failed to stop batch ${batch.id}:`, err);
+        this.logger.error("Failed to stop batch on credit limit", err, {
+          action: "wallet.stop_batches.batch_failed",
+          tenantId: input.tenantId,
+          batchId: batch.id,
+        });
       }
     }
 

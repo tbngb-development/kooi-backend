@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import type { ExpireBonusCreditsUseCase } from "../../application/use-cases/expire-bonus-credits.use-case";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 type ScheduledTask = ReturnType<typeof cron.schedule>;
 
@@ -19,18 +20,28 @@ export class BonusExpiryScheduler {
 
   constructor(
     private readonly expireBonusCreditsUseCase: ExpireBonusCreditsUseCase,
-    private readonly cronExpression = "*/15 * * * *", // Every 15 minutes
+    private readonly logger: Logger,
+    private readonly cronExpression = "*/15 * * * *",
   ) {}
 
   start(): void {
     if (this.task) {
-      console.warn("[BonusExpiryScheduler] Already running");
+      this.logger.warn("Bonus expiry scheduler already running", {
+        action: "scheduler.start",
+        jobId: "bonus-expiry",
+      });
       return;
     }
 
     if (!cron.validate(this.cronExpression)) {
-      console.error(
-        `[BonusExpiryScheduler] Invalid cron expression: ${this.cronExpression}`,
+      this.logger.error(
+        "Invalid cron expression for bonus expiry scheduler",
+        undefined,
+        {
+          action: "scheduler.invalid_cron",
+          jobId: "bonus-expiry",
+          cronExpression: this.cronExpression,
+        },
       );
       return;
     }
@@ -38,21 +49,25 @@ export class BonusExpiryScheduler {
     this.task = cron.schedule(
       this.cronExpression,
       async () => {
-        // Prevent overlapping runs
         if (this.isRunning) {
-          console.warn(
-            "[BonusExpiryScheduler] Previous run still in progress, skipping",
+          this.logger.warn(
+            "Bonus expiry scheduler — previous run still in progress, skipping",
+            {
+              action: "scheduler.skip",
+              jobId: "bonus-expiry",
+            },
           );
           return;
         }
 
         this.isRunning = true;
         try {
-           // ── Optional: Add this line to see the tick every minute in dev ──
-          // console.log(`[BonusExpiryScheduler] Cron tick executed at ${new Date().toLocaleTimeString()}`);
           await this.expireBonusCreditsUseCase.execute();
         } catch (err) {
-          console.error("[BonusExpiryScheduler] Unhandled error:", err);
+          this.logger.error("Bonus expiry scheduler unhandled error", err, {
+            action: "scheduler.error",
+            jobId: "bonus-expiry",
+          });
         } finally {
           this.isRunning = false;
         }
@@ -62,16 +77,22 @@ export class BonusExpiryScheduler {
       },
     );
 
-    console.log(
-      `[BonusExpiryScheduler] Started (cron: ${this.cronExpression}, tz: Asia/Kolkata)`,
-    );
+    this.logger.info("Bonus expiry scheduler started", {
+      action: "scheduler.started",
+      jobId: "bonus-expiry",
+      cronExpression: this.cronExpression,
+      timezone: "Asia/Kolkata",
+    });
   }
 
   stop(): void {
     if (this.task) {
       this.task.stop();
       this.task = null;
-      console.log("[BonusExpiryScheduler] Stopped");
+      this.logger.info("Bonus expiry scheduler stopped", {
+        action: "scheduler.stopped",
+        jobId: "bonus-expiry",
+      });
     }
   }
 }

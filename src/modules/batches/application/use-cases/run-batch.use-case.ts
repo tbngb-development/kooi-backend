@@ -16,6 +16,7 @@ import {
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class RunBatchUseCase {
   constructor(
@@ -24,6 +25,7 @@ export class RunBatchUseCase {
     private readonly bolnaProvider: BolnaBatchProvider,
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(tenantId: string, campaignId: string, batchId: string) {
@@ -53,7 +55,6 @@ export class RunBatchUseCase {
         activePlan.maxActiveCampaigns !== null &&
         activePlan.maxActiveCampaigns !== undefined
       ) {
-        // [FIXED] Count ONLY live RUNNING campaigns (not DRAFT or COMPLETED)
         const runningCount =
           await this.planRepo.countRunningCampaigns(tenantId);
         if (runningCount >= activePlan.maxActiveCampaigns) {
@@ -104,7 +105,16 @@ export class RunBatchUseCase {
         startedAt: new Date(),
       });
     }
-    
+
+    this.logger?.info("Batch run started", {
+      action: "batch.run",
+      tenantId,
+      campaignId,
+      batchId,
+      bolnaBatchId: batchData.bolnaBatchId,
+      totalLeads: batchData.totalLeads,
+    });
+
     const runsAt = new Date(bolnaScheduledAt ?? now).toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       dateStyle: "medium",
