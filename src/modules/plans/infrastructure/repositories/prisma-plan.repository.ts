@@ -461,6 +461,30 @@ export class PrismaPlanRepository implements PlanRepository {
     });
   }
 
+  async recordBonusExpiredEvent(tenantId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const tenantPlan = await tx.tenantPlan.findUnique({
+        where: { tenantId },
+      });
+
+      if (!tenantPlan || tenantPlan.status !== "ACTIVE") return;
+
+      await tx.tenantPlanEvent.create({
+        data: {
+          tenantPlanId: tenantPlan.id,
+          tenantId,
+          type: "BONUS_EXPIRED",
+          toPlanVersionId: tenantPlan.planVersionId,
+          createdBy: "SYSTEM",
+          metadata: {
+            reason: "Scheduled bonus expiry",
+            expiredAt: new Date().toISOString(),
+          },
+        },
+      });
+    });
+  }
+
   // ── Enforcement Counts ────────────────────────────────────────
 
   async countActiveCampaigns(tenantId: string): Promise<number> {

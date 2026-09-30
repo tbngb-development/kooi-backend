@@ -68,6 +68,11 @@ export interface PlanRepository {
     status: TenantPlanStatus,
     createdBy?: string,
   ): Promise<void>;
+  /**
+   * Records a BONUS_EXPIRED TenantPlanEvent for audit trail.
+   * No-op if tenant plan is not ACTIVE.
+   */
+  recordBonusExpiredEvent(tenantId: string): Promise<void>;
 
   // ── Enforcement Counts ────────────────────────────────────────
   countActiveCampaigns(tenantId: string): Promise<number>;
