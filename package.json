@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "seed:plans": "tsx src/seeds/plans.seed.ts",
+    "seed:dispositions": "tsx  src/seeds/dispositions.seed.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
