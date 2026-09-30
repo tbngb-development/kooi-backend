@@ -1,6 +1,9 @@
 import prisma from "../shared/config/database/prisma";
 import { BcryptPasswordService } from "../modules/auth/infrastructure/services/bcrypt-password.service";
 import { validatePasswordStrength } from "../modules/auth/domain/rules/password.rules";
+import { createLogger } from "../shared/config/logging/winston.logger";
+
+const logger = createLogger().child({ module: "seed", seed: "platform-admin" });
 
 interface SeedArgs {
   email: string;
@@ -30,10 +33,17 @@ function parseArgs(): SeedArgs {
 async function main(): Promise<void> {
   const args = parseArgs();
 
+  logger.info("Starting platform admin seed", {
+    action: "seed.platform_admin.start",
+    email: args.email,
+  });
+
   const validation = validatePasswordStrength(args.password);
   if (!validation.isValid) {
-    console.error("❌ Password validation failed:");
-    validation.errors.forEach((e) => console.error(`  - ${e}`));
+    logger.error("Password validation failed", undefined, {
+      action: "seed.platform_admin.password_invalid",
+      errors: validation.errors,
+    });
     process.exit(1);
   }
 
@@ -47,15 +57,22 @@ async function main(): Promise<void> {
 
   if (existing) {
     if (existing.platformAdmin) {
-      console.log(
-        `✓ User ${args.email} is already a platform admin (id: ${existing.id})`,
-      );
+      logger.info("User is already a platform admin", {
+        action: "seed.platform_admin.already_exists",
+        userId: existing.id,
+        email: args.email,
+      });
       return;
     }
-    await prisma.platformAdmin.create({
+    const admin = await prisma.platformAdmin.create({
       data: { userId: existing.id },
     });
-    console.log(`✓ Promoted existing user ${args.email} to platform admin`);
+    logger.info("Existing user promoted to platform admin", {
+      action: "seed.platform_admin.promoted",
+      userId: existing.id,
+      adminId: admin.id,
+      email: args.email,
+    });
     return;
   }
 
@@ -76,15 +93,19 @@ async function main(): Promise<void> {
     return { user, admin };
   });
 
-  console.log(`✓ Platform admin created`);
-  console.log(`  User ID:   ${result.user.id}`);
-  console.log(`  Admin ID:  ${result.admin.id}`);
-  console.log(`  Email:     ${result.user.email}`);
+  logger.info("Platform admin created", {
+    action: "seed.platform_admin.created",
+    userId: result.user.id,
+    adminId: result.admin.id,
+    email: result.user.email,
+  });
 }
 
 main()
   .catch((err) => {
-    console.error("❌ Seed failed:", err);
+    logger.error("Platform admin seed script failed", err, {
+      action: "seed.platform_admin.script_failed",
+    });
     process.exit(1);
   })
   .finally(async () => {

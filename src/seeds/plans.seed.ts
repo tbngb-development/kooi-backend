@@ -7,6 +7,7 @@ import type {
   SupportTier,
   PricingModel,
 } from "@prisma/client";
+import { createLogger } from "../shared/config/logging/winston.logger";
 
 interface SeedPlanData {
   slug: string;
@@ -177,82 +178,134 @@ const seedPlansData: SeedPlanData[] = [
   },
 ];
 
-async function seedPlans() {
-  console.log("🌱 Starting Plans & PlanVersion v1 seed...");
+const logger = createLogger().child({ module: "seed", seed: "plans" });
+
+async function seedPlans(): Promise<void> {
+  logger.info("Starting Plans & PlanVersion v1 seed", {
+    action: "seed.plans.start",
+    total: seedPlansData.length,
+  });
+
+  let created = 0;
+  let updated = 0;
+  let failed = 0;
 
   for (const item of seedPlansData) {
-    const plan = await prisma.plan.upsert({
-      where: { slug: item.slug },
-      create: {
-        slug: item.slug,
-        name: item.name,
-        displayOrder: item.displayOrder,
-        description: item.description,
-        isActive: true,
-      },
-      update: {
-        name: item.name,
-        displayOrder: item.displayOrder,
-        description: item.description,
-        isActive: true,
-      },
-    });
+    try {
+      const existingPlan = await prisma.plan.findUnique({
+        where: { slug: item.slug },
+        select: { id: true },
+      });
 
-    const versionData = {
-      planId: plan.id,
-      version: 1,
-      status: "PUBLISHED" as const,
-      currency: "INR",
-
-      pricingModel: item.pricingModel,
-      onboardingFee: item.onboardingFee,
-      onboardingFeeOriginal: item.onboardingFeeOriginal,
-      perMinuteRate: item.perMinuteRate,
-      billingMinimumSec: item.billingMinimumSec,
-      billingIncrementSec: item.billingIncrementSec,
-
-      maxActiveCampaigns: item.maxActiveCampaigns,
-      maxLeadsPerBatch: item.maxLeadsPerBatch,
-      maxAgents: item.maxAgents,
-      maxTeamMembers: item.maxTeamMembers,
-      retryAutomation: item.retryAutomation,
-      industryPackLimit: item.industryPackLimit,
-
-      callingChannel: item.callingChannel,
-      brochureUpload: item.brochureUpload,
-
-      dashboardTier: item.dashboardTier,
-      agentCapability: item.agentCapability,
-      integrations: item.integrations,
-      supportTier: item.supportTier,
-
-      lowBalanceThreshold: item.lowBalanceThreshold,
-      includedBalance: item.includedBalance,
-      bonusValidityDays: item.bonusValidityDays,
-
-      publishedAt: new Date(),
-    };
-
-    await prisma.planVersion.upsert({
-      where: {
-        planId_version: {
-          planId: plan.id,
-          version: 1,
+      const plan = await prisma.plan.upsert({
+        where: { slug: item.slug },
+        create: {
+          slug: item.slug,
+          name: item.name,
+          displayOrder: item.displayOrder,
+          description: item.description,
+          isActive: true,
         },
-      },
-      create: versionData,
-      update: versionData,
-    });
+        update: {
+          name: item.name,
+          displayOrder: item.displayOrder,
+          description: item.description,
+          isActive: true,
+        },
+      });
 
-    console.log(`✓ Seeded Plan "${plan.name}" with published Version 1`);
+      const versionData = {
+        planId: plan.id,
+        version: 1,
+        status: "PUBLISHED" as const,
+        currency: "INR",
+
+        pricingModel: item.pricingModel,
+        onboardingFee: item.onboardingFee,
+        onboardingFeeOriginal: item.onboardingFeeOriginal,
+        perMinuteRate: item.perMinuteRate,
+        billingMinimumSec: item.billingMinimumSec,
+        billingIncrementSec: item.billingIncrementSec,
+
+        maxActiveCampaigns: item.maxActiveCampaigns,
+        maxLeadsPerBatch: item.maxLeadsPerBatch,
+        maxAgents: item.maxAgents,
+        maxTeamMembers: item.maxTeamMembers,
+        retryAutomation: item.retryAutomation,
+        industryPackLimit: item.industryPackLimit,
+
+        callingChannel: item.callingChannel,
+        brochureUpload: item.brochureUpload,
+
+        dashboardTier: item.dashboardTier,
+        agentCapability: item.agentCapability,
+        integrations: item.integrations,
+        supportTier: item.supportTier,
+
+        lowBalanceThreshold: item.lowBalanceThreshold,
+        includedBalance: item.includedBalance,
+        bonusValidityDays: item.bonusValidityDays,
+
+        publishedAt: new Date(),
+      };
+
+      await prisma.planVersion.upsert({
+        where: {
+          planId_version: {
+            planId: plan.id,
+            version: 1,
+          },
+        },
+        create: versionData,
+        update: versionData,
+      });
+
+      if (existingPlan) {
+        updated++;
+        logger.info("Plan updated with published v1", {
+          action: "seed.plans.updated",
+          slug: item.slug,
+          planName: plan.name,
+          planId: plan.id,
+        });
+      } else {
+        created++;
+        logger.info("Plan created with published v1", {
+          action: "seed.plans.created",
+          slug: item.slug,
+          planName: plan.name,
+          planId: plan.id,
+        });
+      }
+    } catch (err) {
+      failed++;
+      logger.error("Plan seed failed", err, {
+        action: "seed.plans.failed",
+        slug: item.slug,
+      });
+    }
   }
 
-  console.log("\n✅ All Plans & Versions seeded successfully.");
+  logger.info("Plans seed complete", {
+    action: "seed.plans.complete",
+    total: seedPlansData.length,
+    created,
+    updated,
+    failed,
+  });
+
+  if (failed > 0) {
+    throw new Error(`${failed} plan(s) failed to seed`);
+  }
 }
 
 seedPlans()
-  .catch((e) => {
-    console.error("❌ Seed failed:", e);
+  .catch((err) => {
+    logger.error("Plans seed script failed", err, {
+      action: "seed.plans.script_failed",
+    });
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
