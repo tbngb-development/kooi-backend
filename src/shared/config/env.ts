@@ -14,7 +14,11 @@ export const env = {
   port: Number(process.env.PORT) || 5001,
   nodeEnv: process.env.NODE_ENV || "development",
   isDev: (process.env.NODE_ENV || "development") === "development",
-
+  logLevel:
+    process.env.LOG_LEVEL ||
+    ((process.env.NODE_ENV || "development") === "development"
+      ? "debug"
+      : "info"),
   jwt: {
     secret: requireEnv("JWT_SECRET"),
     accessExpiry: process.env.JWT_ACCESS_EXPIRY || "15m",

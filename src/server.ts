@@ -4,31 +4,40 @@ import { env } from "./shared/config/env";
 
 const container = buildContainer();
 const app = buildApp(container);
+const logger = container.logger;
 
 const server = app.listen(env.port, () => {
-  console.log(`\n🚀 Server:       http://localhost:${env.port}`);
-  console.log(`❤️  Health:       GET  http://localhost:${env.port}/api/health`);
+  logger.info("Server started", {
+    port: env.port,
+    env: env.nodeEnv,
+    logLevel: env.logLevel,
+  });
+  logger.info("Health check available", {
+    path: `http://localhost:${env.port}/api/health`,
+  });
 
   // ── Start background schedulers ──────────────────────────────
   try {
     container.wallet.schedulers.bonusExpiry.start();
-    console.log("✅ All background schedulers started\n");
+    logger.info("Background schedulers started");
   } catch (err) {
-    console.error("❌ Failed to start schedulers:", err);
+    logger.error("Failed to start schedulers", err);
   }
 });
 
 // ── Graceful Shutdown ────────────────────────────────────────────
 
 function gracefulShutdown(signal: string): void {
-  console.log(`\n[${signal}] Shutting down gracefully...`);
+  logger.info("Graceful shutdown initiated", { signal });
   container.wallet.schedulers.bonusExpiry.stop();
   server.close(() => {
-    console.log("Process terminated");
+    logger.info("Process terminated");
     process.exit(0);
   });
 
   setTimeout(() => {
+    // Intentionally retained: the logger pipeline may already be
+    // flushed/closed at this point during a forced kill.
     console.error("Forced shutdown after timeout");
     process.exit(1);
   }, 10_000);

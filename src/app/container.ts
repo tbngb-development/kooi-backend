@@ -73,8 +73,11 @@ import {
   type IndustryPackModule,
 } from "../modules/industry-packs/container";
 import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
+import type { Logger } from "../shared/logging/logger.interface";
+import { createLogger } from "../shared/config/logging/winston.logger";
 
 export interface AppContainer {
+  logger: Logger;
   auth: AuthModule;
   assistants: AssistantModule;
   tenants: TenantModule;
@@ -106,6 +109,8 @@ export interface AppContainer {
 }
 
 export function buildContainer(): AppContainer {
+  const logger = createLogger();
+
   // ── Infrastructure ──────────────────────────────────────────────────
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
@@ -169,6 +174,7 @@ export function buildContainer(): AppContainer {
 
   // ── Assembled Domain Modules ────────────────────────────────────────
   return {
+    logger,
     auth,
     assistants: buildAssistantModule({ bolnaClientFactory }),
     tenants: buildTenantModule(),
