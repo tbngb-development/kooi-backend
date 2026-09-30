@@ -10,6 +10,7 @@ import type {
   CallStatsResult,
 } from "../../application/interfaces/call-repository.interface";
 import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
+import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
 export class PrismaCallRepository implements CallRepository {
   async list(
@@ -62,9 +63,6 @@ export class PrismaCallRepository implements CallRepository {
       };
     }
 
-    // ── [REWRITTEN] Dynamic Filters via normalized extraction tables ──
-    // Each filter entry maps to a CallExtractionOverview row (objective/metric values)
-    // e.g. { "lead_temperature": "HOT", "location_match": "MATCH" }
     const dynamicAndConditions: Prisma.CallWhereInput[] = [];
 
     if (
@@ -96,13 +94,13 @@ export class PrismaCallRepository implements CallRepository {
     const orderField = validSortFields.includes(sortBy) ? sortBy : "startedAt";
     const orderDir = sortOrder === "asc" ? "asc" : "desc";
 
-    const [calls, total] = await Promise.all([
+    // ← Parallel: calls + count + tenant-global overview
+    const [calls, total, overview] = await Promise.all([
       prisma.call.findMany({
         where,
         include: {
           lead: { select: { id: true, name: true, phone: true } },
           campaign: { select: { id: true, name: true } },
-          // [UPDATED] Replaced old callAnalysis hardcoded fields with normalized tables
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -128,9 +126,11 @@ export class PrismaCallRepository implements CallRepository {
         take: limitNum,
       }),
       prisma.call.count({ where }),
+      this.getTenantCallOverview(tenantId),
     ]);
 
     return {
+      overview,
       calls: calls.map((c) => ({
         id: c.id,
         bolnaCallId: c.bolnaCallId,
@@ -164,6 +164,34 @@ export class PrismaCallRepository implements CallRepository {
         limit: limitNum,
         pages: Math.ceil(total / limitNum),
       },
+    };
+  }
+
+  // ── NEW: Tenant-global call overview (unfiltered) ──
+  async getTenantCallOverview(tenantId: string): Promise<CallListOverview> {
+    const where = { tenantId };
+
+    const [totalCalls, completedCalls, failedCalls, durationAgg, costAgg] =
+      await Promise.all([
+        prisma.call.count({ where }),
+        prisma.call.count({ where: { ...where, status: "COMPLETED" } }),
+        prisma.call.count({ where: { ...where, status: "FAILED" } }),
+        prisma.call.aggregate({
+          where: { ...where, status: "COMPLETED", duration: { not: null } },
+          _avg: { duration: true },
+        }),
+        prisma.call.aggregate({
+          where: { ...where, chargedAmount: { not: null } },
+          _sum: { chargedAmount: true },
+        }),
+      ]);
+
+    return {
+      totalCalls,
+      completedCalls,
+      failedCalls,
+      avgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
+      totalCostPaisa: costAgg._sum.chargedAmount ?? 0,
     };
   }
 

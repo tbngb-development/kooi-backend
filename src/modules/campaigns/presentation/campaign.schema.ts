@@ -18,9 +18,24 @@ export const createCampaignSchema = z.object({
     .optional(),
 });
 
+export const listCampaignsQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  status: z.string().optional(), // comma-separated: "RUNNING,COMPLETED"
+  dateFrom: z
+    .string()
+    .datetime({ message: "Invalid dateFrom format" })
+    .optional(),
+  dateTo: z.string().datetime({ message: "Invalid dateTo format" }).optional(),
+  sortBy: z.enum(["createdAt", "totalLeads"]).optional().default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
 export const extractVariablesSchema = z.object({
   assistantId: z.uuid("Invalid assistant ID"),
 });
 
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
+export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
 export type ExtractVariablesBody = z.infer<typeof extractVariablesSchema>;

@@ -1,3 +1,5 @@
+import {type  CampaignListItem } from "../interfaces/campaign-repository.interface";
+
 export interface CreateCampaignInput {
   name: string;
   description?: string;
@@ -59,6 +61,61 @@ export interface ParseLeadsOutput {
       durationMaxSec: number; // e.g. 90
     };
   };
+}
+
+// ── Campaign List ──────────────────────────────────────────────────────────
+
+export interface ListCampaignsFilters {
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: "createdAt" | "totalLeads";
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export interface CampaignListOverview {
+  totalCampaigns: number;
+  totalLeads: number;
+  totalCalls: number;
+  runningCampaigns: number;
+}
+
+export interface PaginatedCampaignsResult {
+  overview: CampaignListOverview;
+  items: CampaignListItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
+}
+
+// ── Campaign Detail Overview ───────────────────────────────────────────────
+
+export interface CampaignDetailOverview {
+  totalLeads: number;
+  totalCalls: number;
+  completedCalls: number;
+  failedCalls: number;
+  noAnswerCalls: number;
+  busyCalls: number;
+  stoppedCalls: number;
+  totalCostPaisa: number;
+  avgDurationSec: number;
+}
+
+// ── Call List Overview ─────────────────────────────────────────────────────
+
+export interface CallListOverview {
+  totalCalls: number;
+  completedCalls: number;
+  failedCalls: number;
+  avgDurationSec: number;
+  totalCostPaisa: number;
 }
 
 // ── Extraction Overview ──

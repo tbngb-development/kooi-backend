@@ -2,8 +2,11 @@ import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
+  CampaignDetailOverview,
   ExtractionInsightResult,
   ExtractionOverviewResult,
+  ListCampaignsFilters,
+  PaginatedCampaignsResult,
 } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
@@ -36,7 +39,6 @@ export interface CampaignStatsResult {
   calls: Array<{ status: string; _count: number }>;
 }
 
-
 export interface CampaignListItem {
   id: string;
   name: string;
@@ -68,7 +70,10 @@ export interface AssistantWithAgentData {
 }
 
 export interface CampaignRepository {
-  list(tenantId: string): Promise<CampaignListItem[]>;
+  list(
+    tenantId: string,
+    filters: ListCampaignsFilters,
+  ): Promise<PaginatedCampaignsResult>;
 
   findById(
     tenantId: string,
@@ -89,6 +94,11 @@ export interface CampaignRepository {
       })
     | null
   >;
+
+  getCampaignOverviewStats(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<CampaignDetailOverview>;
 
   create(
     tenantId: string,
