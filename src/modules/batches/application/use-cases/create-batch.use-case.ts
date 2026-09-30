@@ -30,7 +30,7 @@ import {
   toBolnaISO,
   parseBolnaScheduledTime,
 } from "../../../../shared/utils/bolna-date";
-import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
+import { ScheduledCampaignConflictError, TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 
 export class CreateBatchUseCase {
@@ -39,7 +39,7 @@ export class CreateBatchUseCase {
     private readonly campaignRepo: CampaignRepository,
     private readonly storage: FileStorageProvider,
     private readonly bolnaProvider: BolnaBatchProvider,
-    private readonly planRepo: PlanRepository, 
+    private readonly planRepo: PlanRepository,
   ) {}
 
   async execute(input: CreateBatchInput): Promise<CreateBatchOutput> {
@@ -58,6 +58,7 @@ export class CreateBatchUseCase {
     const activePlan = await this.planRepo.getActivePlanForTenant(
       input.tenantId,
     );
+    if (!activePlan) throw new TenantPlanNotFoundError(input.tenantId);
 
     // ── [FAIL FAST] 3. Validate Plan Caps & Time-Conflicts BEFORE doing any I/O ──
     let targetScheduledDate: Date | null = null;
