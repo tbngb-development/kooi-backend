@@ -8,9 +8,11 @@ import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/pr
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 import { BolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import { PrismaBolnaApiKeyRepository } from "../bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
+import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface WebhookModuleDeps {
   debitWalletForCall?: DebitWalletForCallUseCase;
+  logger: Logger;
 }
 
 export interface WebhookModule {
@@ -18,32 +20,36 @@ export interface WebhookModule {
 }
 
 export function buildWebhookModule(
-  deps: WebhookModuleDeps = {},
+  deps: WebhookModuleDeps = {} as WebhookModuleDeps,
 ): WebhookModule {
   const webhookRepo = new PrismaWebhookRepository();
   const walletRepo = new PrismaWalletRepository();
   const planRepo = new PrismaPlanRepository();
   const bolnaApiKeyRepo = new PrismaBolnaApiKeyRepository();
   const bolnaClientFactory = new BolnaClientFactory(bolnaApiKeyRepo);
+  const log = deps.logger.child({ module: "webhook" });
 
   const stopBatchesOnInsufficientBalance =
     new StopBatchesOnInsufficientBalanceUseCase(
       walletRepo,
       planRepo,
       bolnaClientFactory,
+      log,
     );
-    
+
   const processCallWebhook = new ProcessCallWebhookUseCase(
     webhookRepo,
     deps.debitWalletForCall,
     stopBatchesOnInsufficientBalance,
+    log,
   );
 
-  const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo);
+  const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo, log);
 
   const controller = new WebhookController(
     processCallWebhook,
     processBatchWebhook,
+    log,
   );
 
   return {

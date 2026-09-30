@@ -11,9 +11,13 @@ import type {
   ExtractVariablesInput,
   ExtractVariablesOutput,
 } from "../dto/campaign.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ExtractCampaignVariablesUseCase {
-  constructor(private readonly campaignRepo: CampaignRepository) {}
+  constructor(
+    private readonly campaignRepo: CampaignRepository,
+    private readonly logger?: Logger,
+  ) {}
 
   async execute(
     tenantId: string,
@@ -26,6 +30,11 @@ export class ExtractCampaignVariablesUseCase {
     );
 
     if (!assistant) {
+      this.logger?.warn("Assistant not found for variable extraction", {
+        action: "campaign.extract_variables",
+        tenantId,
+        assistantId: input.assistantId,
+      });
       throw new AppError(
         HttpStatus.NOT_FOUND,
         "Assistant not found or does not belong to this tenant",
@@ -80,6 +89,16 @@ export class ExtractCampaignVariablesUseCase {
         extractableVariables,
       );
 
+      this.logger?.info("Campaign variables extracted from PDF", {
+        action: "campaign.extract_variables",
+        tenantId,
+        assistantId: input.assistantId,
+        fileName: pdfResult.fileName,
+        pageCount: pdfResult.pageCount,
+        confidence: extraction.confidence,
+        extractedCount: Object.keys(extraction.variables).length,
+      });
+
       return {
         variables: extraction.variables,
         confidence: extraction.confidence,
@@ -97,6 +116,16 @@ export class ExtractCampaignVariablesUseCase {
     } catch (error: unknown) {
       const err = error as { message?: string };
       if (err.message?.includes("quota") || err.message?.includes("QUOTA")) {
+        this.logger?.error(
+          "AI API quota exceeded during PDF variable extraction",
+          error,
+          {
+            action: "campaign.extract_variables.quota_exceeded",
+            tenantId,
+            assistantId: input.assistantId,
+            fileName: input.originalFileName,
+          },
+        );
         throw new AppError(
           HttpStatus.INTERNAL_SERVER_ERROR,
           "AI API quota exceeded. Please try again later.",

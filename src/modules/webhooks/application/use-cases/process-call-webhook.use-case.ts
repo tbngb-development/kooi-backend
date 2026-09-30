@@ -9,6 +9,7 @@ import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-
 import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -37,6 +38,7 @@ export class ProcessCallWebhookUseCase {
     private readonly webhookRepo: WebhookRepository,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
     private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(payload: WebhookCallPayload): Promise<void> {
@@ -83,7 +85,17 @@ export class ProcessCallWebhookUseCase {
         if (this.stopBatchesOnInsufficientBalance) {
           this.stopBatchesOnInsufficientBalance
             .execute({ tenantId: resolved.tenantId })
-            .catch(console.error);
+            .catch((err) =>
+              this.logger?.error(
+                "Credit limit check failed during call webhook",
+                err,
+                {
+                  action: "webhook.call.credit_check",
+                  tenantId: resolved.tenantId,
+                  callId: resolved.id,
+                },
+              ),
+            );
         }
         break;
       }
@@ -251,7 +263,11 @@ export class ProcessCallWebhookUseCase {
       }
     } catch (err) {
       // Best-effort — don't fail the webhook if extraction mapping fails
-      console.error("[Webhook] Dynamic extraction mapping failed:", err);
+      this.logger?.error("Dynamic extraction mapping failed", err, {
+        action: "webhook.call.extraction_failed",
+        callId: call.id,
+        tenantId: call.tenantId,
+      });
     }
 
     // ── Step 1: Persist terminal state (Bolna cost in `cost` field) ──
@@ -297,9 +313,25 @@ export class ProcessCallWebhookUseCase {
           });
         }
       } catch (err) {
-        console.error("[Webhook] wallet debit failed:", err);
+        this.logger?.error("Wallet debit failed during call webhook", err, {
+          action: "webhook.call.debit_failed",
+          callId: call.id,
+          tenantId: call.tenantId,
+          bolnaCallId: String(bolnaCallId),
+          durationSec: duration,
+        });
       }
     }
+
+    this.logger?.info("Call completed", {
+      action: "webhook.call.completed",
+      callId: call.id,
+      tenantId: call.tenantId,
+      campaignId: call.campaignId,
+      batchId: call.batchId ? call.batchId : undefined,
+      bolnaCallId: String(bolnaCallId),
+      durationSec: duration,
+    });
 
     await this.checkBatchCompletion(call);
   }
@@ -321,6 +353,14 @@ export class ProcessCallWebhookUseCase {
       call.batchId,
       status,
     );
+
+    this.logger?.debug("Call terminal", {
+      action: "webhook.call.terminal",
+      callId: call.id,
+      tenantId: call.tenantId,
+      status,
+    });
+
     await this.checkBatchCompletion(call);
   }
 
@@ -333,6 +373,13 @@ export class ProcessCallWebhookUseCase {
     });
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
+
+    this.logger?.debug("Call canceled", {
+      action: "webhook.call.canceled",
+      callId: call.id,
+      tenantId: call.tenantId,
+    });
+
     await this.checkBatchCompletion(call);
   }
 
@@ -552,9 +599,12 @@ export class ProcessCallWebhookUseCase {
       })),
     });
 
-    console.info(
-      `[Webhook] Materialized ${objectiveEntries.length} overview rows for call ${callId}`,
-    );
+    this.logger?.debug("Extraction overview materialized", {
+      action: "webhook.call.overview_materialized",
+      callId,
+      tenantId,
+      rowCount: objectiveEntries.length,
+    });
   }
 
   private async materializeExtractionInsights(
@@ -635,9 +685,12 @@ export class ProcessCallWebhookUseCase {
       })),
     });
 
-    console.info(
-      `[Webhook] Materialized ${subjectiveEntries.length} insight rows for call ${callId}`,
-    );
+    this.logger?.debug("Extraction insights materialized", {
+      action: "webhook.call.insights_materialized",
+      callId,
+      tenantId,
+      rowCount: subjectiveEntries.length,
+    });
   }
 
   // ── Completion Checks ────────────────────────────────────────────────────

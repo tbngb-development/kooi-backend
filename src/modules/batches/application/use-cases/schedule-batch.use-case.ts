@@ -14,6 +14,7 @@ import {
 } from "../../../../shared/utils/bolna-date";
 import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ScheduleBatchUseCase {
   constructor(
@@ -22,6 +23,7 @@ export class ScheduleBatchUseCase {
     private readonly bolnaProvider: BolnaBatchProvider,
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
+    private readonly logger?: Logger,
   ) {}
 
   async execute(
@@ -64,12 +66,11 @@ export class ScheduleBatchUseCase {
       activePlan.maxActiveCampaigns !== null &&
       activePlan.maxActiveCampaigns !== undefined
     ) {
-      // Check if other campaigns are scheduled/running in this time window
       const concurrentCount =
         await this.planRepo.countConcurrentCampaignsAtTime(
           tenantId,
           targetDate,
-          campaignId, // Exclude this campaign (scheduling 2 batches in SAME campaign is fine)
+          campaignId,
         );
 
       if (concurrentCount >= activePlan.maxActiveCampaigns) {
@@ -122,11 +123,19 @@ export class ScheduleBatchUseCase {
       });
     }
 
+    this.logger?.info("Batch scheduled", {
+      action: "batch.schedule",
+      tenantId,
+      campaignId,
+      batchId,
+      bolnaBatchId: batchData.bolnaBatchId,
+      scheduledAt: targetDate.toISOString(),
+    });
+
     const finalDate = bolnaScheduledAt
       ? new Date(bolnaScheduledAt)
       : targetDate;
 
-    // 2. Format explicitly in IST (Asia/Kolkata)
     const scheduledFormattedTime = finalDate.toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       dateStyle: "medium",

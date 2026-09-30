@@ -3,6 +3,7 @@ import type { WalletRepository } from "../../../wallet/application/interfaces/wa
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
 import { RechargeNotFoundError } from "../../domain/errors/payment.errors";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface CompletePlanUpgradeInput {
   razorpayOrderId: string;
@@ -31,6 +32,7 @@ export class CompletePlanUpgradePaymentUseCase {
     private readonly rechargeRepo: RechargeRepository,
     private readonly planRepo: PlanRepository,
     private readonly walletRepo: WalletRepository,
+    private readonly logger: Logger,
   ) {}
 
   async execute(
@@ -43,6 +45,15 @@ export class CompletePlanUpgradePaymentUseCase {
     if (!recharge) throw new RechargeNotFoundError(input.razorpayOrderId);
 
     if (recharge.status === "SUCCESS") {
+      this.logger.info(
+        "Plan upgrade payment already processed (idempotent hit)",
+        {
+          action: "payment.complete_plan_upgrade",
+          orderId: input.razorpayOrderId,
+          tenantId: recharge.tenantId,
+          newPlanVersionId: input.newPlanVersionId,
+        },
+      );
       return {
         tenantId: recharge.tenantId,
         newPlanVersionId: input.newPlanVersionId,
@@ -70,6 +81,16 @@ export class CompletePlanUpgradePaymentUseCase {
       currentPlan.bonusExpiresAt,
       "plan-upgrade-payment",
     );
+
+    this.logger.info("Plan upgrade payment completed", {
+      action: "payment.complete_plan_upgrade",
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      rechargeId: recharge.id,
+      tenantId: recharge.tenantId,
+      newPlanVersionId: input.newPlanVersionId,
+      amountPaidPaisa: recharge.amount,
+    });
 
     return {
       tenantId: recharge.tenantId,

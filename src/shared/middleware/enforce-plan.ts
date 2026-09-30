@@ -7,6 +7,7 @@ import {
   PlanFeatureNotAvailableError,
   TenantPlanNotFoundError,
 } from "../../modules/plans/domain/errors/plan.errors";
+import type { Logger } from "../logging/logger.interface";
 
 export type PlanFeature =
   | "CREATE_CAMPAIGN"
@@ -17,7 +18,10 @@ export type PlanFeature =
   | "BROCHURE_UPLOAD";
 
 export class EnforcePlanMiddleware {
-  constructor(private readonly planRepo: PlanRepository) {}
+  constructor(
+    private readonly planRepo: PlanRepository,
+    private readonly logger?: Logger,
+  ) {}
 
   check(feature: PlanFeature): RequestHandler {
     return async (req: Request, _res: Response, next: NextFunction) => {
@@ -36,6 +40,13 @@ export class EnforcePlanMiddleware {
                 ctx.tenantId,
               );
               if (count >= plan.maxActiveCampaigns) {
+                this.logger?.warn("Plan limit exceeded — active campaigns", {
+                  action: "plan.enforce.limit_exceeded",
+                  tenantId: ctx.tenantId,
+                  feature,
+                  current: count,
+                  limit: plan.maxActiveCampaigns,
+                });
                 throw new PlanLimitExceededError(
                   "active campaigns",
                   plan.maxActiveCampaigns,
@@ -46,6 +57,14 @@ export class EnforcePlanMiddleware {
 
           case "RETRY_AUTOMATION":
             if (!plan.retryAutomation) {
+              this.logger?.warn(
+                "Plan feature not available — retry automation",
+                {
+                  action: "plan.enforce.feature_unavailable",
+                  tenantId: ctx.tenantId,
+                  feature,
+                },
+              );
               throw new PlanFeatureNotAvailableError("retry automation");
             }
             break;
@@ -58,6 +77,13 @@ export class EnforcePlanMiddleware {
             if (plan.maxAgents !== null) {
               const count = await this.planRepo.countAgents(ctx.tenantId);
               if (count >= plan.maxAgents) {
+                this.logger?.warn("Plan limit exceeded — agents", {
+                  action: "plan.enforce.limit_exceeded",
+                  tenantId: ctx.tenantId,
+                  feature,
+                  current: count,
+                  limit: plan.maxAgents,
+                });
                 throw new PlanLimitExceededError("agents", plan.maxAgents);
               }
             }
@@ -67,6 +93,13 @@ export class EnforcePlanMiddleware {
             if (plan.maxTeamMembers !== null) {
               const count = await this.planRepo.countTeamMembers(ctx.tenantId);
               if (count >= plan.maxTeamMembers) {
+                this.logger?.warn("Plan limit exceeded — team members", {
+                  action: "plan.enforce.limit_exceeded",
+                  tenantId: ctx.tenantId,
+                  feature,
+                  current: count,
+                  limit: plan.maxTeamMembers,
+                });
                 throw new PlanLimitExceededError(
                   "team members",
                   plan.maxTeamMembers,
@@ -77,6 +110,14 @@ export class EnforcePlanMiddleware {
 
           case "BROCHURE_UPLOAD":
             if (!plan.brochureUpload) {
+              this.logger?.warn(
+                "Plan feature not available — brochure upload",
+                {
+                  action: "plan.enforce.feature_unavailable",
+                  tenantId: ctx.tenantId,
+                  feature,
+                },
+              );
               throw new PlanFeatureNotAvailableError("brochure upload");
             }
             break;

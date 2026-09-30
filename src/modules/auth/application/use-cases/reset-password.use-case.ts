@@ -10,12 +10,14 @@ import {
   SamePasswordError,
 } from "../../domain/errors/auth.errors";
 import { AuthMessages } from "../../../../shared/constants/messages";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ResetPasswordUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly resetTokenService: PasswordResetTokenService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: ResetPasswordInput): Promise<ResetPasswordOutput> {
@@ -23,6 +25,10 @@ export class ResetPasswordUseCase {
 
     const user = await this.authRepository.findUserById(payload.userId);
     if (!user || !user.isActive) {
+      this.logger.warn("Password reset failed — user missing/inactive", {
+        action: "password.reset",
+        userId: payload.userId,
+      });
       throw new InvalidResetTokenError();
     }
 
@@ -31,6 +37,10 @@ export class ResetPasswordUseCase {
       user.passwordHash,
     );
     if (isSame) {
+      this.logger.warn("Password reset failed — same as current password", {
+        action: "password.reset",
+        userId: user.id,
+      });
       throw new SamePasswordError();
     }
 
@@ -42,6 +52,11 @@ export class ResetPasswordUseCase {
 
     // Invalidate all refresh tokens across sessions
     await this.authRepository.revokeAllUserRefreshTokens(user.id);
+
+    this.logger.info("Password reset successful", {
+      action: "password.reset",
+      userId: user.id,
+    });
 
     return { message: AuthMessages.PASSWORD_RESET_SUCCESS };
   }

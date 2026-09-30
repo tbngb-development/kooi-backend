@@ -115,12 +115,15 @@ export function buildContainer(): AppContainer {
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
-  const email = new ResendEmailService();
+  const email = new ResendEmailService(logger.child({ module: "email" }));
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
 
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
-  const bolnaClientFactory = new BolnaClientFactory(apiKeyRepository);
+  const bolnaClientFactory = new BolnaClientFactory(
+    apiKeyRepository,
+    logger.child({ module: "bolna-factory" }),
+  );
 
   const assistantModule = buildAssistantModule({
     bolnaClientFactory,
@@ -138,6 +141,7 @@ export function buildContainer(): AppContainer {
     otpService,
     passwordResetTokenService,
     emailService: email,
+    logger,
   });
 
   // ── Core Commercial Foundation ──────────────────────────────────────
@@ -150,6 +154,7 @@ export function buildContainer(): AppContainer {
     planRepository: plans.repository,
     bolnaClientFactory,
     email,
+    logger,
   });
 
   // ── Payments (depends on wallet + plans + bolna key auto-assign) ─────
@@ -158,6 +163,7 @@ export function buildContainer(): AppContainer {
     planRepository: plans.repository,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
+    logger,
   });
 
   // ── Invites ─────────────────────────────────────────────────────────
@@ -189,6 +195,7 @@ export function buildContainer(): AppContainer {
     users: buildUserModule({ passwordService }),
     webhooks: buildWebhookModule({
       debitWalletForCall: wallet.useCases.debitWalletForCall,
+      logger,
     }),
     platformAgents: buildPlatformAgentModule(),
     extractions: buildExtractionModule(),

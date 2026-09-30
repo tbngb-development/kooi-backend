@@ -9,11 +9,13 @@ import {
   RefreshTokenExpiredError,
   RefreshTokenInvalidError,
 } from "../../domain/errors/auth.errors";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class RefreshTokensUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: RefreshTokensInput): Promise<RefreshTokensOutput> {
@@ -26,12 +28,20 @@ export class RefreshTokensUseCase {
     );
 
     if (!storedToken) {
+      this.logger.warn("Refresh token not found in DB", {
+        action: "auth.refresh",
+      });
       throw new RefreshTokenInvalidError();
     }
 
     // 3. REUSE DETECTION: If this token was already revoked,
     //    someone is replaying a stolen token. Kill the entire family.
     if (storedToken.revokedAt !== null) {
+      this.logger.warn("Refresh token reuse detected — revoking family", {
+        action: "auth.refresh",
+        userId: storedToken.userId,
+        familyId: storedToken.familyId,
+      });
       await this.authRepository.revokeRefreshTokenFamily(storedToken.familyId);
       throw new RefreshTokenInvalidError();
     }
@@ -52,6 +62,10 @@ export class RefreshTokensUseCase {
 
     //Block de-activated users from acquiring new sessions
     if (!user.isActive) {
+      this.logger.warn("Refresh token rejected — user inactive", {
+        action: "auth.refresh",
+        userId: user.id,
+      });
       throw new RefreshTokenInvalidError();
     }
 
@@ -88,6 +102,11 @@ export class RefreshTokensUseCase {
       userId: user.id,
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+    });
+
+    this.logger.info("Tokens refreshed", {
+      action: "auth.refresh",
+      userId: user.id,
     });
 
     return {

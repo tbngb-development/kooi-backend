@@ -16,10 +16,12 @@ import { AdminBatchController } from "./presentation/admin-batch.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { CheckBalanceForBatchUseCase } from "../wallet/application/use-cases/check-balance-for-batch.use-case";
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
+import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
   checkBalanceForBatch?: CheckBalanceForBatchUseCase;
+  logger?: Logger;
 }
 
 export interface BatchModule {
@@ -30,13 +32,16 @@ export interface BatchModule {
 export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const batchRepo = new PrismaBatchRepository();
   const campaignRepo = new PrismaCampaignRepository();
-  const storage = new CloudinaryStorageProvider();
+  const log = deps.logger?.child({ module: "batch" });
+  const storage = new CloudinaryStorageProvider(
+    log?.child({ module: "cloudinary" }),
+  );
   const bolnaProvider = new BolnaBatchProviderImpl(deps.bolnaClientFactory);
+  const planRepo = new PrismaPlanRepository();
 
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
   const getBatch = new GetBatchUseCase(batchRepo);
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
-  const planRepo = new PrismaPlanRepository();
 
   return {
     tenantController: new TenantBatchController(
@@ -48,6 +53,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         storage,
         bolnaProvider,
         planRepo,
+        log,
       ),
       new RunBatchUseCase(
         batchRepo,
@@ -55,6 +61,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         bolnaProvider,
         planRepo,
         deps.checkBalanceForBatch,
+        log,
       ),
       new ScheduleBatchUseCase(
         batchRepo,
@@ -62,10 +69,17 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         bolnaProvider,
         planRepo,
         deps.checkBalanceForBatch,
+        log,
       ),
-      new StopBatchUseCase(batchRepo, campaignRepo, bolnaProvider),
-      new ResumeBatchUseCase(batchRepo, campaignRepo, storage, bolnaProvider),
-      new DeleteBatchUseCase(batchRepo, bolnaProvider),
+      new StopBatchUseCase(batchRepo, campaignRepo, bolnaProvider, log),
+      new ResumeBatchUseCase(
+        batchRepo,
+        campaignRepo,
+        storage,
+        bolnaProvider,
+        log,
+      ),
+      new DeleteBatchUseCase(batchRepo, bolnaProvider, log),
       getBatchStats,
     ),
     adminController: new AdminBatchController(

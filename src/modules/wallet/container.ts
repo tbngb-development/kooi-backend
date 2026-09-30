@@ -3,6 +3,7 @@ import type { WalletRepository } from "./application/interfaces/wallet-repositor
 import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { Logger } from "../../shared/logging/logger.interface";
 
 import { TenantWalletController } from "./presentation/tenant-wallet.controller";
 import { AdminWalletController } from "./presentation/admin-wallet.controller";
@@ -21,6 +22,7 @@ export interface WalletModuleDeps {
   planRepository: PlanRepository;
   bolnaClientFactory: IBolnaClientFactory;
   email: IEmailService;
+  logger: Logger;
 }
 
 export interface WalletModule {
@@ -43,39 +45,48 @@ export interface WalletModule {
 
 export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
   const repository = new PrismaWalletRepository();
+  const log = deps.logger.child({ module: "wallet" });
 
   const getWallet = new GetWalletUseCase(repository);
   const listTransactions = new ListTransactionsUseCase(repository);
-  const adjustWallet = new AdjustWalletUseCase(repository);
+  const adjustWallet = new AdjustWalletUseCase(repository, log);
 
   const checkLowBalance = new CheckLowBalanceUseCase(
     repository,
     deps.planRepository,
     deps.email,
+    log,
   );
   const stopBatches = new StopBatchesOnInsufficientBalanceUseCase(
     repository,
     deps.planRepository,
     deps.bolnaClientFactory,
+    log,
   );
   const checkBalanceForBatch = new CheckBalanceForBatchUseCase(
     repository,
     deps.planRepository,
+    log,
   );
   const debitWalletForCall = new DebitWalletForCallUseCase(
     repository,
     deps.planRepository,
     checkLowBalance,
     stopBatches,
+    log,
   );
 
   const expireBonusCredits = new ExpireBonusCreditsUseCase(
     repository,
     deps.planRepository,
     deps.email,
+    log,
   );
 
-  const bonusExpiryScheduler = new BonusExpiryScheduler(expireBonusCredits);
+  const bonusExpiryScheduler = new BonusExpiryScheduler(
+    expireBonusCredits,
+    log,
+  );
 
   return {
     repository,

@@ -7,6 +7,7 @@ import {
 } from "../../../plans/domain/errors/plan.errors";
 import type { StopBatchesOnInsufficientBalanceUseCase } from "./stop-batches-on-insufficient-balance.use-case";
 import type { CheckLowBalanceUseCase } from "./check-low-balance.use-case";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface DebitCallInput {
   tenantId: string;
@@ -30,6 +31,7 @@ export class DebitWalletForCallUseCase {
     private readonly planRepo: PlanRepository,
     private readonly checkLowBalance: CheckLowBalanceUseCase,
     private readonly stopBatches: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: DebitCallInput): Promise<DebitCallResult | null> {
@@ -67,11 +69,27 @@ export class DebitWalletForCallUseCase {
       createdBy: "SYSTEM",
     });
 
+    this.logger.info("Wallet debited for call", {
+      action: "wallet.debit",
+      tenantId: input.tenantId,
+      callId: input.callId,
+      amountPaisa: costPaisa,
+      billableSeconds,
+    });
+
     // 4. Background Threshold & Batch Invariant Checks
-    this.checkLowBalance
-      .execute({ tenantId: input.tenantId })
-      .catch(console.error);
-    this.stopBatches.execute({ tenantId: input.tenantId }).catch(console.error);
+    this.checkLowBalance.execute({ tenantId: input.tenantId }).catch((err) =>
+      this.logger.error("Low balance check failed", err, {
+        action: "wallet.low_balance_check",
+        tenantId: input.tenantId,
+      }),
+    );
+    this.stopBatches.execute({ tenantId: input.tenantId }).catch((err) =>
+      this.logger.error("Stop batches check failed", err, {
+        action: "wallet.stop_batches_check",
+        tenantId: input.tenantId,
+      }),
+    );
 
     // 5. Return Full Historical Breakdown for Call Snapshot
     return {

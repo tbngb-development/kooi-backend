@@ -8,6 +8,7 @@ import type {
   VerifyPaymentInput,
   OrderPayment,
 } from "./payment-provider.interface";
+import type { Logger } from "../../../logging/logger.interface";
 
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
@@ -19,7 +20,7 @@ const RETRY_BASE_MS = 300;
 export class RazorpayProvider implements IPaymentProvider {
   private readonly client: Razorpay;
 
-  constructor() {
+  constructor(private readonly logger?: Logger) {
     if (!env.razorpay.keyId || !env.razorpay.keySecret) {
       throw new Error(
         "Razorpay is misconfigured. Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET environment variables.",
@@ -29,8 +30,6 @@ export class RazorpayProvider implements IPaymentProvider {
       key_id: env.razorpay.keyId,
       key_secret: env.razorpay.keySecret,
     });
-
-    
   }
 
   async createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -48,6 +47,12 @@ export class RazorpayProvider implements IPaymentProvider {
       notes: input.notes,
     };
 
+    this.logger?.debug("Creating Razorpay order", {
+      action: "razorpay.create_order_start",
+      amountPaisa: input.amountPaisa,
+      receipt,
+    });
+
     const order = await this.withRetry(() =>
       this.client.orders.create(payload),
     );
@@ -55,6 +60,12 @@ export class RazorpayProvider implements IPaymentProvider {
     if (!order?.id) {
       throw new Error("Razorpay create-order response missing id.");
     }
+
+    this.logger?.info("Razorpay order created successfully", {
+      action: "razorpay.create_order_success",
+      orderId: order.id,
+      amount: Number(order.amount),
+    });
 
     return {
       orderId: order.id,
@@ -73,7 +84,17 @@ export class RazorpayProvider implements IPaymentProvider {
       .update(body)
       .digest("hex");
 
-    return this.timingSafeEqualHex(expected, input.signature);
+    const isValid = this.timingSafeEqualHex(expected, input.signature);
+
+    if (!isValid) {
+      this.logger?.warn("Razorpay payment signature mismatch", {
+        action: "razorpay.verify_signature_failed",
+        orderId: input.orderId,
+        paymentId: input.paymentId,
+      });
+    }
+
+    return isValid;
   }
 
   verifyWebhookSignature(rawBody: string, signature: string): boolean {
@@ -84,14 +105,33 @@ export class RazorpayProvider implements IPaymentProvider {
       .update(rawBody)
       .digest("hex");
 
-    return this.timingSafeEqualHex(expected, signature);
+    const isValid = this.timingSafeEqualHex(expected, signature);
+
+    if (!isValid) {
+      this.logger?.warn("Razorpay webhook signature mismatch", {
+        action: "razorpay.verify_webhook_signature_failed",
+      });
+    }
+
+    return isValid;
   }
 
   async getOrderPayments(orderId: string): Promise<OrderPayment[]> {
+    this.logger?.debug("Fetching payments for Razorpay order", {
+      action: "razorpay.get_payments_start",
+      orderId,
+    });
+
     const response = await this.withRetry(() =>
       this.client.orders.fetchPayments(orderId),
     );
     const items = response?.items ?? [];
+
+    this.logger?.info("Retrieved order payments", {
+      action: "razorpay.get_payments_success",
+      orderId,
+      paymentCount: items.length,
+    });
 
     return items.map((p: any) => ({
       id: p.id,
@@ -126,6 +166,14 @@ export class RazorpayProvider implements IPaymentProvider {
       } catch (err: any) {
         const status: number | undefined = err?.statusCode ?? err?.status;
         const isRetryable = !status || status >= 500;
+
+        this.logger?.warn("Razorpay API request error", {
+          action: "razorpay.api_attempt_failed",
+          attempt: attempt + 1,
+          statusCode: status,
+          isRetryable,
+        });
+
         if (!isRetryable || attempt === MAX_RETRIES) {
           lastError = err;
           break;

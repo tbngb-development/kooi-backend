@@ -5,11 +5,13 @@ import type {
   WebhookCallPayload,
   WebhookBatchPayload,
 } from "../application/dto/webhook.dto";
+import type { Logger } from "../../../shared/logging/logger.interface";
 
 export class WebhookController {
   constructor(
     private readonly processCallWebhook: ProcessCallWebhookUseCase,
     private readonly processBatchWebhook: ProcessBatchWebhookUseCase,
+    private readonly logger?: Logger,
   ) {}
 
   bolna = async (
@@ -22,7 +24,9 @@ export class WebhookController {
     try {
       await this.processCallWebhook.execute(req.body);
     } catch (err) {
-      console.error("[WebhookController] Per-call processing error:", err);
+      this.logger?.error("Per-call webhook processing error", err, {
+        action: "webhook.call.processing_error",
+      });
     }
   };
 
@@ -35,7 +39,9 @@ export class WebhookController {
     try {
       await this.processBatchWebhook.execute(req.body);
     } catch (err) {
-      console.error("[WebhookController] Batch processing error:", err);
+      this.logger?.error("Batch webhook processing error", err, {
+        action: "webhook.batch.processing_error",
+      });
     }
   };
 }

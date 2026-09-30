@@ -9,11 +9,13 @@ import {
   MembershipNotFoundError,
   TenantInactiveError,
 } from "../../domain/errors/auth.errors";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class SelectTenantUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly tokenService: TokenService,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: SelectTenantInput): Promise<SelectTenantOutput> {
@@ -29,11 +31,21 @@ export class SelectTenantUseCase {
       input.tenantId,
     );
     if (!membership) {
+      this.logger.warn("Select tenant failed — membership not found", {
+        action: "auth.select_tenant",
+        userId: input.userId,
+        tenantId: input.tenantId,
+      });
       throw new MembershipNotFoundError();
     }
 
     // 3. Verify tenant is active
     if (!membership.tenantActive) {
+      this.logger.warn("Select tenant failed — tenant inactive", {
+        action: "auth.select_tenant",
+        userId: input.userId,
+        tenantId: input.tenantId,
+      });
       throw new TenantInactiveError();
     }
 
@@ -53,6 +65,12 @@ export class SelectTenantUseCase {
       userId: user.id,
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
+    });
+
+    this.logger.info("Tenant selected", {
+      action: "auth.select_tenant",
+      userId: user.id,
+      tenantId: membership.tenantId,
     });
 
     return {

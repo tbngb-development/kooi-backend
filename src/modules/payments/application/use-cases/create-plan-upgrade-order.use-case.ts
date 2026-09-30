@@ -11,6 +11,7 @@ import {
 import { AppError } from "../../../../shared/errors";
 import { HttpStatus } from "../../../../shared/constants";
 import type { CreateOrderResult } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface CreatePlanUpgradeOrderInput {
   tenantId: string;
@@ -42,6 +43,7 @@ export class CreatePlanUpgradeOrderUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly rechargeRepo: RechargeRepository,
     private readonly payments: IPaymentProvider,
+    private readonly logger: Logger,
   ) {}
 
   async execute(
@@ -127,6 +129,16 @@ export class CreatePlanUpgradeOrderUseCase {
       razorpayOrderId: order.orderId,
       tenantPlanId: tenantPlan?.id ?? null,
       targetPlanVersionId: newVersion.id, // ← KEY: stored for auto-activation
+    });
+
+    this.logger.info("Plan upgrade order created", {
+      action: "payment.create_plan_upgrade_order",
+      orderId: order.orderId,
+      rechargeId: recharge.id,
+      tenantId: input.tenantId,
+      fromPlanVersionId: currentTerms.planVersionId,
+      toPlanVersionId: newVersion.id,
+      feeDifferencePaisa: feeDifference,
     });
 
     return {

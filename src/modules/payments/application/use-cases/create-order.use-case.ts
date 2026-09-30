@@ -9,6 +9,7 @@ import {
 import { AppError } from "../../../../shared/errors";
 import { HttpStatus } from "../../../../shared/constants";
 import type { CreateOrderInput, CreateOrderResult } from "../dto/payment.dto";
+import type { Logger } from "../../../../shared/logging/logger.interface";
 
 /**
  * Creates a Razorpay order for a wallet top-up recharge.
@@ -20,6 +21,7 @@ export class CreateOrderUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly rechargeRepo: RechargeRepository,
     private readonly payments: IPaymentProvider,
+    private readonly logger: Logger,
   ) {}
 
   async execute(input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -60,6 +62,14 @@ export class CreateOrderUseCase {
       status: "INITIATED",
       razorpayOrderId: order.orderId,
       tenantPlanId: null, // top-up is not tied to a specific plan
+    });
+
+    this.logger.info("Wallet top-up order created", {
+      action: "payment.create_order",
+      orderId: order.orderId,
+      rechargeId: recharge.id,
+      tenantId: input.tenantId,
+      amountPaisa: input.amountPaisa,
     });
 
     return {
