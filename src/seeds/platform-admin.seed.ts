@@ -1,10 +1,3 @@
-/**
- * Seed a platform admin user.
- *
- * Usage:
- *  npx tsx src/seeds/platform-admin.seed.ts --email admin@kooi.in --password "Str0ngPass" --name "Platform Admin"
- */
-
 import prisma from "../shared/config/database/prisma";
 import { BcryptPasswordService } from "../modules/auth/infrastructure/services/bcrypt-password.service";
 import { validatePasswordStrength } from "../modules/auth/domain/rules/password.rules";
