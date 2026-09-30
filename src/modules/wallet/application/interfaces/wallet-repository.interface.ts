@@ -42,6 +42,18 @@ export interface ListTransactionsOptions {
   type?: WalletTxType;
 }
 
+export interface ExpiredBonusWallet {
+  id: string;
+  tenantId: string;
+  bonusBalance: number;
+  bonusExpiresAt: Date;
+  currency: string;
+  tenant: {
+    name: string;
+    email: string;
+  };
+}
+
 export interface WalletRepository {
   findByTenantId(tenantId: string): Promise<Wallet | null>;
   ensureWallet(tenantId: string): Promise<Wallet>;
@@ -54,4 +66,17 @@ export interface WalletRepository {
     tenantId: string,
     opts: ListTransactionsOptions,
   ): Promise<{ items: WalletTransaction[]; total: number }>;
+
+  /**
+   * Finds all wallets with expired, non-zero bonus balances
+   * belonging to active tenants with active plans.
+   */
+  findWalletsWithExpiredBonus(): Promise<ExpiredBonusWallet[]>;
+
+  /**
+   * Atomically zeroes the bonus balance and creates a BONUS_EXPIRY
+   * ledger entry. Returns null if the bonus was already expired
+   * (idempotent). Uses FOR UPDATE row lock for concurrency safety.
+   */
+  expireBonus(tenantId: string): Promise<WalletTransaction | null>;
 }

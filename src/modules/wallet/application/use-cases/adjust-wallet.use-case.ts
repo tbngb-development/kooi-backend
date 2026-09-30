@@ -12,9 +12,12 @@ export class AdjustWalletUseCase {
   ): Promise<WalletTransactionResponse> {
     await this.walletRepo.ensureWallet(input.tenantId);
 
-    const bonusExpiresAt = input.bonusExpiresAt
-      ? new Date(input.bonusExpiresAt)
-      : null;
+    const bonusExpiresAt =
+      input.bonusExpiresAt !== undefined
+        ? input.bonusExpiresAt
+          ? new Date(input.bonusExpiresAt)
+          : null
+        : undefined;
 
     if (input.type === "DEBIT") {
       const tx = await this.walletRepo.debit({

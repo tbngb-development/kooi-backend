@@ -11,7 +11,7 @@ import { sendError } from "../shared/utils/response";
 import { buildRazorpayWebhookRoutes } from "../modules/payments/presentation/razorpay-webhook.routes";
 import { buildWebhookRoutes } from "../modules/webhooks/presentation/webhook.routes";
 
-export function buildApp(): Express {
+export function buildApp(container = buildContainer()): Express {
   const app = express();
   app.set("trust proxy", 1);
 
@@ -36,8 +36,6 @@ export function buildApp(): Express {
     }
     next();
   });
-
-  const container = buildContainer();
 
   // ── 2. WEBHOOK ROUTES ──────
   app.use(

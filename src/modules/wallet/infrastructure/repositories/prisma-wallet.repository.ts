@@ -6,6 +6,7 @@ import type {
   CreditWalletData,
   DebitWalletData,
   ListTransactionsOptions,
+  ExpiredBonusWallet,
 } from "../../application/interfaces/wallet-repository.interface";
 import {
   computeBonusFirstDeduction,
@@ -254,5 +255,109 @@ export class PrismaWalletRepository implements WalletRepository {
     ]);
 
     return { items, total };
+  }
+
+  /**
+   * Finds wallets where bonus has expired but balance is still > 0.
+   * Joins Tenant (must be active) and TenantPlan (must be ACTIVE).
+   */
+  async findWalletsWithExpiredBonus(): Promise<ExpiredBonusWallet[]> {
+    const now = new Date();
+
+    return prisma.wallet.findMany({
+      where: {
+        bonusBalance: { gt: 0 },
+        bonusExpiresAt: { lte: now },
+        isActive: true,
+        tenant: {
+          isActive: true,
+          tenantPlan: {
+            status: "ACTIVE",
+          },
+        },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        bonusBalance: true,
+        bonusExpiresAt: true,
+        currency: true,
+        tenant: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }) as Promise<ExpiredBonusWallet[]>;
+    // Cast needed because Prisma's generated type includes `tenant`
+    // as a nested object which matches our interface shape.
+  }
+
+  /**
+   * Atomically expires bonus credits for a single tenant wallet.
+   * Idempotent: returns null if bonus is already zeroed or not expired.
+   */
+  async expireBonus(tenantId: string): Promise<WalletTransaction | null> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Pessimistic Row Lock
+      const wallets = await tx.$queryRaw<Wallet[]>`
+        SELECT * FROM "Wallet" WHERE "tenantId" = ${tenantId} FOR UPDATE
+      `;
+      const wallet = wallets[0];
+      if (!wallet) return null;
+
+      // 2. Re-check conditions (idempotent guard)
+      const now = new Date();
+      if (
+        !wallet.bonusExpiresAt ||
+        wallet.bonusExpiresAt > now ||
+        wallet.bonusBalance <= 0
+      ) {
+        return null;
+      }
+
+      const expiredAmount = wallet.bonusBalance;
+
+      // 3. Idempotency key derived from wallet + expiry timestamp
+      const idempotencyKey = `bonus_expiry:${wallet.id}:${wallet.bonusExpiresAt.toISOString()}`;
+
+      const existingTx = await tx.walletTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          idempotencyKey,
+        },
+      });
+      if (existingTx) return existingTx;
+
+      // 4. Zero out bonus balance
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          bonusBalance: 0,
+          bonusExpiresAt: null,
+        },
+      });
+
+      // 5. Create BONUS_EXPIRY ledger entry
+      return tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          tenantId,
+          type: "BONUS_EXPIRY",
+          amount: expiredAmount,
+          cashDelta: 0,
+          bonusDelta: -expiredAmount,
+          cashBalanceAfter: updatedWallet.cashBalance,
+          bonusBalanceAfter: 0,
+          currency: updatedWallet.currency,
+          description: "Promotional bonus credits expired",
+          sourceType: "BONUS_EXPIRY",
+          sourceId: wallet.id,
+          idempotencyKey,
+          createdBy: "SYSTEM",
+        },
+      });
+    });
   }
 }

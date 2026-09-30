@@ -14,6 +14,8 @@ import { GetWalletUseCase } from "./application/use-cases/get-wallet.use-case";
 import { ListTransactionsUseCase } from "./application/use-cases/list-transactions.use-case";
 import { AdjustWalletUseCase } from "./application/use-cases/adjust-wallet.use-case";
 import { DebitWalletForCallUseCase } from "./application/use-cases/debit-wallet.use-case";
+import { ExpireBonusCreditsUseCase } from "./application/use-cases/expire-bonus-credits.use-case";
+import { BonusExpiryScheduler } from "./infrastructure/jobs/bonus-expiry.scheduler";
 
 export interface WalletModuleDeps {
   planRepository: PlanRepository;
@@ -32,6 +34,10 @@ export interface WalletModule {
     stopBatchesOnInsufficientBalance: StopBatchesOnInsufficientBalanceUseCase;
     adjustWallet: AdjustWalletUseCase;
     getWallet: GetWalletUseCase;
+    expireBonusCredits: ExpireBonusCreditsUseCase;
+  };
+  schedulers: {
+    bonusExpiry: BonusExpiryScheduler;
   };
 }
 
@@ -63,6 +69,14 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
     stopBatches,
   );
 
+  const expireBonusCredits = new ExpireBonusCreditsUseCase(
+    repository,
+    deps.planRepository,
+    deps.email,
+  );
+
+  const bonusExpiryScheduler = new BonusExpiryScheduler(expireBonusCredits);
+
   return {
     repository,
     tenantController: new TenantWalletController(getWallet, listTransactions),
@@ -78,6 +92,10 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
       stopBatchesOnInsufficientBalance: stopBatches,
       adjustWallet,
       getWallet,
+      expireBonusCredits,
+    },
+    schedulers: {
+      bonusExpiry: bonusExpiryScheduler,
     },
   };
 }
