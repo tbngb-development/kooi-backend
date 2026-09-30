@@ -8,33 +8,173 @@ import type {
   AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
-import { type CampaignStatus } from "@prisma/client";
+import type { Prisma, CampaignStatus } from "@prisma/client";
 import type {
+  CampaignDetailOverview,
+  CampaignListOverview,
   ExtractionInsightDisposition,
   ExtractionInsightResult,
   ExtractionOverviewDisposition,
   ExtractionOverviewResult,
+  ListCampaignsFilters,
+  PaginatedCampaignsResult,
 } from "../../application/dto/campaign.dto";
 
 export class PrismaCampaignRepository implements CampaignRepository {
-  async list(tenantId: string): Promise<CampaignListItem[]> {
-    const campaigns = await prisma.campaign.findMany({
-      where: { tenantId },
-      include: {
-        assistant: true,
-        batches: {
-          select: {
-            id: true,
-            status: true,
-            totalLeads: true,
-            completedLeads: true,
+  async list(
+    tenantId: string,
+    filters: ListCampaignsFilters,
+  ): Promise<PaginatedCampaignsResult> {
+    const {
+      search,
+      status,
+      dateFrom,
+      dateTo,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      page = 1,
+      limit = 20,
+    } = filters;
+
+    const pageNum = Math.max(1, page);
+    const limitNum = Math.min(Math.max(1, limit), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    // ── Build WHERE clause ──
+    const where: Prisma.CampaignWhereInput = { tenantId };
+
+    if (search && search.trim() !== "") {
+      const term = search.trim();
+      where.OR = [
+        { name: { contains: term, mode: "insensitive" } },
+        { assistant: { name: { contains: term, mode: "insensitive" } } },
+      ];
+    }
+
+    if (status && status.trim() !== "") {
+      const statuses = status
+        .split(",")
+        .map((s) => s.trim() as CampaignStatus)
+        .filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom && { gte: new Date(dateFrom) }),
+        ...(dateTo && { lte: new Date(dateTo) }),
+      };
+    }
+
+    // ── Sorting ──
+    const validSortFields = ["createdAt", "totalLeads"];
+    const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
+    const orderDir = sortOrder === "asc" ? "asc" : "desc";
+
+    // ── Parallel: filtered items + filtered count + global overview ──
+    const [campaigns, total, overview] = await Promise.all([
+      prisma.campaign.findMany({
+        where,
+        include: {
+          assistant: { select: { id: true, name: true } },
+          batches: {
+            select: {
+              id: true,
+              status: true,
+              totalLeads: true,
+              completedLeads: true,
+            },
           },
         },
+        orderBy: { [orderField]: orderDir },
+        skip,
+        take: limitNum,
+      }),
+      prisma.campaign.count({ where }),
+      this.getTenantCampaignOverview(tenantId),
+    ]);
+
+    return {
+      overview,
+      items: campaigns as unknown as CampaignListItem[],
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum) || 1,
       },
-      orderBy: { createdAt: "desc" },
+    };
+  }
+
+  // ── NEW: Tenant-global overview (unfiltered) ──
+  private async getTenantCampaignOverview(
+    tenantId: string,
+  ): Promise<CampaignListOverview> {
+    const [totalCampaigns, totalLeads, totalCalls, runningCampaigns] =
+      await Promise.all([
+        prisma.campaign.count({ where: { tenantId } }),
+        prisma.lead.count({ where: { tenantId } }),
+        prisma.call.count({ where: { tenantId } }),
+        prisma.campaign.count({ where: { tenantId, status: "RUNNING" } }),
+      ]);
+
+    return { totalCampaigns, totalLeads, totalCalls, runningCampaigns };
+  }
+
+  // ── NEW: Campaign-scoped overview for detail page ──
+  async getCampaignOverviewStats(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<CampaignDetailOverview> {
+    // Verify campaign belongs to tenant
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: { id: true, totalLeads: true },
     });
 
-    return campaigns as unknown as CampaignListItem[];
+    if (!campaign) {
+      throw new Error("Campaign not found");
+    }
+
+    const callWhere = { campaignId };
+
+    const [
+      totalCalls,
+      completedCalls,
+      failedCalls,
+      noAnswerCalls,
+      busyCalls,
+      stoppedCalls,
+      costAgg,
+      durationAgg,
+    ] = await Promise.all([
+      prisma.call.count({ where: callWhere }),
+      prisma.call.count({ where: { ...callWhere, status: "COMPLETED" } }),
+      prisma.call.count({ where: { ...callWhere, status: "FAILED" } }),
+      prisma.call.count({ where: { ...callWhere, status: "NO_ANSWER" } }),
+      prisma.call.count({ where: { ...callWhere, status: "BUSY" } }),
+      prisma.call.count({ where: { ...callWhere, status: "STOPPED" } }),
+      prisma.call.aggregate({
+        where: { ...callWhere, chargedAmount: { not: null } },
+        _sum: { chargedAmount: true },
+      }),
+      prisma.call.aggregate({
+        where: { ...callWhere, status: "COMPLETED", duration: { not: null } },
+        _avg: { duration: true },
+      }),
+    ]);
+
+    return {
+      totalLeads: campaign.totalLeads,
+      totalCalls,
+      completedCalls,
+      failedCalls,
+      noAnswerCalls,
+      busyCalls,
+      stoppedCalls,
+      totalCostPaisa: costAgg._sum.chargedAmount ?? 0,
+      avgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
+    };
   }
 
   async findById(

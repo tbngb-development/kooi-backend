@@ -3,6 +3,7 @@ import type {
   AvailableFiltersResponse,
   DynamicFilterMap,
 } from "../../../../shared/types/bolna.types";
+import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
 export interface ListCallsFilters {
   campaignId?: string;
@@ -19,6 +20,7 @@ export interface ListCallsFilters {
 }
 
 export interface PaginatedCallsResult {
+  overview: CallListOverview;
   calls: Array<
     CallEntityData & {
       lead: {
@@ -116,6 +118,8 @@ export interface CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult>;
+
+  getTenantCallOverview(tenantId: string): Promise<CallListOverview>;
 
   getAvailableFilters(
     tenantId: string,

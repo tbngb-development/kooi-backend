@@ -3,10 +3,11 @@ import type { TenantCampaignController } from "./tenant-campaign.controller";
 import type { TenantBatchController } from "../../batches/presentation/tenant-batch.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validate } from "../../../shared/middleware/validate";
+import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   createCampaignSchema,
   extractVariablesSchema,
+  listCampaignsQuerySchema,
 } from "./campaign.schema";
 import { buildTenantBatchRoutes } from "../../batches/presentation/tenant-batch.routes";
 import {
@@ -31,7 +32,7 @@ export function buildTenantCampaignRoutes(
   );
 
   // Collection
-  router.get("/", controller.list);
+  router.get("/", validateQuery(listCampaignsQuerySchema), controller.list);
   router.post(
     "/",
     authorize.tenantRoles("OWNER", "ADMIN", "USER"),
