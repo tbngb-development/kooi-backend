@@ -45,8 +45,8 @@ export const createDispositionSchema = z
     name: z.string().min(1).max(100),
     displayName: z.string().min(1).max(150),
     tag: z.string().max(50).optional(),
-    question: z.string().min(1).max(1000),
-    systemPrompt: z.string().max(2000).optional(),
+    question: z.string().min(1).max(10_000),
+    systemPrompt: z.string().max(20_000).optional(),
     model: z.enum(SUPPORTED_MODELS).optional(),
     isSubjective: z.boolean().optional().default(false), // Defaults to false
     isObjective: z.boolean().optional().default(false), // Defaults to false
@@ -99,8 +99,8 @@ export const updateDispositionSchema = z
     name: z.string().min(1).max(100).optional(),
     displayName: z.string().min(1).max(150).optional(),
     tag: z.string().max(50).nullable().optional(),
-    question: z.string().min(1).max(1000).optional(),
-    systemPrompt: z.string().max(2000).optional(),
+    question: z.string().min(1).max(10_000).optional(),
+    systemPrompt: z.string().max(20_000).optional(),
     model: z.enum(SUPPORTED_MODELS).optional(),
     isSubjective: z.boolean().optional(),
     isObjective: z.boolean().optional(),
