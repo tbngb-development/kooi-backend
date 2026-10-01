@@ -360,4 +360,13 @@ export class PrismaWalletRepository implements WalletRepository {
       });
     });
   }
+
+  async findTransactionByIdempotencyKey(
+    walletId: string,
+    idempotencyKey: string,
+  ): Promise<WalletTransaction | null> {
+    return prisma.walletTransaction.findFirst({
+      where: { walletId, idempotencyKey },
+    });
+  }
 }
