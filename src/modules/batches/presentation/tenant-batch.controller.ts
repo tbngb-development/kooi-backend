@@ -13,12 +13,14 @@ import type { StopBatchUseCase } from "../application/use-cases/stop-batch.use-c
 import type { ResumeBatchUseCase } from "../application/use-cases/resume-batch.use-case";
 import type { DeleteBatchUseCase } from "../application/use-cases/delete-batch.use-case";
 import type { GetBatchStatsUseCase } from "../application/use-cases/get-batch-stats.use-case";
+import type { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batch-upload.use-case";
 
 export class TenantBatchController {
   constructor(
     private readonly listBatchesUseCase: ListBatchesUseCase,
     private readonly getBatchUseCase: GetBatchUseCase,
-    private readonly createBatchUseCase: CreateBatchUseCase,
+    // private readonly createBatchUseCase: CreateBatchUseCase,
+    private readonly enqueueBatchUploadUseCase: EnqueueBatchUploadUseCase,
     private readonly runBatchUseCase: RunBatchUseCase,
     private readonly scheduleBatchUseCase: ScheduleBatchUseCase,
     private readonly stopBatchUseCase: StopBatchUseCase,
@@ -83,7 +85,6 @@ export class TenantBatchController {
         return;
       }
 
-      // 1. Resolve optional retryConfig override
       let retryConfig: RetryConfig | undefined;
       if (req.body.retryConfig) {
         try {
@@ -100,12 +101,10 @@ export class TenantBatchController {
         }
       }
 
-      // 2. Resolve Solution 1 atomic fields from body parameters
       const scheduledAt = req.body.scheduledAt as string | undefined;
       const runImmediately =
         req.body.runImmediately === "true" || req.body.runImmediately === true;
 
-      // 2b. Resolve terms acceptance (multipart sends strings)
       const termsAccepted =
         req.body.termsAccepted === "true" || req.body.termsAccepted === true;
       const termsVersion = req.body.termsVersion as string | undefined;
@@ -126,7 +125,8 @@ export class TenantBatchController {
         return;
       }
 
-      const data = await this.createBatchUseCase.execute({
+      // ← Now calls the async enqueue use case instead of sync create
+      const data = await this.enqueueBatchUploadUseCase.execute({
         tenantId,
         campaignId,
         fileBuffer: req.file.buffer,
@@ -138,7 +138,7 @@ export class TenantBatchController {
         termsVersion: termsVersion.trim(),
       });
 
-      sendSuccess(res, data, HttpStatus.CREATED);
+      sendSuccess(res, data, HttpStatus.ACCEPTED); 
     } catch (err) {
       next(err);
     }

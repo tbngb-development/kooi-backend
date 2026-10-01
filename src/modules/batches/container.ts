@@ -4,7 +4,7 @@ import { BolnaBatchProviderImpl } from "./infrastructure/bolna-batch-provider";
 import { CloudinaryStorageProvider } from "../../shared/config/external/storage/cloudinary.storage";
 import { ListBatchesUseCase } from "./application/use-cases/list-batches.use-case";
 import { GetBatchUseCase } from "./application/use-cases/get-batch.use-case";
-import { CreateBatchUseCase } from "./application/use-cases/create-batch.use-case";
+import { EnqueueBatchUploadUseCase } from "./application/use-cases/enqueue-batch-upload.use-case";
 import { RunBatchUseCase } from "./application/use-cases/run-batch.use-case";
 import { ScheduleBatchUseCase } from "./application/use-cases/schedule-batch.use-case";
 import { StopBatchUseCase } from "./application/use-cases/stop-batch.use-case";
@@ -13,6 +13,8 @@ import { DeleteBatchUseCase } from "./application/use-cases/delete-batch.use-cas
 import { GetBatchStatsUseCase } from "./application/use-cases/get-batch-stats.use-case";
 import { TenantBatchController } from "./presentation/tenant-batch.controller";
 import { AdminBatchController } from "./presentation/admin-batch.controller";
+import { BatchProcessingWorker } from "./infrastructure/jobs/batch-processing.worker";
+import { BatchProcessingScheduler } from "./infrastructure/jobs/batch-processing.scheduler";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { CheckBalanceForBatchUseCase } from "../wallet/application/use-cases/check-balance-for-batch.use-case";
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
@@ -27,6 +29,9 @@ export interface BatchModuleDeps {
 export interface BatchModule {
   tenantController: TenantBatchController;
   adminController: AdminBatchController;
+  schedulers: {
+    batchProcessing: BatchProcessingScheduler;
+  };
 }
 
 export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
@@ -43,18 +48,30 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const getBatch = new GetBatchUseCase(batchRepo);
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
 
+  // New async enqueue use case with logger injected
+  const enqueueBatchUpload = new EnqueueBatchUploadUseCase(
+    batchRepo,
+    campaignRepo,
+    planRepo,
+    storage,
+    log,
+  );
+
+  // Worker + scheduler with logger injected
+  const worker = new BatchProcessingWorker(
+    batchRepo,
+    campaignRepo,
+    planRepo,
+    bolnaProvider,
+    log,
+  );
+  const batchProcessingScheduler = new BatchProcessingScheduler(worker, log);
+
   return {
     tenantController: new TenantBatchController(
       listBatches,
       getBatch,
-      new CreateBatchUseCase(
-        batchRepo,
-        campaignRepo,
-        storage,
-        bolnaProvider,
-        planRepo,
-        log,
-      ),
+      enqueueBatchUpload,
       new RunBatchUseCase(
         batchRepo,
         campaignRepo,
@@ -87,5 +104,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       getBatch,
       getBatchStats,
     ),
+    schedulers: {
+      batchProcessing: batchProcessingScheduler,
+    },
   };
 }

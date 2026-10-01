@@ -273,6 +273,46 @@ export class PrismaBatchRepository implements BatchRepository {
     return new Set(existing.map((l) => l.phone));
   }
 
+  async updateProgress(
+    batchId: string,
+    stage: string,
+    progress: number,
+  ): Promise<void> {
+    await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: {
+        processingStage: stage,
+        processingProgress: Math.min(100, Math.max(0, progress)),
+      },
+    });
+  }
+
+  async updateProcessingError(batchId: string, error: string): Promise<void> {
+    await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: {
+        status: "FAILED",
+        processingStage: null,
+        processingProgress: 0,
+        processingError: error.substring(0, 1000), // Cap at 1000 chars
+      },
+    });
+  }
+
+  async updateRawFileUrl(batchId: string, url: string): Promise<void> {
+    await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: { rawFileUrl: url },
+    });
+  }
+
+  async updateTotalLeads(batchId: string, count: number): Promise<void> {
+    await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: { totalLeads: count },
+    });
+  }
+
   // ── Private Mapper ───────────────────────────────────────────────────────
 
   private toEntityData(batch: {

@@ -1,8 +1,10 @@
 import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
-import type { BatchStatsResult, CreateBatchData, CreateLeadData } from "../dto/batch.dto";
-
-
+import type {
+  BatchStatsResult,
+  CreateBatchData,
+  CreateLeadData,
+} from "../dto/batch.dto";
 
 // ── List Item ────────────────────────────────────────────────────────────────
 
@@ -83,4 +85,16 @@ export interface BatchRepository {
     campaignId: string,
     phones: string[],
   ): Promise<Set<string>>;
+
+  updateProgress(
+    batchId: string,
+    stage: string,
+    progress: number,
+  ): Promise<void>;
+
+  updateProcessingError(batchId: string, error: string): Promise<void>;
+
+  updateRawFileUrl(batchId: string, url: string): Promise<void>;
+
+  updateTotalLeads(batchId: string, count: number): Promise<void>;
 }
