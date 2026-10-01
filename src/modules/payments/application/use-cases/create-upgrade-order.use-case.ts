@@ -22,12 +22,6 @@ export interface CreateUpgradeOrderResult {
   onboardingFeeDifference: number;
 }
 
-/**
- * Creates a Razorpay order for the onboarding fee difference during a plan upgrade.
- *
- * Example: Tenant on Growth (₹19,999) upgrades to Scale (₹49,999).
- * Difference = ₹30,000. This creates a Razorpay order for ₹30,000.
- */
 export class CreateUpgradeOrderUseCase {
   constructor(
     private readonly planRepo: PlanRepository,
@@ -60,7 +54,16 @@ export class CreateUpgradeOrderUseCase {
       );
     }
 
-    // 3. Calculate fee difference
+    // 3. Prevent same-version no-op
+    if (currentPlan.planVersionId === newVersion.id) {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        "Already on this plan version.",
+        "SAME_PLAN_VERSION",
+      );
+    }
+
+    // 4. Calculate fee difference
     const difference = Math.max(
       0,
       newVersion.onboardingFee - currentPlan.onboardingFee,
@@ -74,7 +77,7 @@ export class CreateUpgradeOrderUseCase {
       );
     }
 
-    // 4. Create Razorpay order
+    // 5. Create Razorpay order
     const order = await this.payments.createOrder({
       amountPaisa: difference,
       receipt: `upg_${input.tenantId.slice(0, 8)}_${Date.now()}`,
@@ -86,19 +89,20 @@ export class CreateUpgradeOrderUseCase {
       },
     });
 
-    // 5. Ensure wallet exists
+    // 6. Ensure wallet exists
     const wallet = await this.walletRepo.ensureWallet(input.tenantId);
 
-    // 6. Create recharge record
+    // 7. Create recharge record WITH targetPlanVersionId
     const tenantPlan = await this.planRepo.getTenantPlan(input.tenantId);
     const recharge = await this.rechargeRepo.create({
       walletId: wallet.id,
       tenantId: input.tenantId,
       amount: difference,
-      purpose: "ONBOARDING", // reusing ONBOARDING purpose for upgrade fee
+      purpose: "ONBOARDING",
       status: "INITIATED",
       razorpayOrderId: order.orderId,
       tenantPlanId: tenantPlan?.id ?? null,
+      targetPlanVersionId: newVersion.id, // ← FIX: Was missing! Now routes to processUpgrade()
     });
 
     this.logger.info("Plan upgrade order created", {

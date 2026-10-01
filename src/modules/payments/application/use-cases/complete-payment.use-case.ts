@@ -138,6 +138,31 @@ export class CompletePaymentUseCase {
       throw new TenantPlanNotFoundError(recharge.tenantId);
     }
 
+    // FIX: Check if this plan version's bonus was already credited
+    // by looking for ANY existing BONUS transaction for this plan version,
+    // regardless of tenantPlanId (which can change on re-selection).
+    if (effectiveTerms.includedBalance > 0) {
+      const wallet = await this.walletRepo.findByTenantId(recharge.tenantId);
+      if (wallet) {
+        const existingBonusTx =
+          await this.walletRepo.findTransactionByIdempotencyKey(
+            wallet.id,
+            `plan_bonus:${recharge.tenantId}:${effectiveTerms.planVersionId}`,
+          );
+        if (existingBonusTx) {
+          this.logger?.warn(
+            "Bonus already credited for this plan version, skipping",
+            {
+              action: "payment.bonus_already_credited",
+              tenantId: recharge.tenantId,
+              planVersionId: effectiveTerms.planVersionId,
+            },
+          );
+          // Still activate the plan, just don't double-credit
+        }
+      }
+    }
+
     const bonusExpiresAt = effectiveTerms.bonusValidityDays
       ? new Date(
           Date.now() + effectiveTerms.bonusValidityDays * 24 * 60 * 60 * 1000,
@@ -162,7 +187,7 @@ export class CompletePaymentUseCase {
       });
     }
 
-    // Credit initial plan bonus
+    // Credit initial plan bonus (only if not already credited)
     if (effectiveTerms.includedBalance > 0) {
       await this.walletRepo.credit({
         tenantId: recharge.tenantId,
@@ -172,7 +197,7 @@ export class CompletePaymentUseCase {
         description: `Plan bonus — ${effectiveTerms.planName}`,
         sourceType: "PLAN_BONUS",
         sourceId: recharge.tenantPlanId!,
-        idempotencyKey: `plan_bonus:${recharge.tenantPlanId}:${effectiveTerms.planVersionId}`,
+        idempotencyKey: `plan_bonus:${recharge.tenantId}:${effectiveTerms.planVersionId}`,
         createdBy: "razorpay-webhook",
         bonusExpiresAt,
       });
@@ -200,14 +225,14 @@ export class CompletePaymentUseCase {
     const targetPlan = await this.planRepo.findById(targetVersion.planId);
     const targetPlanName = targetPlan?.name ?? "Upgraded Plan";
 
-    // 3. Compute new bonus expiration (extends validity from upgrade date)
+    // 3. Compute new bonus expiration
     const bonusExpiresAt = targetVersion.bonusValidityDays
       ? new Date(
           Date.now() + targetVersion.bonusValidityDays * 24 * 60 * 60 * 1000,
         )
       : currentTerms.bonusExpiresAt;
 
-    // 4. Activate the target PlanVersion (creates TenantPlanEvent: PLAN_CHANGED)
+    // 4. Activate the target PlanVersion
     await this.planRepo.activatePlan(
       recharge.tenantId,
       targetVersionId,
@@ -221,7 +246,7 @@ export class CompletePaymentUseCase {
       targetVersion.includedBalance - currentTerms.includedBalance,
     );
 
-    // 6. Credit incremental bonus & generate WalletTransaction
+    // 6. Credit incremental bonus with stable idempotency key
     if (bonusDelta > 0) {
       await this.walletRepo.credit({
         tenantId: recharge.tenantId,
@@ -231,20 +256,19 @@ export class CompletePaymentUseCase {
         description: `Plan upgrade bonus — ${currentTerms.planName} → ${targetPlanName}`,
         sourceType: "PLAN_BONUS",
         sourceId: recharge.id,
-        idempotencyKey: `plan_upgrade_bonus:${recharge.id}:${targetVersionId}`,
+        idempotencyKey: `plan_upgrade_bonus:${recharge.tenantId}:${currentTerms.planVersionId}:${targetVersionId}`,
         createdBy: "plan-upgrade-payment",
         bonusExpiresAt,
       });
     }
 
-    this.logger.info("Plan upgrade complete", {
-      action: "payment.plan_upgrade",
+    this.logger?.info("Plan upgrade complete", {
+      action: "payment.plan_upgrade_complete",
       tenantId: recharge.tenantId,
-      rechargeId: recharge.id,
-      targetPlanVersionId: targetVersionId,
-      targetPlanName,
-      targetVersion: targetVersion.version,
-      bonusDeltaPaisa: bonusDelta,
+      fromPlanVersionId: currentTerms.planVersionId,
+      toPlanVersionId: targetVersionId,
+      planName: targetPlanName,
+      bonusDeltaCredited: bonusDelta,
     });
   }
 

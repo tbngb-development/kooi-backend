@@ -79,4 +79,9 @@ export interface WalletRepository {
    * (idempotent). Uses FOR UPDATE row lock for concurrency safety.
    */
   expireBonus(tenantId: string): Promise<WalletTransaction | null>;
+
+  findTransactionByIdempotencyKey(
+  walletId: string,
+  idempotencyKey: string,
+): Promise<WalletTransaction | null>;
 }
