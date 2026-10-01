@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import cookieParser from "cookie-parser"; // <-- Added
+import cookieParser from "cookie-parser";
 import { createErrorHandler } from "../shared/middleware/error-handler";
 import { env } from "../shared/config/env";
 import { buildContainer } from "./container";
@@ -16,34 +16,39 @@ export function buildApp(container = buildContainer()): Express {
   const app = express();
   app.set("trust proxy", 1);
 
-  // 1. Standard global middleware
   app.use(
     cors({
       origin: env.cors.origins,
-      credentials: true, // <-- Essential for cookies to be sent across origins
+      credentials: true,
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     }),
   );
 
-  app.use(cookieParser()); // <-- Added before routes/limiter
-  app.use(express.json({ limit: "10mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+  app.use(cookieParser());
 
-  // Structured request logger (replaces inline console.log)
-  app.use(createRequestLogger(container.logger));
-
-  // ── 2. WEBHOOK ROUTES ──────
+  // ── 2. RAZORPAY WEBHOOK — MUST be before express.json() ──────
+  // express.raw() needs an unconsumed body stream to produce a Buffer.
+  // If express.json() runs first, the stream is already drained.
   app.use(
     "/api/webhooks/razorpay",
     buildRazorpayWebhookRoutes(container.payments.webhookController),
   );
+
+  // ── 3. Body parsers (after webhook routes) ──────
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+  // Structured request logger
+  app.use(createRequestLogger(container.logger));
+
+  // ── 4. Bolna webhook routes (JSON body is fine here) ──────
   app.use("/api/webhooks", buildWebhookRoutes(container.webhooks.controller));
 
-  // ── 3. CLIENT API ROUTES
+  // ── 5. Client API routes ──────
   const globalApiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 1500, // ~100 req/min for normal SPA usage
+    max: 1500,
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -56,7 +61,7 @@ export function buildApp(container = buildContainer()): Express {
   const apiRoutes = buildRoutes(container);
   app.use("/api", globalApiLimiter, apiRoutes);
 
-  // ── 4. 404 & Global Error Handling ─────────────────────────────────────
+  // ── 6. 404 & Global Error Handling ──────
   app.use((req, res) => {
     sendError(
       res,

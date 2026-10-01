@@ -40,7 +40,7 @@ export class CompletePaymentUseCase {
     );
     if (!recharge) throw new RechargeNotFoundError(input.razorpayOrderId);
 
-    // 2. Idempotency: already processed
+    // 2. Idempotency: already processed (fast path — avoids write)
     if (recharge.status === "SUCCESS") {
       this.logger.info("Payment already processed (idempotent hit)", {
         action: "payment.complete",
@@ -55,12 +55,26 @@ export class CompletePaymentUseCase {
       };
     }
 
-    // 3. Mark recharge as SUCCESS
-    await this.rechargeRepo.markSuccess(
+    // 3. Atomically mark recharge as SUCCESS (conditional update)
+    const updated = await this.rechargeRepo.markSuccess(
       recharge.id,
       input.razorpayPaymentId,
       input.razorpaySignature,
     );
+
+    if (!updated) {
+      this.logger.info("Payment already processed (concurrent race won)", {
+        action: "payment.complete",
+        orderId: input.razorpayOrderId,
+        rechargeId: recharge.id,
+        tenantId: recharge.tenantId,
+      });
+      return {
+        alreadyProcessed: true,
+        rechargeId: recharge.id,
+        purpose: recharge.purpose,
+      };
+    }
 
     // 4. Ensure wallet exists
     await this.walletRepo.ensureWallet(recharge.tenantId);

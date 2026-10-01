@@ -40,13 +40,23 @@ export class PrismaRechargeRepository implements RechargeRepository {
     });
   }
 
+  /**
+   * Atomically marks a recharge as SUCCESS only if it is still INITIATED.
+   *
+   * Returns the updated Recharge on success, or null if the recharge was
+   * already processed (status !== INITIATED). This prevents double-credit
+   * on concurrent webhook retries.
+   */
   async markSuccess(
     rechargeId: string,
     razorpayPaymentId: string,
     razorpaySignature: string,
-  ): Promise<Recharge> {
-    return prisma.recharge.update({
-      where: { id: rechargeId },
+  ): Promise<Recharge | null> {
+    const result = await prisma.recharge.updateMany({
+      where: {
+        id: rechargeId,
+        status: "INITIATED", // ← Conditional: only update if still pending
+      },
       data: {
         status: "SUCCESS",
         razorpayPaymentId,
@@ -54,6 +64,12 @@ export class PrismaRechargeRepository implements RechargeRepository {
         completedAt: new Date(),
       },
     });
+
+    if (result.count === 0) {
+      return null; // Already processed by a concurrent request
+    }
+
+    return prisma.recharge.findUniqueOrThrow({ where: { id: rechargeId } });
   }
 
   async markFailed(rechargeId: string, reason: string): Promise<Recharge> {

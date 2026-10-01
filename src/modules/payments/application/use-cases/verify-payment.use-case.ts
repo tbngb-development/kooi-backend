@@ -23,12 +23,26 @@ export class VerifyPaymentUseCase {
     private readonly logger: Logger,
   ) {}
 
-  async execute(input: VerifyPaymentInput): Promise<CompletePaymentResult> {
+  async execute(
+    input: VerifyPaymentInput,
+    tenantId?: string,
+  ): Promise<CompletePaymentResult> {
     // 1. Find the recharge to get the order details
     const recharge = await this.rechargeRepo.findByRazorpayOrderId(
       input.razorpayOrderId,
     );
     if (!recharge) throw new RechargeNotFoundError(input.razorpayOrderId);
+
+    // 2. Verify the order belongs to the authenticated tenant
+    if (tenantId && recharge.tenantId !== tenantId) {
+      this.logger?.warn("Payment verification — tenant mismatch", {
+        action: "payment.verify.tenant_mismatch",
+        orderId: input.razorpayOrderId,
+        expectedTenantId: tenantId,
+        actualTenantId: recharge.tenantId,
+      });
+      throw new RechargeNotFoundError(input.razorpayOrderId);
+    }
 
     // 2. Verify Razorpay HMAC signature
     const isValid = this.payments.verifySignature({

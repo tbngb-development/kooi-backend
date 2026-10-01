@@ -80,9 +80,10 @@ export class TenantPaymentController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const result = await this.verifyPaymentUseCase.execute(
-        req.body as VerifyPaymentInput,
-      );
+      const { tenantId } = getTenantContext(req);
+      const input = req.body as VerifyPaymentInput;
+
+      const result = await this.verifyPaymentUseCase.execute(input, tenantId);
       sendSuccess(res, result);
     } catch (err) {
       next(err);

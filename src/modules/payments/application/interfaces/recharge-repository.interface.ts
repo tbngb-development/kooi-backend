@@ -23,11 +23,15 @@ export interface RechargeRepository {
   findByRazorpayOrderId(orderId: string): Promise<Recharge | null>;
   findByRazorpayPaymentId(paymentId: string): Promise<Recharge | null>;
 
+  /**
+   * Atomically marks a recharge as SUCCESS only if currently INITIATED.
+   * Returns null if already processed (idempotent guard).
+   */
   markSuccess(
     rechargeId: string,
     razorpayPaymentId: string,
     razorpaySignature: string,
-  ): Promise<Recharge>;
+  ): Promise<Recharge | null>;
 
   markFailed(rechargeId: string, reason: string): Promise<Recharge>;
 

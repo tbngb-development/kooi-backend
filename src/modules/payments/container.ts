@@ -148,6 +148,6 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
       getPaymentSummary,
       activateFreeOnboarding,
     ),
-    webhookController: new RazorpayWebhookController(processWebhook),
+    webhookController: new RazorpayWebhookController(processWebhook, log),
   };
 }
