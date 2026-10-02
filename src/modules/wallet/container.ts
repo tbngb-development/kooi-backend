@@ -1,0 +1,112 @@
+import { PrismaWalletRepository } from "./infrastructure/repositories/prisma-wallet.repository";
+import type { WalletRepository } from "./application/interfaces/wallet-repository.interface";
+import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
+import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
+import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { Logger } from "../../shared/logging/logger.interface";
+
+import { TenantWalletController } from "./presentation/tenant-wallet.controller";
+import { AdminWalletController } from "./presentation/admin-wallet.controller";
+
+import { CheckBalanceForBatchUseCase } from "./application/use-cases/check-balance-for-batch.use-case";
+import { CheckLowBalanceUseCase } from "./application/use-cases/check-low-balance.use-case";
+import { StopBatchesOnInsufficientBalanceUseCase } from "./application/use-cases/stop-batches-on-insufficient-balance.use-case";
+import { GetWalletUseCase } from "./application/use-cases/get-wallet.use-case";
+import { ListTransactionsUseCase } from "./application/use-cases/list-transactions.use-case";
+import { AdjustWalletUseCase } from "./application/use-cases/adjust-wallet.use-case";
+import { DebitWalletForCallUseCase } from "./application/use-cases/debit-wallet.use-case";
+import { ExpireBonusCreditsUseCase } from "./application/use-cases/expire-bonus-credits.use-case";
+import { BonusExpiryScheduler } from "./infrastructure/jobs/bonus-expiry.scheduler";
+
+export interface WalletModuleDeps {
+  planRepository: PlanRepository;
+  bolnaClientFactory: IBolnaClientFactory;
+  email: IEmailService;
+  logger: Logger;
+}
+
+export interface WalletModule {
+  repository: WalletRepository;
+  tenantController: TenantWalletController;
+  adminController: AdminWalletController;
+  useCases: {
+    debitWalletForCall: DebitWalletForCallUseCase;
+    checkBalanceForBatch: CheckBalanceForBatchUseCase;
+    checkLowBalance: CheckLowBalanceUseCase;
+    stopBatchesOnInsufficientBalance: StopBatchesOnInsufficientBalanceUseCase;
+    adjustWallet: AdjustWalletUseCase;
+    getWallet: GetWalletUseCase;
+    expireBonusCredits: ExpireBonusCreditsUseCase;
+  };
+  schedulers: {
+    bonusExpiry: BonusExpiryScheduler;
+  };
+}
+
+export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
+  const repository = new PrismaWalletRepository();
+  const log = deps.logger.child({ module: "wallet" });
+
+  const getWallet = new GetWalletUseCase(repository);
+  const listTransactions = new ListTransactionsUseCase(repository);
+  const adjustWallet = new AdjustWalletUseCase(repository, log);
+
+  const checkLowBalance = new CheckLowBalanceUseCase(
+    repository,
+    deps.planRepository,
+    deps.email,
+    log,
+  );
+  const stopBatches = new StopBatchesOnInsufficientBalanceUseCase(
+    repository,
+    deps.planRepository,
+    deps.bolnaClientFactory,
+    log,
+  );
+  const checkBalanceForBatch = new CheckBalanceForBatchUseCase(
+    repository,
+    deps.planRepository,
+    log,
+  );
+  const debitWalletForCall = new DebitWalletForCallUseCase(
+    repository,
+    deps.planRepository,
+    checkLowBalance,
+    stopBatches,
+    log,
+  );
+
+  const expireBonusCredits = new ExpireBonusCreditsUseCase(
+    repository,
+    deps.planRepository,
+    deps.email,
+    log,
+  );
+
+  const bonusExpiryScheduler = new BonusExpiryScheduler(
+    expireBonusCredits,
+    log,
+  );
+
+  return {
+    repository,
+    tenantController: new TenantWalletController(getWallet, listTransactions),
+    adminController: new AdminWalletController(
+      getWallet,
+      listTransactions,
+      adjustWallet,
+    ),
+    useCases: {
+      debitWalletForCall,
+      checkBalanceForBatch,
+      checkLowBalance,
+      stopBatchesOnInsufficientBalance: stopBatches,
+      adjustWallet,
+      getWallet,
+      expireBonusCredits,
+    },
+    schedulers: {
+      bonusExpiry: bonusExpiryScheduler,
+    },
+  };
+}

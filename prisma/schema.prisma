@@ -1,8 +1,5 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -11,183 +8,206 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TENANT
+// AUTH & MULTI-TENANCY 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Tenant {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
-  apiKey    String   @unique @default(uuid())
   isActive  Boolean  @default(true)
+
+  termsAccepted   Boolean   @default(false)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  campaigns    Campaign[]
-  leads        Lead[]
-  calls        Call[]
-  assistants   Assistant[]
-  brochures    Brochure[]
-  callAnalyses CallAnalysis[]
-}
+  memberships   TenantUser[]
+  bolnaApiKeyId String?
+  bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
+  tenantPlan    TenantPlan?
+  wallet        Wallet?
+  campaigns     Campaign[]
+  batches       LeadBatch[]
+  leads         Lead[]
+  calls         Call[]
+  assistants    Assistant[]
+  callAnalyses  CallAnalysis[]
 
-// ─────────────────────────────────────────────────────────────────────────────
-// USER
-// ─────────────────────────────────────────────────────────────────────────────
+  @@index([email])
+}
 
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
   name      String
-  role      Role     @default(USER)
-  tenantId  String
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  memberships   TenantUser[]
+  platformAdmin PlatformAdmin?
+  refreshTokens RefreshToken[]
 }
 
-enum Role {
-  SUPER_ADMIN
+model TenantUser {
+  id        String     @id @default(uuid())
+  userId    String
+  tenantId  String
+  role      TenantRole @default(USER)
+  createdAt DateTime   @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+}
+
+enum TenantRole {
+  OWNER
   ADMIN
   USER
 }
 
+model PlatformAdmin {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  familyId  String 
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId]) 
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// ASSISTANT
+// ASSISTANT 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Assistant {
-  id        String   @id @default(uuid())
-  bolnaId   String   
-  name      String
-  tenantId  String
-  config    Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String
+  tenantId        String
+  config          Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  platformAgentId String
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  campaigns Campaign[]
+  platformAgent PlatformAgent @relation(fields: [platformAgentId], references: [id], onDelete: Restrict)
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  campaigns     Campaign[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BROCHURE
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Brochure {
-  id       String @id @default(uuid())
-  tenantId String
-
-  originalFileName String
-  fileSizeMB       String
-  pageCount        Int
-  rawTextLength    Int
-
-  projectName    String?
-  developerName  String?
-  reraNumber     String?
-  projectWebsite String?
-  contactNumber  String?
-
-  city        String?
-  area        String?
-  state       String?
-  landmark    String?
-  fullAddress String?
-
-  propertyTypes  String[]
-  configurations String[]
-  totalUnits     Int?
-  totalTowers    Int?
-  totalFloors    Int?
-  sizeMin        Float?
-  sizeMax        Float?
-  sizeUnit       String?
-
-  startingPrice     Float?
-  maxPrice          Float?
-  pricePerSqft      Float?
-  priceLabel        String?
-  paymentPlan       String?
-  bankApprovals     String[]
-  maintenanceCharge String?
-
-  possessionDate     String?
-  launchDate         String?
-  constructionStatus String? @default("unknown")
-
-  amenities            String[]
-  specifications       String[]
-  nearbyInfrastructure String[]
-  usps                 String[]
-
-  minimumBudget          Float?
-  maximumBudget          Float?
-  targetBuyerProfile     String?
-  preferredLocations     String[]
-  investmentType         String[]
-  keyQualifyingQuestions String[]
-
-  confidence         Float    @default(0)
-  extractionWarnings String[]
-
-  isConfirmed Boolean   @default(false)
-  confirmedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  campaigns Campaign[]
-
-  @@index([tenantId])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CAMPAIGN
+// CAMPAIGN 
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Campaign {
-  id           String         @id @default(uuid())
-  name         String
-  description  String?
-  status       CampaignStatus @default(DRAFT)
-  tenantId     String
-  assistantId  String
-  brochureId   String?
-  variables    Json?
-  totalLeads   Int            @default(0)
-  calledLeads  Int            @default(0)
-  successLeads Int            @default(0)
-  failedLeads  Int            @default(0)
-  scheduledAt  DateTime? 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  startedAt    DateTime?
-  completedAt  DateTime?
+  id                 String         @id @default(uuid())
+  name               String
+  description        String?
+  status             CampaignStatus @default(DRAFT)
+  tenantId           String
+  assistantId        String
+  variables          Json?
+  defaultRetryConfig Json?
+  totalLeads         Int            @default(0)
+  calledLeads        Int            @default(0)
+  completedLeads     Int            @default(0)
+  failedLeads        Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  startedAt          DateTime?
+  completedAt        DateTime?
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  assistant Assistant @relation(fields: [assistantId], references: [id])
-  brochure  Brochure? @relation(fields: [brochureId], references: [id])
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  assistant Assistant   @relation(fields: [assistantId], references: [id])
   leads     Lead[]
   calls     Call[]
-
-  @@index([brochureId])
+  batches   LeadBatch[]
 }
 
 enum CampaignStatus {
   DRAFT
-  SCHEDULED 
   RUNNING
-  PAUSED
   COMPLETED
   FAILED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEAD
+// LEAD BATCH  
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LeadBatch {
+  id                String      @id @default(uuid())
+  bolnaBatchId      String?     @unique
+  campaignId        String
+  tenantId          String
+  status            BatchStatus @default(CREATED)
+  fileName          String?
+  originalFileUrl   String?
+  transformedCsvUrl String?
+  totalLeads        Int         @default(0)
+  calledLeads       Int         @default(0)
+  completedLeads    Int         @default(0)
+  failedLeads       Int         @default(0)
+  retryConfig       Json?
+  scheduledAt       DateTime?
+  bolnaScheduledAt  DateTime?
+
+  termsAccepted   Boolean   @default(false)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+
+  processingStage    String?   // "PARSING" | "STORING" | "SYNCING" | "FINALIZING"
+  processingProgress Int       @default(0)
+  processingError    String?
+  rawFileUrl         String?   // Cloudinary URL for worker to download
+  
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leads    Lead[]
+  calls    Call[]
+
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([bolnaBatchId])
+}
+
+enum BatchStatus {
+  PROCESSING
+  CREATED
+  SCHEDULED
+  RUNNING
+  STOPPED
+  COMPLETED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEAD  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Lead {
@@ -198,62 +218,86 @@ model Lead {
   company    String?
   status     LeadStatus @default(PENDING)
   doNotCall  Boolean    @default(false)
+  stoppedReason LeadStopReason?
   tenantId   String
   campaignId String
+  batchId    String?
   metadata   Json?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-  campaign Campaign @relation(fields: [campaignId], references: [id])
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
+  campaign Campaign   @relation(fields: [campaignId], references: [id])
+  batch    LeadBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
   calls    Call[]
 
-  // One phone number per campaign — prevents duplicate leads
-  // @@unique([phone, campaignId])
+  @@unique([phone, campaignId])
   @@index([tenantId])
   @@index([campaignId])
+  @@index([batchId])
 }
 
 enum LeadStatus {
   PENDING
   CALLING
   CALLED
-  QUALIFIED
-  NOT_QUALIFIED
   NO_ANSWER
   FAILED
+  STOPPED
+}
+
+enum LeadStopReason {
+  LOW_BALANCE
+  MANUAL
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL
+// CALL  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Call {
-  id                 String     @id @default(uuid())
-  bolnaCallId        String?    @unique
-  tenantId           String
-  campaignId         String
-  leadId             String
-  status             CallStatus @default(PENDING)
-  duration           Int?
-  cost               Float?
-  recording          String?
-  transcript         String?
-  transcriptMessages Json?
-  summary            String?
-  startedAt          DateTime?
-  endedAt            DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                  String     @id @default(uuid())
+  bolnaCallId         String?    @unique
+  tenantId            String
+  campaignId          String
+  leadId              String
+  batchId             String?
+  status              CallStatus @default(PENDING)
+  duration            Int?
+  cost                Float?
+  platformCost        Int?
+  billableSeconds     Int?
+  planVersionId       String?
+  appliedRate         Int?
+  appliedMinSec       Int?
+  appliedIncrementSec Int?
+  chargedAmount       Int?
+  recording           String?
+  transcript          String?
+  transcriptMessages  Json?
+  summary             String?
+  callHistory         Json?
+  extractionResult    Json?
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  callAnalysis CallAnalysis?
+  extractionOverview CallExtractionOverview[]
+  extractionInsights CallExtractionInsight[]
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   campaign     Campaign      @relation(fields: [campaignId], references: [id])
   lead         Lead          @relation(fields: [leadId], references: [id])
-  callAnalysis CallAnalysis?
+  batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
 
   @@index([tenantId])
   @@index([campaignId])
   @@index([leadId])
+  @@index([batchId])
 }
 
 enum CallStatus {
@@ -263,10 +307,11 @@ enum CallStatus {
   FAILED
   NO_ANSWER
   BUSY
+  STOPPED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL ANALYSIS
+// CALL ANALYSIS  
 // ─────────────────────────────────────────────────────────────────────────────
 
 model CallAnalysis {
@@ -274,19 +319,8 @@ model CallAnalysis {
   callId   String @unique
   tenantId String
 
-  disposition             Disposition?
-  leadTemperature         LeadTemperature?
-  preferredConfiguration  String?
-  budgetRange             String?
-  purchaseTimeline        PurchaseTimeline?
-  purchasePurpose         PurchasePurpose?
-  locationMatch           LocationMatch?
-  customerLocationPref    String?
-  preferredNextAction     PreferredNextAction?
-  preferredContactChannel ContactChannel?
-  followupSchedule        String?
-  doNotCall               ExtractionFlag?
-  languageSupportRequired ExtractionFlag?
+  dynamicExtractions Json?
+  extractionResult   Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -296,78 +330,608 @@ model CallAnalysis {
 
   @@index([tenantId])
   @@index([callId])
-  @@index([disposition])
-  @@index([leadTemperature])
+  
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CALL ANALYSIS ENUMS
+// PLANS & BILLING
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum Disposition {
-  INTERESTED_SEND_DETAILS
-  QUALIFIED_CONSULTANT_FOLLOWUP
-  SITE_VISIT_INTEREST
-  INTERESTED_GENERAL
-  FOLLOWUP_REQUESTED
-  NOT_INTERESTED
-  DO_NOT_CALL
-  WRONG_NUMBER
-  ALREADY_PURCHASED
-  BROKER
-  LANGUAGE_CALLBACK_REQUIRED
-  CALL_ENDED_BY_CUSTOMER
-  CALL_ENDED_ABUSIVE
-  NO_RESPONSE
-  CALL_DROPPED
+enum PricingModel {
+  STANDARD
+  VOLUME
+  CUSTOM
 }
 
-enum LeadTemperature {
-  HOT
-  WARM
-  NURTURE
-  COLD
-  NOT_APPLICABLE
+enum CallingChannel {
+  SHARED
+  DEDICATED
+  DEDICATED_WITH_NUMBER
 }
 
-enum PurchaseTimeline {
-  WITHIN_3_MONTHS
-  WITHIN_6_MONTHS
-  WITHIN_1_YEAR
-  AFTER_1_YEAR
-  FLEXIBLE
-  NOT_SHARED
+enum DashboardTier {
+  BASIC
+  STANDARD
+  ADVANCED
+  CUSTOM
 }
 
-enum PurchasePurpose {
-  OWN_USE
-  INVESTMENT
-  BOTH
-  NOT_SHARED
+enum AgentCapability {
+  BASIC
+  BASIC_KNOWLEDGE
+  ADVANCED_KNOWLEDGE
+  CUSTOM
 }
 
-enum PreferredNextAction {
-  SEND_DETAILS
-  CONSULTANT_CALL
-  SITE_VISIT
-  FOLLOWUP_CALL
+enum IntegrationTier {
   NONE
+  BASIC
+  API_SELECTED
+  CUSTOM
 }
 
-enum ContactChannel {
-  WHATSAPP
-  EMAIL
-  NOT_ASKED
+enum SupportTier {
+  STANDARD
+  PRIORITY
+  SLA
 }
 
-enum LocationMatch {
-  MATCH
-  MISMATCH
-  NOT_ASKED
-  NOT_MENTIONED
+model Plan {
+  id           String  @id @default(uuid())
+  name         String
+  slug         String  @unique
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
+  description  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions    PlanVersion[]
+  tenantPlans TenantPlan[]
+  invites     TenantInvite[]
 }
 
-enum ExtractionFlag {
-  YES
-  NO
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model PlanVersion {
+  id       String            @id @default(uuid())
+  planId   String
+  version  Int
+  status   PlanVersionStatus @default(DRAFT)
+  currency String            @default("INR")
+
+  pricingModel          PricingModel @default(STANDARD)
+  onboardingFee         Int
+  onboardingFeeOriginal Int?
+  perMinuteRate         Int
+  billingMinimumSec     Int          @default(30)
+  billingIncrementSec   Int          @default(15)
+
+  maxActiveCampaigns Int?
+  maxLeadsPerBatch   Int?
+  maxAgents          Int?
+  maxTeamMembers     Int?
+  retryAutomation    Boolean @default(false)
+  industryPackLimit  Int?
+
+  callingChannel CallingChannel @default(SHARED)
+  brochureUpload Boolean        @default(false)
+
+  dashboardTier   DashboardTier   @default(BASIC)
+  agentCapability AgentCapability @default(BASIC)
+  integrations    IntegrationTier @default(NONE)
+  supportTier     SupportTier     @default(STANDARD)
+
+  lowBalanceThreshold Int  @default(10000)
+  includedBalance     Int  @default(0)
+  bonusValidityDays   Int?
+
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  plan        Plan              @relation(fields: [planId], references: [id])
+  tenantPlans TenantPlan[]
+  calls       Call[]
+  eventsFrom  TenantPlanEvent[] @relation("EventFromVersion")
+  eventsTo    TenantPlanEvent[] @relation("EventToVersion")
+
+  @@unique([planId, version])
+  @@index([status])
+}
+
+enum TenantPlanStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model TenantPlan {
+  id            String           @id @default(uuid())
+  tenantId      String           @unique
+  planId        String
+  planVersionId String
+  status        TenantPlanStatus @default(PENDING_PAYMENT)
+
+  onboardingFeeOverride Int?
+  perMinuteRateOverride Int?
+
+  activatedAt    DateTime?
+  bonusExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan        Plan              @relation(fields: [planId], references: [id])
+  planVersion PlanVersion       @relation(fields: [planVersionId], references: [id])
+  events      TenantPlanEvent[]
+  recharges   Recharge[]
+
+  @@index([planId])
+  @@index([planVersionId])
+  @@index([status])
+}
+
+enum TenantPlanEventType {
+  CREATED
+  ACTIVATED
+  PLAN_CHANGED
+  OVERRIDES_UPDATED
+  BONUS_GRANTED
+  BONUS_EXPIRED
+  CANCELLED
+  EXPIRED
+  REACTIVATED
+}
+
+model TenantPlanEvent {
+  id           String              @id @default(uuid())
+  tenantPlanId String
+  tenantId     String
+  type         TenantPlanEventType
+
+  fromPlanVersionId String?
+  toPlanVersionId   String?
+
+  metadata  Json?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  tenantPlan  TenantPlan   @relation(fields: [tenantPlanId], references: [id], onDelete: Cascade)
+  fromVersion PlanVersion? @relation("EventFromVersion", fields: [fromPlanVersionId], references: [id])
+  toVersion   PlanVersion? @relation("EventToVersion", fields: [toPlanVersionId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantPlanId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WALLET  
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id             String    @id @default(uuid())
+  tenantId       String    @unique
+  cashBalance    Int       @default(0)
+  bonusBalance   Int       @default(0)
+  bonusExpiresAt DateTime?
+  currency       String    @default("INR")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  recharges    Recharge[]
+}
+
+enum WalletTxType {
+  CREDIT
+  DEBIT
+  BONUS
+  BONUS_EXPIRY
+  REFUND
+  ADJUSTMENT
+}
+
+enum WalletTxSourceType {
+  RECHARGE
+  CALL
+  PLAN_BONUS
+  BONUS_EXPIRY
+  ADMIN_ADJUSTMENT
+  REFUND
+}
+
+model WalletTransaction {
+  id       String @id @default(uuid())
+  walletId String
+  tenantId String
+
+  type       WalletTxType
+  amount     Int
+  cashDelta  Int
+  bonusDelta Int
+
+  cashBalanceAfter  Int
+  bonusBalanceAfter Int
+  currency          String @default("INR")
+  description       String
+
+  sourceType     WalletTxSourceType?
+  sourceId       String?
+  idempotencyKey String?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@unique([walletId, idempotencyKey], name: "uniq_wallet_tx_idem")
+  @@index([tenantId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+enum RechargeStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum RechargePurpose {
+  ONBOARDING
+  WALLET_TOPUP
+}
+
+model Recharge {
+  id       String          @id @default(uuid())
+  walletId String
+  tenantId String
+  amount   Int
+  currency String          @default("INR")
+  purpose  RechargePurpose @default(WALLET_TOPUP)
+  status   RechargeStatus
+
+  provider          String  @default("razorpay")
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String? @unique
+  razorpaySignature String?
+  failureReason     String?
+
+  tenantPlanId        String?
+  targetPlanVersionId String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  wallet     Wallet      @relation(fields: [walletId], references: [id])
+  tenantPlan TenantPlan? @relation(fields: [tenantPlanId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantPlanId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLNA API KEYS  
+// ─────────────────────────────────────────────────────────────────────────────
+
+model BolnaApiKey {
+  id                String          @id @default(uuid())
+  keyIdentifier     String
+  encryptedKey      String
+  type              BolnaApiKeyType @default(GENERAL)
+  isPlatformDefault Boolean         @default(false)
+  isActive          Boolean         @default(true)
+
+  createdBy      String
+  lastAccessedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenants        Tenant[]
+  platformAgents PlatformAgent[]
+}
+
+enum BolnaApiKeyType {
+  GENERAL
+  CUSTOM
+}
+
+model TenantInvite {
+  id                    String       @id @default(uuid())
+  email                 String
+  tenantName            String
+  token                 String       @unique
+  status                InviteStatus @default(PENDING)
+  planId                String
+  invitedBy             String
+  expiresAt             DateTime
+  acceptedAt            DateTime?
+  resendCount           Int          @default(0)
+  lastResentAt          DateTime?
+  skipPayment           Boolean      @default(false)
+  discountPercent       Int          @default(0)
+  creditIncludedBalance Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id])
+
+  @@index([token])
+  @@index([email])
+  @@index([status])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM AGENT 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PlatformAgent {
+  id          String  @id @default(uuid())
+  bolnaId     String  @unique
+  slug        String  @unique
+  name        String
+  category    String?
+  description String?
+
+  defaultConfig Json
+  systemPrompt  String?
+
+  welcomeMessage      String?
+  requiredVariables   Json?
+  gender              AgentGender?
+  isActive   Boolean @default(true)
+  isFeatured Boolean @default(false)
+  sortOrder  Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bolnaApiKeyId String
+  industryPackId String?
+
+  assistants Assistant[]
+  categories    PlatformAgentCategory[]
+  bolnaBindings AgentBolnaExtractionBinding[]
+
+  bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
+  industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
+
+  @@index([industryPackId])
+  @@index([category])
+  @@index([bolnaApiKeyId])
+}
+
+enum AgentGender {
+  MALE
+  FEMALE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION CATEGORY  
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractionCategory {
+  id    String @id @default(uuid())
+  slug  String @unique
+  name  String 
+  model String @default("gpt-4.1-mini")
+
+  description String?
+  isActive    Boolean @default(true)
+
+  industries     ExtractionCategoryIndustry[]
+  dispositions   ExtractionCategoryDisposition[]
+  platformAgents PlatformAgentCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION DISPOSITION 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractionDisposition {
+  id           String  @id @default(uuid())
+  slug         String  @unique
+  name         String 
+  displayName  String
+  tag          String? 
+  question     String
+  systemPrompt String?
+  model        String  @default("gpt-4.1-mini")
+
+  isSubjective         Boolean @default(false)
+  isObjective          Boolean @default(false)
+  subjectiveType       String  @default("text")
+  subjectiveTypeConfig Json?
+  objectiveOptions     Json?
+
+  description String?
+  isActive    Boolean @default(true)
+
+  showInOverview Boolean @default(true)  // Include in campaign metrics overview?
+  showInInsights Boolean @default(false) // Include in free-text insights?
+
+  industries    ExtractionDispositionIndustry[]
+  categories    ExtractionCategoryDisposition[]
+  bolnaBindings AgentBolnaExtractionBinding[]
+  callOverviews CallExtractionOverview[] 
+  callInsights  CallExtractionInsight[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([tag])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRY PACK 
+// ─────────────────────────────────────────────────────────────────────────────
+
+model IndustryPack {
+  id          String  @id @default(uuid())
+  slug        String  @unique
+  name        String
+  description String?
+  icon        String?
+
+  allowedCallingHours Json?
+  requiresConsent     Boolean @default(false)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  platformAgents PlatformAgent[]
+
+  extractionCategories   ExtractionCategoryIndustry[]
+  extractionDispositions ExtractionDispositionIndustry[]
+
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRACTION JUNCTION TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Category ↔ Industry  ──────────────────────────────────────────────────
+model ExtractionCategoryIndustry {
+  categoryId     String
+  industryPackId String
+
+  category     ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  industryPack IndustryPack       @relation(fields: [industryPackId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, industryPackId])
+  @@index([industryPackId])
+}
+
+// ── Disposition ↔ Industry ───────────────────────────────────────────────
+model ExtractionDispositionIndustry {
+  dispositionId  String
+  industryPackId String
+
+  disposition  ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+  industryPack IndustryPack          @relation(fields: [industryPackId], references: [id], onDelete: Cascade)
+
+  @@id([dispositionId, industryPackId])
+  @@index([industryPackId])
+}
+
+// ── Category ↔ Disposition ───────────────────────────────────────────────
+model ExtractionCategoryDisposition {
+  categoryId    String
+  dispositionId String
+  sortOrder     Int    @default(0)
+
+  category    ExtractionCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  disposition ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, dispositionId])
+  @@index([dispositionId])
+}
+
+// ── Agent ↔ Category  ────────────────────────────────────────────────────
+model PlatformAgentCategory {
+  platformAgentId String
+  categoryId      String
+  sortOrder       Int    @default(0)
+
+  platformAgent PlatformAgent      @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
+  category      ExtractionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([platformAgentId, categoryId])
+  @@index([categoryId])
+}
+
+// ── Bolna Binding (tracks per-agent Bolna copies) ────────────────────────────
+model AgentBolnaExtractionBinding {
+  id                 String   @id @default(uuid())
+  platformAgentId    String
+  dispositionId      String
+  bolnaAgentId       String // PlatformAgent.bolnaId snapshot
+  bolnaCategoryId    String // Bolna's category ID (may be per-agent "General")
+  bolnaDispositionId String // Bolna's disposition ID (copy-on-write)
+  lastSyncedAt       DateTime @default(now())
+
+  platformAgent PlatformAgent         @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@unique([platformAgentId, dispositionId])
+  @@index([bolnaAgentId])
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL EXTRACTION OVERVIEW (Auto-generated objective outcomes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallExtractionOverview {
+  id               String   @id @default(uuid())
+  callId           String
+  tenantId         String
+  campaignId       String
+  batchId          String?
+  dispositionId    String
+  dispositionSlug  String
+  dispositionName  String
+  categoryName     String
+  objectiveValue   String
+  confidence       Float?
+  createdAt        DateTime @default(now())
+
+  call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, dispositionId])
+  @@index([tenantId, campaignId, dispositionId, objectiveValue])
+  @@index([callId])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL EXTRACTION INSIGHTS (Subjective / free-text outcomes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallExtractionInsight {
+  id               String   @id @default(uuid())
+  callId           String
+  tenantId         String
+  campaignId       String
+  batchId          String?
+  dispositionId    String
+  dispositionSlug  String
+  dispositionName  String
+  categoryName     String
+  subjectiveValue  String   // Raw extracted text: "CSE"
+  normalizedValue  String   // Grouping key: "cse"
+  confidence       Float?
+  createdAt        DateTime @default(now())
+
+  call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  disposition   ExtractionDisposition @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, dispositionId])
+  @@index([tenantId, campaignId, dispositionId, normalizedValue])
+  @@index([callId])
+  @@index([batchId])
 }

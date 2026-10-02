@@ -4,4 +4,7 @@ src/generated/
 dist
 .env
 .env.production
-.env.example
+.env.staging
+kooi-v1-auth.json
+docs
+

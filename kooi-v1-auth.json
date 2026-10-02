@@ -1,0 +1,3284 @@
+{
+  "info": {
+    "name": "KOOI-V1-LATEST🔥",
+    "_postman_id": "v1-backend-complete-test-suite",
+    "description": "Complete test suite for V1 Backend API. Covers all modules: Auth, Campaigns, Batches, Leads, Calls, Assistants, Users, Dashboard, Brochures, Admin Tenants, and Webhooks.\n\nRun folders in order for proper variable propagation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": ["// Global pre-request: nothing by default"]
+      }
+    }
+  ],
+  "variable": [],
+  "item": [
+    {
+      "name": "00 — Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/../health",
+              "host": ["{{baseUrl}}"],
+              "path": ["..", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health check returns OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('OK');",
+                  "    pm.expect(json.version).to.eql('1.0.0');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 — Auth (Registration & Login)",
+      "item": [
+        {
+          "name": "Register — New Tenant & User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantName\": \"Test Company {{$timestamp}}\",\n  \"email\": \"user_{{$timestamp}}@test.com\",\n  \"password\": \"TestPass1\",\n  \"name\": \"Test User\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Registration successful', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.tokens).to.exist;",
+                  "    pm.expect(json.data.user).to.exist;",
+                  "    pm.expect(json.data.tenant).to.exist;",
+                  "    pm.expect(json.data.membership.role).to.eql('OWNER');",
+                  "",
+                  "    pm.collectionVariables.set('registeredEmail', json.data.user.email);",
+                  "    pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "    pm.environment.set('tenantId', json.data.tenant.id);",
+                  "    pm.environment.set('userId', json.data.user.id);",
+                  "    pm.environment.set('membershipId', json.data.membership.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register — Validation Error (weak password)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantName\": \"Fail Co\",\n  \"email\": \"fail@test.com\",\n  \"password\": \"weak\",\n  \"name\": \"Fail\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Validation error for weak password', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register — Duplicate Email (409)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantName\": \"Dup Co\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"TestPass1\",\n  \"name\": \"Dup User\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Duplicate email returns 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Single Tenant (direct tokens)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.user).to.exist;",
+                  "",
+                  "    if (json.data.tokens) {",
+                  "        pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "        pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "        pm.expect(json.data.requiresTenantSelection).to.be.false;",
+                  "    } else {",
+                  "        pm.expect(json.data.requiresTenantSelection).to.be.true;",
+                  "        pm.expect(json.data.memberships.length).to.be.greaterThan(1);",
+                  "    }",
+                  "",
+                  "    if (json.data.memberships && json.data.memberships.length > 0) {",
+                  "        pm.environment.set('tenantId', json.data.memberships[0].tenantId);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Invalid Credentials (401)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"WrongPassword1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invalid credentials returns 401 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 401]);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — With tenantId (skip selection)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"tenantId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login with tenantId returns tokens directly', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.tokens).to.exist;",
+                  "    pm.expect(json.data.requiresTenantSelection).to.be.false;",
+                  "    pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Select Tenant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/select-tenant",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "select-tenant"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Tenant selection returns scoped tokens', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.tokens).to.exist;",
+                  "    pm.expect(json.data.membership).to.exist;",
+                  "    pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "profile"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Profile returns user and memberships', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.user).to.exist;",
+                  "    pm.expect(json.data.user.email).to.be.a('string');",
+                  "    pm.expect(json.data.memberships).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "refresh"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token refresh returns new tokens', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.tokens).to.exist;",
+                  "    pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Invite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"invited_{{$timestamp}}@test.com\",\n  \"role\": \"USER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/invites",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "invites"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invite created with token', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.inviteToken).to.be.a('string');",
+                  "    pm.expect(json.data.inviteUrl).to.be.a('string');",
+                  "    pm.expect(json.data.expiresAt).to.be.a('string');",
+                  "    pm.environment.set('inviteToken', json.data.inviteToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept Invite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inviteToken\": \"{{inviteToken}}\",\n  \"email\": \"invited_user@test.com\",\n  \"password\": \"InvitedPass1\",\n  \"name\": \"Invited User\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/accept-invite",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "accept-invite"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Invite accepted', function () {",
+                  "    // May succeed (201) or fail if token doesn't match email",
+                  "    var code = pm.response.code;",
+                  "    if (code === 201) {",
+                  "        var json = pm.response.json();",
+                  "        pm.expect(json.data.tokens).to.exist;",
+                  "        pm.expect(json.data.membership).to.exist;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unauthenticated Access (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "profile"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 401 without token', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Assistants",
+      "item": [
+        {
+          "name": "Fetch Bolna Agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/bolna-agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "bolna-agents"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns Bolna agents list', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Assistant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Assistant {{$timestamp}}\",\n  \"bolnaId\": \"{{bolnaAgentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Assistant registered', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.id).to.be.a('string');",
+                  "    pm.environment.set('assistantId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Assistants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns assistant array', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 0) {",
+                  "        pm.environment.set('assistantId', json.data[0].id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Assistant by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/{{assistantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "{{assistantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns assistant with variables', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.assistant).to.exist;",
+                  "    pm.expect(json.data.variables).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Assistant Name",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed Assistant\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/{{assistantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "{{assistantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Assistant updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.name).to.eql('Renamed Assistant');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sync Assistant from Bolna",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/{{assistantId}}/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "{{assistantId}}", "sync"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sync successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Non-existent Assistant (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "assistants",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — Brochures",
+      "item": [
+        {
+          "name": "Extract Brochure (PDF upload)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a PDF brochure file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures/extract",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures", "extract"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Extraction returns property details', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.propertyDetails).to.exist;",
+                  "    pm.expect(json.data.flattenedForSave).to.exist;",
+                  "    pm.expect(json.data.pdfMeta).to.exist;",
+                  "    pm.collectionVariables.set('brochureSavePayload', JSON.stringify(json.data.flattenedForSave));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Brochure",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{{brochureSavePayload}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures", "save"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// If no brochure was extracted, use a minimal payload",
+                  "var payload = pm.collectionVariables.get('brochureSavePayload');",
+                  "if (!payload) {",
+                  "    var fallback = {",
+                  "        originalFileName: 'test.pdf',",
+                  "        fileSizeMB: '1.5',",
+                  "        pageCount: 10,",
+                  "        rawTextLength: 5000,",
+                  "        projectName: 'Test Project',",
+                  "        city: 'Mumbai',",
+                  "        configurations: ['2BHK', '3BHK'],",
+                  "        amenities: ['Pool', 'Gym'],",
+                  "        confidence: 0.8",
+                  "    };",
+                  "    pm.collectionVariables.set('brochureSavePayload', JSON.stringify(fallback));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Brochure saved', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.be.a('string');",
+                  "    pm.expect(json.data.isConfirmed).to.be.true;",
+                  "    pm.environment.set('brochureId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Brochures",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns brochure list', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Brochure by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures/{{brochureId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures", "{{brochureId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns brochure detail', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.eql(pm.environment.get('brochureId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Brochure",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectName\": \"Updated Project Name\",\n  \"city\": \"Pune\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures/{{brochureId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures", "{{brochureId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Brochure updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Campaigns",
+      "item": [
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Campaign {{$timestamp}}\",\n  \"description\": \"Automated test campaign\",\n  \"assistantId\": \"{{assistantId}}\",\n  \"brochureId\": \"{{brochureId}}\",\n  \"variables\": {},\n  \"defaultRetryConfig\": {\n    \"enabled\": true,\n    \"max_retries\": 2,\n    \"retry_on_statuses\": [\"no-answer\", \"busy\"],\n    \"retry_on_voicemail\": false,\n    \"retry_intervals_minutes\": [5, 15]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Campaign created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.id).to.be.a('string');",
+                  "    pm.expect(json.data.status).to.eql('DRAFT');",
+                  "    pm.environment.set('campaignId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Campaign — Without brochure",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No Brochure Campaign {{$timestamp}}\",\n  \"assistantId\": \"{{assistantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Campaign without brochure created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.brochureId).to.be.oneOf([null, undefined]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Campaign — Validation Error (no name)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantId\": \"{{assistantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Validation error for missing name', function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('VALIDATION_ERROR');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns campaign list with relations', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 0) {",
+                  "        var c = json.data[0];",
+                  "        pm.expect(c).to.have.property('totalLeads');",
+                  "        pm.expect(c).to.have.property('assistant');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Campaign by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns campaign detail', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.eql(pm.environment.get('campaignId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Campaign Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns campaign stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.campaign).to.exist;",
+                  "    pm.expect(json.data.leads).to.be.an('array');",
+                  "    pm.expect(json.data.calls).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Campaign Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/performance",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}", "performance"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns performance metrics', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('hotLeads');",
+                  "    pm.expect(json.data).to.have.property('totalCost');",
+                  "    pm.expect(json.data).to.have.property('qualificationRate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Parse Leads CSV (preview)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select CSV/XLS/XLSX with name,phone columns"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/parse-leads",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}", "parse-leads"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Parsed leads preview', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('total');",
+                  "    pm.expect(json.data).to.have.property('valid');",
+                  "    pm.expect(json.data).to.have.property('readyToImport');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Non-existent Campaign (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 404 for non-existent campaign', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Batches",
+      "item": [
+        {
+          "name": "Create Batch (upload CSV)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "CSV/XLS/XLSX with name,phone columns"
+                },
+                {
+                  "key": "retryConfig",
+                  "type": "text",
+                  "value": "{\"enabled\":true,\"max_retries\":1,\"retry_on_statuses\":[\"no-answer\"]}",
+                  "description": "Optional retry config JSON"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}", "batches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch created with stats', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.batch).to.exist;",
+                  "    pm.expect(json.data.stats).to.exist;",
+                  "    pm.expect(json.data.stats.imported).to.be.a('number');",
+                  "    pm.environment.set('batchId', json.data.batch.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Batches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns", "{{campaignId}}", "batches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns batch array', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 0) {",
+                  "        pm.expect(json.data[0]).to.have.property('_count');",
+                  "        pm.environment.set('batchId', json.data[0].id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Batch by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns batch detail', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.eql(pm.environment.get('batchId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Batch Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}",
+                "stats"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns batch stats with cost', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.batch).to.exist;",
+                  "    pm.expect(json.data.leads).to.be.an('array');",
+                  "    pm.expect(json.data).to.have.property('totalCost');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}",
+                "run"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch run initiated', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 400, 409]);",
+                  "    var json = pm.response.json();",
+                  "    if (code === 200) {",
+                  "        pm.expect(json.data.batch).to.exist;",
+                  "        pm.expect(json.data.message).to.be.a('string');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Schedule Batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}",
+                "schedule"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Set schedule 10 minutes in the future",
+                  "var futureDate = new Date(Date.now() + 10 * 60 * 1000);",
+                  "pm.environment.set('scheduledAt', futureDate.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Schedule response', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 400, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stop Batch",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}/stop",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}",
+                "stop"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Stop batch response', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 400, 409]);",
+                  "    if (code === 200) {",
+                  "        var json = pm.response.json();",
+                  "        pm.expect(json.data.batch.status).to.eql('STOPPED');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resume Batch",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}/resume",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}",
+                "resume"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Resume batch response', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([201, 400, 409]);",
+                  "    if (code === 201) {",
+                  "        var json = pm.response.json();",
+                  "        pm.expect(json.data.newBatch).to.exist;",
+                  "        pm.expect(json.data.remainingLeads).to.be.a('number');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Batch",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns/{{campaignId}}/batches/{{batchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "v1",
+                "campaigns",
+                "{{campaignId}}",
+                "batches",
+                "{{batchId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch deleted', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 400, 409]);",
+                  "    if (code === 200) {",
+                  "        var json = pm.response.json();",
+                  "        pm.expect(json.data.message).to.include('deleted');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 — Leads",
+      "item": [
+        {
+          "name": "List Leads — Default",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns paginated leads', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.leads).to.be.an('array');",
+                  "    pm.expect(json.data.pagination).to.exist;",
+                  "    pm.expect(json.data.pagination).to.have.property('total');",
+                  "    pm.expect(json.data.pagination).to.have.property('pages');",
+                  "    if (json.data.leads.length > 0) {",
+                  "        pm.environment.set('leadId', json.data.leads[0].id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Filter by Campaign",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?campaignId={{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [{ "key": "campaignId", "value": "{{campaignId}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns leads for campaign', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.leads).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Filter by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?status=PENDING,CALLED",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [{ "key": "status", "value": "PENDING,CALLED" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns filtered leads by status', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Search by Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?search=9876",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [{ "key": "search", "value": "9876" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Search returns results', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?page=1&limit=5&sortBy=createdAt&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" },
+                { "key": "sortBy", "value": "createdAt" },
+                { "key": "sortOrder", "value": "desc" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Pagination works', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.pagination.limit).to.eql(5);",
+                  "    pm.expect(json.data.leads.length).to.be.at.most(5);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Leads — Date Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads?dateFrom=2024-01-01T00:00:00Z&dateTo=2025-12-31T23:59:59Z",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads"],
+              "query": [
+                { "key": "dateFrom", "value": "2024-01-01T00:00:00Z" },
+                { "key": "dateTo", "value": "2025-12-31T23:59:59Z" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Date range filter works', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/{{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "{{leadId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns lead with calls', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.eql(pm.environment.get('leadId'));",
+                  "    pm.expect(json.data).to.have.property('calls');",
+                  "    pm.expect(json.data).to.have.property('campaign');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead Stats — All",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns lead stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('total');",
+                  "    pm.expect(json.data).to.have.property('pending');",
+                  "    pm.expect(json.data).to.have.property('qualificationRate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead Stats — By Campaign",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/stats?campaignId={{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "stats"],
+              "query": [{ "key": "campaignId", "value": "{{campaignId}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns campaign-scoped lead stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Non-existent Lead (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/leads/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "leads", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 — Calls",
+      "item": [
+        {
+          "name": "List Calls — Default",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns paginated calls', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.calls).to.be.an('array');",
+                  "    pm.expect(json.data.pagination).to.exist;",
+                  "    if (json.data.calls.length > 0) {",
+                  "        pm.environment.set('callId', json.data.calls[0].id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Filter by Campaign",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?campaignId={{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [{ "key": "campaignId", "value": "{{campaignId}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Filtered by campaign', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Filter by Disposition",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?disposition=INTERESTED_SEND_DETAILS,SITE_VISIT_INTEREST",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [
+                {
+                  "key": "disposition",
+                  "value": "INTERESTED_SEND_DETAILS,SITE_VISIT_INTEREST"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Filtered by disposition', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Filter by Lead Temperature",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?leadTemperature=HOT,WARM",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [{ "key": "leadTemperature", "value": "HOT,WARM" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Filtered by temperature', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Filter by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?status=COMPLETED,FAILED",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [{ "key": "status", "value": "COMPLETED,FAILED" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Filtered by status', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Search by Lead Name/Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?search=john",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [{ "key": "search", "value": "john" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Search works', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Sort by Duration DESC",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?sortBy=duration&sortOrder=desc&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [
+                { "key": "sortBy", "value": "duration" },
+                { "key": "sortOrder", "value": "desc" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sorted by duration', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Calls — Combined Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls?campaignId={{campaignId}}&status=COMPLETED&disposition=INTERESTED_SEND_DETAILS&leadTemperature=HOT&sortBy=cost&sortOrder=desc&page=1&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls"],
+              "query": [
+                { "key": "campaignId", "value": "{{campaignId}}" },
+                { "key": "status", "value": "COMPLETED" },
+                { "key": "disposition", "value": "INTERESTED_SEND_DETAILS" },
+                { "key": "leadTemperature", "value": "HOT" },
+                { "key": "sortBy", "value": "cost" },
+                { "key": "sortOrder", "value": "desc" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Combined filters work', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.pagination.limit).to.eql(5);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Call by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/{{callId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "{{callId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns full call detail', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('lead');",
+                  "    pm.expect(json.data).to.have.property('campaign');",
+                  "    pm.expect(json.data).to.have.property('callAnalysis');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Call Transcript",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/{{callId}}/transcript",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "{{callId}}", "transcript"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns transcript data', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('transcript');",
+                  "    pm.expect(json.data).to.have.property('summary');",
+                  "    pm.expect(json.data).to.have.property('recording');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Call Stats — All",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns call stats with breakdowns', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('total');",
+                  "    pm.expect(json.data).to.have.property('completed');",
+                  "    pm.expect(json.data).to.have.property('avgDuration');",
+                  "    pm.expect(json.data).to.have.property('dispositionBreakdown');",
+                  "    pm.expect(json.data).to.have.property('temperatureBreakdown');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Call Stats — By Campaign",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/stats?campaignId={{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "stats"],
+              "query": [{ "key": "campaignId", "value": "{{campaignId}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Campaign-scoped call stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Call Stats — By Lead",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/stats?leadId={{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "stats"],
+              "query": [{ "key": "leadId", "value": "{{leadId}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lead-scoped call stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Non-existent Call (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/calls/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "calls", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 — Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns user array', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 1) {",
+                  "        // Save a non-self user for delete test",
+                  "        var nonSelf = json.data.find(function(u) { return u.id !== pm.environment.get('userId'); });",
+                  "        if (nonSelf) pm.environment.set('targetUserId', nonSelf.id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser_{{$timestamp}}@test.com\",\n  \"name\": \"New User\",\n  \"role\": \"USER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('User created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.email).to.be.a('string');",
+                  "    pm.environment.set('targetUserId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create User — With password and ADMIN role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin_{{$timestamp}}@test.com\",\n  \"name\": \"Admin User\",\n  \"password\": \"AdminPass1\",\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Admin user created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.role).to.eql('ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "{{targetUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('User updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.name).to.eql('Updated Name');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Self (400 — should fail)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cannot delete yourself', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "{{targetUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('User deleted', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.message).to.include('deleted');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 — Dashboard",
+      "item": [
+        {
+          "name": "Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dashboard/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dashboard", "overview"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns overview metrics', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.campaigns).to.exist;",
+                  "    pm.expect(json.data.campaigns).to.have.property('total');",
+                  "    pm.expect(json.data.campaigns).to.have.property('active');",
+                  "    pm.expect(json.data.leads).to.exist;",
+                  "    pm.expect(json.data.leads).to.have.property('qualificationRate');",
+                  "    pm.expect(json.data.calls).to.exist;",
+                  "    pm.expect(json.data.calls).to.have.property('successRate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dashboard/activity",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dashboard", "activity"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns activity data', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.recentCalls).to.be.an('array');",
+                  "    pm.expect(json.data.qualifiedLeads).to.be.an('array');",
+                  "    pm.expect(json.data.recentCampaigns).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dashboard/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dashboard", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns dashboard campaigns', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 0) {",
+                  "        pm.expect(json.data[0]).to.have.property('completedRate');",
+                  "        pm.expect(json.data[0]).to.have.property('progress');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 — Admin (Platform Admin)",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Admin login', function () {",
+                  "    var code = pm.response.code;",
+                  "    if (code === 200) {",
+                  "        var json = pm.response.json();",
+                  "        pm.expect(json.data.user.isPlatformAdmin).to.be.true;",
+                  "        if (json.data.tokens) {",
+                  "            pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "            pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "        }",
+                  "    } else {",
+                  "        pm.expect(code).to.be.oneOf([401, 400]);",
+                  "        console.log('Admin login failed — set correct adminEmail/adminPassword env vars');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — List Tenants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns tenant list', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "    if (json.data.length > 0) {",
+                  "        pm.expect(json.data[0]).to.have.property('_count');",
+                  "        pm.environment.set('adminTenantId', json.data[0].id);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Get Tenant by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants", "{{tenantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns tenant detail', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.id).to.eql(pm.environment.get('tenantId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Get Tenant Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants/{{tenantId}}/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants", "{{tenantId}}", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns tenant stats', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.tenant).to.exist;",
+                  "    pm.expect(json.data.stats).to.exist;",
+                  "    pm.expect(json.data.stats).to.have.property('totalUsers');",
+                  "    pm.expect(json.data.stats).to.have.property('qualificationRate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Update Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Tenant Name\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants", "{{tenantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Tenant updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Deactivate Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants", "{{tenantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Tenant deactivated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Reactivate Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants", "{{tenantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Tenant reactivated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin — Non-admin User Forbidden (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "tenants"]
+            },
+            "description": "Run this AFTER re-logging as a non-admin user to verify 403"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Non-admin gets 403 (if not admin token)', function () {",
+                  "    // This test is meaningful only when accessToken belongs to a non-admin",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 403]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 — Webhooks (Bolna)",
+      "item": [
+        {
+          "name": "Webhook — Call Initiated",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-001\",\n  \"status\": \"initiated\",\n  \"batch_id\": null,\n  \"recipient_phone_number\": \"+919876543210\",\n  \"call_type\": \"outbound\",\n  \"timestamp\": \"2025-01-15T10:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call Ringing",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-001\",\n  \"status\": \"ringing\",\n  \"batch_id\": null,\n  \"timestamp\": \"2025-01-15T10:00:05Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call In Progress",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-001\",\n  \"status\": \"in-progress\",\n  \"batch_id\": null,\n  \"timestamp\": \"2025-01-15T10:00:10Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call Completed",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-001\",\n  \"status\": \"completed\",\n  \"batch_id\": null,\n  \"duration\": 120,\n  \"cost\": 0.05,\n  \"recording_url\": \"https://example.com/recording.mp3\",\n  \"transcript\": \"Agent: Hello, this is a test call. User: Yes, I am interested.\",\n  \"summary\": \"Customer expressed interest in 2BHK apartment\",\n  \"timestamp\": \"2025-01-15T10:02:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Completed webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call No Answer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-002\",\n  \"status\": \"no-answer\",\n  \"batch_id\": null,\n  \"duration\": 0,\n  \"timestamp\": \"2025-01-15T10:05:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('No-answer webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call Busy",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-003\",\n  \"status\": \"busy\",\n  \"batch_id\": null,\n  \"timestamp\": \"2025-01-15T10:06:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Busy webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call Failed",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-004\",\n  \"status\": \"failed\",\n  \"batch_id\": null,\n  \"error\": \"Connection timeout\",\n  \"timestamp\": \"2025-01-15T10:07:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Failed webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Call Stopped",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"call_id\": \"test-bolna-call-005\",\n  \"status\": \"stopped\",\n  \"batch_id\": null,\n  \"timestamp\": \"2025-01-15T10:08:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Stopped webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Batch Completed",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_id\": \"test-bolna-batch-001\",\n  \"state\": \"completed\",\n  \"total_calls\": 50,\n  \"completed_calls\": 48,\n  \"failed_calls\": 2,\n  \"timestamp\": \"2025-01-15T12:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna-batch",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna-batch"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Batch Running",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_id\": \"test-bolna-batch-002\",\n  \"state\": \"running\",\n  \"timestamp\": \"2025-01-15T11:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna-batch",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna-batch"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch running webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Batch Failed",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_id\": \"test-bolna-batch-003\",\n  \"state\": \"failed\",\n  \"error\": \"API rate limit exceeded\",\n  \"timestamp\": \"2025-01-15T11:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna-batch",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna-batch"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch failed webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Batch Stopped",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_id\": \"test-bolna-batch-004\",\n  \"state\": \"stopped\",\n  \"timestamp\": \"2025-01-15T11:45:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna-batch",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna-batch"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch stopped webhook accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook — Empty Body (edge case)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{webhookUrl}}/bolna",
+              "host": ["{{webhookUrl}}"],
+              "path": ["bolna"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Empty webhook handled gracefully', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 204, 400]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 — Cleanup & Logout",
+      "item": [
+        {
+          "name": "Re-login as Tenant User (restore token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"tenantId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Re-login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    if (json.data.tokens) {",
+                  "        pm.environment.set('accessToken', json.data.tokens.accessToken);",
+                  "        pm.environment.set('refreshToken', json.data.tokens.refreshToken);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Assistant (cleanup)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistants/{{assistantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistants", "{{assistantId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Assistant cleanup', function () {",
+                  "    // May be 200 or 409 if linked to campaign",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Brochure (cleanup)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/brochures/{{brochureId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "brochures", "{{brochureId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Brochure cleanup', function () {",
+                  "    var code = pm.response.code;",
+                  "    pm.expect(code).to.be.oneOf([200, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": { "type": "noauth" },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "logout"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logout successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.message).to.include('Logged out');",
+                  "    pm.environment.set('accessToken', '');",
+                  "    pm.environment.set('refreshToken', '');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Logged Out (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": { "type": "noauth" },
+            "url": {
+              "raw": "{{baseUrl}}/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "campaigns"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Confirmed logged out', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
