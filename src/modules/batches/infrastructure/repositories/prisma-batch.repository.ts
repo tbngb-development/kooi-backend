@@ -248,7 +248,7 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
-    // 1. Fetch all batches under this campaign to evaluate status
+    // 1. Fetch all batches for this campaign
     const batches = await prisma.leadBatch.findMany({
       where: { campaignId },
       select: { status: true },
@@ -256,29 +256,33 @@ export class PrismaBatchRepository implements BatchRepository {
 
     const statuses = batches.map((b) => b.status);
 
-    // Check if there are any active/live batches currently running or scheduled
+    // 2. Check if there are any active / pending batches
     const hasActiveBatches = statuses.some(
       (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
     );
 
+    // 3. Determine if campaign should be completed or failed
     let campaignStatusUpdate: {
       status?: "COMPLETED" | "FAILED";
       completedAt?: Date;
     } = {};
 
-    // 2. If there are batches and NONE of them are active, the campaign is finished
     if (statuses.length > 0 && !hasActiveBatches) {
-      // If absolutely 100% of the batches failed, the campaign is FAILED.
-      // If at least one completed or stopped, it is COMPLETED.
-      const allFailed = statuses.every((s) => s === "FAILED");
+      // Check if all batches are terminal (COMPLETED, STOPPED, or FAILED)
+      const allTerminal = statuses.every(
+        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
+      );
 
-      campaignStatusUpdate = {
-        status: allFailed ? "FAILED" : "COMPLETED",
-        completedAt: new Date(),
-      };
+      if (allTerminal) {
+        const allFailed = statuses.every((s) => s === "FAILED");
+        campaignStatusUpdate = {
+          status: allFailed ? "FAILED" : "COMPLETED",
+          completedAt: new Date(),
+        };
+      }
     }
 
-    // 3. Update campaign counters and status in a single atomic query
+    // 4. Update campaign aggregates and status in a single query
     await prisma.campaign.update({
       where: { id: campaignId },
       data: {

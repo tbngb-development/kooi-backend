@@ -40,29 +40,44 @@ export class ProcessBatchWebhookUseCase {
       return;
     }
 
+    // 1. Update this specific batch status
     await this.webhookRepo.updateBatchStatus(
       leadBatch.id,
       newStatus,
       newStatus === "COMPLETED" ? new Date() : undefined,
     );
 
+    // 2. Fetch all batch statuses in this campaign
     const statuses = await this.webhookRepo.getAllBatchStatuses(
       leadBatch.campaignId,
     );
-    const terminalStatuses = new Set<BatchStatus>([
-      "COMPLETED",
-      "STOPPED",
-      "FAILED",
-    ]);
-    const allTerminal = statuses.every((s) => terminalStatuses.has(s));
 
-    if (allTerminal) {
-      const allFailed = statuses.every((s) => s === "FAILED");
-      await this.webhookRepo.updateCampaignStatus(
-        leadBatch.campaignId,
-        allFailed ? "FAILED" : "COMPLETED",
-        new Date(),
-      );
+    // 3. Check if there are any batches actively dialing or queued
+    const hasActiveBatches = statuses.some(
+      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
+    );
+
+    // 4. If no active batches remain, reconcile campaign status
+    if (!hasActiveBatches) {
+      // Ignore un-dialed "CREATED" batches; focus on batches that actually executed
+      const executedBatches = statuses.filter((s) => s !== "CREATED");
+
+      if (executedBatches.length > 0) {
+        const allFailed = executedBatches.every((s) => s === "FAILED");
+        const finalCampaignStatus = allFailed ? "FAILED" : "COMPLETED";
+
+        await this.webhookRepo.updateCampaignStatus(
+          leadBatch.campaignId,
+          finalCampaignStatus,
+          new Date(),
+        );
+
+        this.logger?.info("Campaign marked as finished from batch webhook", {
+          action: "webhook.batch.campaign_completed",
+          campaignId: leadBatch.campaignId,
+          finalCampaignStatus,
+        });
+      }
     }
 
     this.logger?.info("Batch webhook processed", {
