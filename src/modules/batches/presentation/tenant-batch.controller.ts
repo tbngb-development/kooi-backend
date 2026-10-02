@@ -1,3 +1,4 @@
+// modules/batches/presentation/tenant-batch.controller.ts
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import type { RetryConfig } from "../../../shared/types/bolna.types";
@@ -13,14 +14,12 @@ import type { StopBatchUseCase } from "../application/use-cases/stop-batch.use-c
 import type { ResumeBatchUseCase } from "../application/use-cases/resume-batch.use-case";
 import type { DeleteBatchUseCase } from "../application/use-cases/delete-batch.use-case";
 import type { GetBatchStatsUseCase } from "../application/use-cases/get-batch-stats.use-case";
-import type { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batch-upload.use-case";
 
 export class TenantBatchController {
   constructor(
     private readonly listBatchesUseCase: ListBatchesUseCase,
     private readonly getBatchUseCase: GetBatchUseCase,
-    // private readonly createBatchUseCase: CreateBatchUseCase,
-    private readonly enqueueBatchUploadUseCase: EnqueueBatchUploadUseCase,
+    private readonly createBatchUseCase: CreateBatchUseCase,
     private readonly runBatchUseCase: RunBatchUseCase,
     private readonly scheduleBatchUseCase: ScheduleBatchUseCase,
     private readonly stopBatchUseCase: StopBatchUseCase,
@@ -125,8 +124,7 @@ export class TenantBatchController {
         return;
       }
 
-      // ← Now calls the async enqueue use case instead of sync create
-      const data = await this.enqueueBatchUploadUseCase.execute({
+      const data = await this.createBatchUseCase.execute({
         tenantId,
         campaignId,
         fileBuffer: req.file.buffer,
@@ -138,7 +136,7 @@ export class TenantBatchController {
         termsVersion: termsVersion.trim(),
       });
 
-      sendSuccess(res, data, HttpStatus.ACCEPTED); 
+      sendSuccess(res, data, HttpStatus.CREATED);
     } catch (err) {
       next(err);
     }
