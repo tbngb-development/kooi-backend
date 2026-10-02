@@ -546,7 +546,9 @@ export class ProcessCallWebhookUseCase {
           entry.localDispositionId &&
           entry.localDispositionSlug &&
           entry.objective !== null &&
-          entry.objective.trim() !== ""
+          entry.objective.trim() !== "" &&
+          entry.confidence &&
+          entry.confidence > 0.5
         ) {
           objectiveEntries.push({
             dispositionId: entry.localDispositionId,
@@ -631,7 +633,9 @@ export class ProcessCallWebhookUseCase {
           entry.localDispositionId &&
           entry.localDispositionSlug &&
           entry.subjective !== null &&
-          entry.subjective.trim() !== ""
+          entry.subjective.trim() !== "" &&
+          entry.confidence &&
+          entry.confidence > 0.5
         ) {
           if (seenDispositions.has(entry.localDispositionId)) continue;
           seenDispositions.add(entry.localDispositionId);
