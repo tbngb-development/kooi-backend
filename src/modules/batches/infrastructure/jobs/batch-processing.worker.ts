@@ -59,6 +59,24 @@ export class BatchProcessingWorker {
       retryConfig,
     } = job.data;
 
+    // ── Pre-check: Ensure batch still exists in database ──────
+    const existingBatch = await this.batchRepo.findById(
+      tenantId,
+      campaignId,
+      batchId,
+    );
+    if (!existingBatch) {
+      this.log?.warn(
+        "Batch was deleted before processing started, aborting job",
+        {
+          action: "batch.worker.aborted_missing",
+          batchId,
+          tenantId,
+        },
+      );
+      return; // Clean exit without retries
+    }
+
     this.log?.info("Batch processing started", {
       action: "batch.worker.start",
       batchId,
@@ -72,7 +90,6 @@ export class BatchProcessingWorker {
       // ── STAGE 1: PARSE & VALIDATE (0-30%) ──────────────────────
       await this.batchRepo.updateProgress(batchId, "PARSING", 5);
 
-      // 1a. Download raw CSV from Cloudinary
       const fileResponse = await axios.get(rawFileUrl, {
         responseType: "arraybuffer",
         timeout: 30_000,
@@ -81,14 +98,12 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 10);
 
-      // 1b. Parse CSV into rows
       const { rows } = parseLeadBuffer(fileBuffer, fileName);
       if (rows.length === 0) {
         await this.failBatch(batchId, "Uploaded file contains no data rows.");
         return;
       }
 
-      // 1c. Filter valid Indian phone numbers + normalize
       const validRows = rows
         .filter(
           (r) => r.phone && r.phone.trim() !== "" && isIndianPhone(r.phone),
@@ -103,7 +118,6 @@ export class BatchProcessingWorker {
         return;
       }
 
-      // 1d. In-file deduplication
       const seenInFile = new Set<string>();
       const uniqueRows: LeadRow[] = [];
       for (const row of validRows) {
@@ -115,7 +129,6 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 20);
 
-      // 1e. Cross-batch deduplication
       let newLeads = uniqueRows;
       if (!env.skipCrossBatchDedup) {
         const phones = uniqueRows.map((r) => r.phone);
@@ -141,7 +154,6 @@ export class BatchProcessingWorker {
         return;
       }
 
-      // 1f. Enforce plan maxLeadsPerBatch limit
       const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
       if (
         activePlan &&
@@ -155,15 +167,6 @@ export class BatchProcessingWorker {
         );
         return;
       }
-
-      this.log?.info("Parsing complete", {
-        action: "batch.worker.parsed",
-        batchId,
-        tenantId,
-        totalRows: rows.length,
-        validIndian: validRows.length,
-        uniqueAfterDedup: newLeads.length,
-      });
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 30);
 
@@ -234,13 +237,6 @@ export class BatchProcessingWorker {
         const dbLeads = await this.batchRepo.findPendingLeads(batchId);
         const dbPhones = new Set(dbLeads.map((l) => l.phone));
         leadsForBolna = newLeads.filter((r) => dbPhones.has(r.phone));
-
-        this.log?.info("Bolna CSV reconciled with DB leads", {
-          action: "batch.worker.bolna_reconciled",
-          batchId,
-          originalCount: newLeads.length,
-          reconciledCount: leadsForBolna.length,
-        });
       }
 
       const campaignVariables =
@@ -290,6 +286,19 @@ export class BatchProcessingWorker {
         finalStatus = runImmediately ? "RUNNING" : "SCHEDULED";
       }
 
+      // Check existence before final update to avoid P2025 if deleted during Bolna call
+      const finalCheck = await this.batchRepo.findById(
+        tenantId,
+        campaignId,
+        batchId,
+      );
+      if (!finalCheck) {
+        this.log?.warn("Batch was deleted before finalize update, exiting", {
+          batchId,
+        });
+        return;
+      }
+
       await this.batchRepo.update(batchId, {
         bolnaBatchId,
         status: finalStatus,
@@ -328,30 +337,29 @@ export class BatchProcessingWorker {
         error: technicalMessage,
       });
 
-      // Only mark as permanently failed on the last attempt
       if (job.attemptsMade + 1 >= (job.opts.attempts ?? 3)) {
         await this.failBatch(batchId, technicalMessage);
       }
 
-      throw err; // Re-throw so Bull can retry
+      throw err;
     }
   }
 
-  /**
-   * Marks a batch as FAILED with a user-friendly error message.
-   * The technical message is already logged separately.
-   */
   private async failBatch(
     batchId: string,
     technicalError: string,
   ): Promise<void> {
-    const userMessage = toUserFriendlyError(technicalError);
-    await this.batchRepo.updateProcessingError(batchId, userMessage);
+    try {
+      const userMessage = toUserFriendlyError(technicalError);
+      await this.batchRepo.updateProcessingError(batchId, userMessage);
 
-    this.log?.warn("Batch marked as failed", {
-      action: "batch.worker.failed",
-      batchId,
-      userMessage,
-    });
+      this.log?.warn("Batch marked as failed", {
+        action: "batch.worker.failed",
+        batchId,
+        userMessage,
+      });
+    } catch {
+      // Non-fatal: if row is gone, swallow silently
+    }
   }
 }

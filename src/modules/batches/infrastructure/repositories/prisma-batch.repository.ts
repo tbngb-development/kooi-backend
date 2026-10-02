@@ -104,7 +104,7 @@ export class PrismaBatchRepository implements BatchRepository {
       bolnaBatchId?: string;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
-      scheduledAt?: Date;
+      scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData> {
@@ -273,12 +273,16 @@ export class PrismaBatchRepository implements BatchRepository {
     return new Set(existing.map((l) => l.phone));
   }
 
+  /**
+   * Safe non-throwing progress update for background workers.
+   * Uses updateMany so it never throws P2025 if the batch was deleted mid-flight.
+   */
   async updateProgress(
     batchId: string,
     stage: string,
     progress: number,
   ): Promise<void> {
-    await prisma.leadBatch.update({
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: {
         processingStage: stage,
@@ -287,27 +291,36 @@ export class PrismaBatchRepository implements BatchRepository {
     });
   }
 
+  /**
+   * Safe non-throwing error update for background workers.
+   */
   async updateProcessingError(batchId: string, error: string): Promise<void> {
-    await prisma.leadBatch.update({
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: {
         status: "FAILED",
         processingStage: null,
         processingProgress: 0,
-        processingError: error.substring(0, 1000), // Cap at 1000 chars
+        processingError: error.substring(0, 1000),
       },
     });
   }
 
+  /**
+   * Safe non-throwing raw file URL update.
+   */
   async updateRawFileUrl(batchId: string, url: string): Promise<void> {
-    await prisma.leadBatch.update({
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: { rawFileUrl: url },
     });
   }
 
+  /**
+   * Safe non-throwing totalLeads update.
+   */
   async updateTotalLeads(batchId: string, count: number): Promise<void> {
-    await prisma.leadBatch.update({
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: { totalLeads: count },
     });
