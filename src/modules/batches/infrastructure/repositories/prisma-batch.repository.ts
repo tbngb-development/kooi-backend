@@ -248,6 +248,37 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
+    // 1. Fetch all batches under this campaign to evaluate status
+    const batches = await prisma.leadBatch.findMany({
+      where: { campaignId },
+      select: { status: true },
+    });
+
+    const statuses = batches.map((b) => b.status);
+
+    // Check if there are any active/live batches currently running or scheduled
+    const hasActiveBatches = statuses.some(
+      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
+    );
+
+    let campaignStatusUpdate: {
+      status?: "COMPLETED" | "FAILED";
+      completedAt?: Date;
+    } = {};
+
+    // 2. If there are batches and NONE of them are active, the campaign is finished
+    if (statuses.length > 0 && !hasActiveBatches) {
+      // If absolutely 100% of the batches failed, the campaign is FAILED.
+      // If at least one completed or stopped, it is COMPLETED.
+      const allFailed = statuses.every((s) => s === "FAILED");
+
+      campaignStatusUpdate = {
+        status: allFailed ? "FAILED" : "COMPLETED",
+        completedAt: new Date(),
+      };
+    }
+
+    // 3. Update campaign counters and status in a single atomic query
     await prisma.campaign.update({
       where: { id: campaignId },
       data: {
@@ -255,6 +286,7 @@ export class PrismaBatchRepository implements BatchRepository {
         calledLeads: agg._sum.calledLeads ?? 0,
         completedLeads: agg._sum.completedLeads ?? 0,
         failedLeads: agg._sum.failedLeads ?? 0,
+        ...campaignStatusUpdate,
       },
     });
   }

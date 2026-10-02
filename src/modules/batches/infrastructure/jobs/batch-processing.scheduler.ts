@@ -1,6 +1,7 @@
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { BatchProcessingWorker } from "./batch-processing.worker";
-import prisma from "../../../../shared/config/database/prisma"; // ◄ Added
+import prisma from "../../../../shared/config/database/prisma";
+import { PrismaBatchRepository } from "../repositories/prisma-batch.repository"; // ◄ Added
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
 
 export class BatchProcessingScheduler {
@@ -20,6 +21,14 @@ export class BatchProcessingScheduler {
     this.cleanupStuckProcessingBatches().catch((err) => {
       this.log?.error(
         "Failed to clean up stuck processing batches on boot",
+        err,
+      );
+    });
+
+    // ── Run Stuck Campaigns Startup Cleanup ───────────────────
+    this.cleanupStuckRunningCampaigns().catch((err) => {
+      this.log?.error(
+        "Failed to clean up stuck running campaigns on boot",
         err,
       );
     });
@@ -62,14 +71,8 @@ export class BatchProcessingScheduler {
     });
   }
 
-  /**
-   * Scans the database on server boot for any batches left stuck
-   * in the 'PROCESSING' status (which means the server crashed mid-upload)
-   * and cleanly transitions them to 'FAILED'.
-   */
   private async cleanupStuckProcessingBatches(): Promise<void> {
     try {
-      // Find all batches left in PROCESSING
       const stuckBatches = await prisma.leadBatch.findMany({
         where: { status: "PROCESSING" },
         select: { id: true, fileName: true, tenantId: true },
@@ -85,7 +88,6 @@ export class BatchProcessingScheduler {
         },
       );
 
-      // Safely transition them all to FAILED with a friendly message
       const result = await prisma.leadBatch.updateMany({
         where: { status: "PROCESSING" },
         data: {
@@ -103,6 +105,42 @@ export class BatchProcessingScheduler {
       });
     } catch (err) {
       this.log?.error("Database error during stuck batch startup cleanup", err);
+    }
+  }
+
+  /**
+   * Scans for running campaigns on boot and evaluates their status.
+   * If all batches are terminal, it immediately closes the campaign.
+   */
+  private async cleanupStuckRunningCampaigns(): Promise<void> {
+    try {
+      const runningCampaigns = await prisma.campaign.findMany({
+        where: { status: "RUNNING" },
+        select: { id: true, name: true },
+      });
+
+      if (runningCampaigns.length === 0) return;
+
+      this.log?.info(
+        `Checking ${runningCampaigns.length} running campaign(s) for terminal states`,
+        {
+          action: "campaign.cleanup.start",
+          runningCount: runningCampaigns.length,
+        },
+      );
+
+      const batchRepo = new PrismaBatchRepository();
+
+      for (const campaign of runningCampaigns) {
+        // Calling this triggers our updated recalculateCampaignStats logic
+        // which transitions campaign status cleanly to COMPLETED/FAILED
+        await batchRepo.recalculateCampaignStats(campaign.id);
+      }
+    } catch (err) {
+      this.log?.error(
+        "Database error during running campaign startup cleanup",
+        err,
+      );
     }
   }
 
