@@ -188,7 +188,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     status: BatchStatus,
     completedAt?: Date,
   ): Promise<void> {
-    await prisma.leadBatch.update({
+    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: {
         status,
@@ -202,7 +203,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     status: CampaignStatus,
     timestamp?: Date,
   ): Promise<void> {
-    await prisma.campaign.update({
+    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+    await prisma.campaign.updateMany({
       where: { id: campaignId },
       data: {
         status,
@@ -221,7 +223,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     const isSuccess = status === "COMPLETED";
     const field = isSuccess ? "completedLeads" : "failedLeads";
 
-    await prisma.campaign.update({
+    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+    await prisma.campaign.updateMany({
       where: { id: campaignId },
       data: {
         calledLeads: { increment: 1 },
@@ -230,7 +233,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
 
     if (batchId) {
-      await prisma.leadBatch.update({
+      // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+      await prisma.leadBatch.updateMany({
         where: { id: batchId },
         data: {
           calledLeads: { increment: 1 },
@@ -363,8 +367,6 @@ export class PrismaWebhookRepository implements WebhookRepository {
       dispositions: Array.from(dispositionMap.values()),
     };
   }
-
-  // ── [NEW] Dynamic Extraction Response ───────────────────────────────────
 
   async getExtractionConfigForCall(callId: string): Promise<{
     platformAgentId: string;
