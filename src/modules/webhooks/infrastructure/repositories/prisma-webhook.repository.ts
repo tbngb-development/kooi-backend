@@ -220,26 +220,21 @@ export class PrismaWebhookRepository implements WebhookRepository {
     batchId: string | null,
     status: "COMPLETED" | "NO_ANSWER" | "BUSY" | "FAILED",
   ): Promise<void> {
-    const isSuccess = status === "COMPLETED";
-    const field = isSuccess ? "completedLeads" : "failedLeads";
+    const updateData = {
+      calledLeads: { increment: 1 },
+      ...(status === "COMPLETED" && { completedLeads: { increment: 1 } }),
+      ...(status === "FAILED" && { failedLeads: { increment: 1 } }),
+    };
 
-    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
     await prisma.campaign.updateMany({
       where: { id: campaignId },
-      data: {
-        calledLeads: { increment: 1 },
-        [field]: { increment: 1 },
-      },
+      data: updateData,
     });
 
     if (batchId) {
-      // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
       await prisma.leadBatch.updateMany({
         where: { id: batchId },
-        data: {
-          calledLeads: { increment: 1 },
-          [field]: { increment: 1 },
-        },
+        data: updateData,
       });
     }
   }
