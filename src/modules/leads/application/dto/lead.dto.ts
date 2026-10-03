@@ -9,5 +9,6 @@ export interface ListLeadsInput {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  includeDeleted?: boolean;
 }
 

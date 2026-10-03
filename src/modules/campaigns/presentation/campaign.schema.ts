@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/campaign.schema.ts
+
 import { z } from "zod";
 
 export const createCampaignSchema = z.object({
@@ -20,7 +22,7 @@ export const createCampaignSchema = z.object({
 
 export const listCampaignsQuerySchema = z.object({
   search: z.string().trim().optional(),
-  status: z.string().optional(), // comma-separated: "RUNNING,COMPLETED"
+  status: z.string().optional(),
   dateFrom: z
     .string()
     .datetime({ message: "Invalid dateFrom format" })
@@ -30,6 +32,10 @@ export const listCampaignsQuerySchema = z.object({
   sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  includeDeleted: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .default(false),
 });
 
 export const extractVariablesSchema = z.object({

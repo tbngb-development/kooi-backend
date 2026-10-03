@@ -1,3 +1,5 @@
+// modules/campaigns/application/interfaces/campaign-repository.interface.ts
+
 import type { CampaignStatus } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
@@ -50,6 +52,8 @@ export interface CampaignListItem {
   failedLeads: number;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
   assistant: { id: string; name: string } | null;
   batches: Array<{
     id: string;
@@ -69,6 +73,15 @@ export interface AssistantWithAgentData {
   };
 }
 
+export interface CampaignCascadeResult {
+  archivedCalls?: number;
+  archivedLeads?: number;
+  archivedBatches?: number;
+  restoredCalls?: number;
+  restoredLeads?: number;
+  restoredBatches?: number;
+}
+
 export interface CampaignRepository {
   list(
     tenantId: string,
@@ -78,11 +91,13 @@ export interface CampaignRepository {
   findById(
     tenantId: string,
     campaignId: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<CampaignEntityData | null>;
 
   findByIdWithRelations(
     tenantId: string,
     campaignId: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<
     | (CampaignEntityData & {
         assistant: {
@@ -132,4 +147,22 @@ export interface CampaignRepository {
     tenantId: string,
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
+
+  softDelete(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    archivedCalls: number;
+    archivedLeads: number;
+    archivedBatches: number;
+  }>;
+
+  restore(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    restoredCalls: number;
+    restoredLeads: number;
+    restoredBatches: number;
+  }>;
 }

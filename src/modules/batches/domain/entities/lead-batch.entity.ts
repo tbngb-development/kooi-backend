@@ -1,3 +1,5 @@
+// modules/batches/domain/entities/lead-batch.entity.ts
+
 import type { BatchStatus } from "@prisma/client";
 import { InvalidBatchStatusTransitionError } from "../errors/batch.errors";
 import {
@@ -28,6 +30,8 @@ export interface LeadBatchEntityData {
   termsVersion: string | null;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 export class LeadBatchEntity {
@@ -50,6 +54,20 @@ export class LeadBatchEntity {
   }
   get isTerminal(): boolean {
     return isBatchTerminal(this.data.status);
+  }
+  get isDeleted(): boolean {
+    return this.data.isDeleted;
+  }
+  get deletedAt(): Date | null {
+    return this.data.deletedAt;
+  }
+
+  /**
+   * Only non-active, non-processing batches can be archived.
+   * RUNNING, SCHEDULED, and PROCESSING batches must be stopped first.
+   */
+  get isArchivable(): boolean {
+    return !this.isActive && this.data.status !== "PROCESSING";
   }
 
   canRun(): boolean {

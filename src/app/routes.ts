@@ -15,12 +15,10 @@ import { buildAdminCallRoutes } from "../modules/calls/presentation/admin-call.r
 import { buildTenantDashboardRoutes } from "../modules/dashboard/presentation/tenant-dashboard.routes";
 import { buildAdminDashboardRoutes } from "../modules/dashboard/presentation/admin-dashboard.routes";
 import { buildTenantUserRoutes } from "../modules/users/presentation/tenant-user.routes";
-import { buildWebhookRoutes } from "../modules/webhooks/presentation/webhook.routes";
 import { buildAdminBatchRoutes } from "../modules/batches/presentation/admin-batch.routes";
 import { buildAdminPlanRoutes } from "../modules/plans/presentation/admin-plan.routes";
 import { buildTenantPlanRoutes } from "../modules/plans/presentation/tenant-plan.routes";
 import { buildAdminBolnaApiKeyRoutes } from "../modules/bolna-api-keys/presentation/admin-bolna-api-key.routes";
-import { buildRazorpayWebhookRoutes } from "../modules/payments/presentation/razorpay-webhook.routes";
 import { buildTenantPaymentRoutes } from "../modules/payments/presentation/tenant-payment.routes";
 import { buildTenantWalletRoutes } from "../modules/wallet/presentation/tenant-wallet.routes";
 import {
@@ -45,7 +43,6 @@ export function buildRoutes(c: AppContainer): Router {
       timestamp: new Date().toISOString(),
     });
   });
-
 
   // ── Tenant API v1 (Scoped workspace actions) ─────────────────────────────
   router.use(
@@ -73,11 +70,19 @@ export function buildRoutes(c: AppContainer): Router {
   );
   router.use(
     "/v1/leads",
-    buildTenantLeadRoutes(c.leads.tenantController, c.authenticate),
+    buildTenantLeadRoutes(
+      c.leads.tenantController,
+      c.authenticate,
+      c.authorize,
+    ),
   );
   router.use(
     "/v1/calls",
-    buildTenantCallRoutes(c.calls.tenantController, c.authenticate),
+    buildTenantCallRoutes(
+      c.calls.tenantController,
+      c.authenticate,
+      c.authorize,
+    ),
   );
   router.use(
     "/v1/dashboard",

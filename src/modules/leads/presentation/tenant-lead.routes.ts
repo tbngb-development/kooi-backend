@@ -1,12 +1,14 @@
 import { Router } from "express";
 import type { TenantLeadController } from "./tenant-lead.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
+import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
 import { validateQuery } from "../../../shared/middleware/validate";
 import { listLeadsQuerySchema, getLeadsStatsQuerySchema } from "./lead.schema";
 
 export function buildTenantLeadRoutes(
   controller: TenantLeadController,
   authenticate: AuthenticateMiddleware,
+  authorize: AuthorizeMiddleware,
 ): Router {
   const router = Router();
 
@@ -23,5 +25,10 @@ export function buildTenantLeadRoutes(
 
   router.get("/:id", controller.get);
 
+  router.patch(
+    "/:id/archive",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    controller.archive,
+  );
   return router;
 }

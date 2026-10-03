@@ -1,3 +1,5 @@
+// modules/calls/container.ts
+
 import { PrismaCallRepository } from "./infrastructure/repositories/prisma-call.repository";
 import { ListCallsUseCase } from "./application/use-cases/list-calls.use-case";
 import { GetCallUseCase } from "./application/use-cases/get-call.use-case";
@@ -6,6 +8,8 @@ import { GetCallStatsUseCase } from "./application/use-cases/get-call-stats.use-
 import { TenantCallController } from "./presentation/tenant-call.controller";
 import { AdminCallController } from "./presentation/admin-call.controller";
 import { GetAvailableFiltersUseCase } from "./application/use-cases/get-available-filters.use-case";
+import { ArchiveCallUseCase } from "./application/use-cases/archive-call.use-case";
+import { RestoreCallUseCase } from "./application/use-cases/restore-call.use-case";
 
 export interface CallModule {
   adminController: AdminCallController;
@@ -18,8 +22,10 @@ export function buildCallModule(): CallModule {
   const getCall = new GetCallUseCase(repo);
   const getTranscript = new GetCallTranscriptUseCase(repo);
   const getStats = new GetCallStatsUseCase(repo);
-
   const getAvailableFilters = new GetAvailableFiltersUseCase(repo);
+
+  const archiveCall = new ArchiveCallUseCase(repo);
+  const restoreCall = new RestoreCallUseCase(repo);
 
   return {
     tenantController: new TenantCallController(
@@ -28,6 +34,7 @@ export function buildCallModule(): CallModule {
       getTranscript,
       getStats,
       getAvailableFilters,
+      archiveCall,
     ),
     adminController: new AdminCallController(
       listCalls,
@@ -35,6 +42,8 @@ export function buildCallModule(): CallModule {
       getTranscript,
       getStats,
       getAvailableFilters,
+      archiveCall,
+      restoreCall,
     ),
   };
 }

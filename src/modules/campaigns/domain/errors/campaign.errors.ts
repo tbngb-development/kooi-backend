@@ -1,3 +1,5 @@
+// modules/campaigns/domain/errors/campaign.errors.ts
+
 import { NotFoundError } from "../../../../shared/errors/not-found.error";
 import { AppError } from "../../../../shared/errors/app.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
@@ -14,7 +16,6 @@ export class CampaignAssistantNotFoundError extends NotFoundError {
     super("Assistant");
   }
 }
-
 
 export class CampaignIdRequiredError extends AppError {
   constructor() {
@@ -72,6 +73,36 @@ export class RetryConfigNotAllowedError extends AppError {
       HttpStatus.UNPROCESSABLE_ENTITY,
       "Retry automation is not available on your current plan",
       "RETRY_CONFIG_NOT_ALLOWED",
+    );
+  }
+}
+
+export class CampaignNotArchivableError extends AppError {
+  constructor(status: CampaignStatus) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Cannot archive campaign in active or non-terminal status: '${status}'. Stop or complete the campaign first.`,
+      "CAMPAIGN_NOT_ARCHIVABLE",
+    );
+  }
+}
+
+export class CampaignAlreadyDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Campaign is already archived",
+      "CAMPAIGN_ALREADY_ARCHIVED",
+    );
+  }
+}
+
+export class CampaignNotDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Campaign is not currently archived",
+      "CAMPAIGN_NOT_ARCHIVED",
     );
   }
 }

@@ -135,12 +135,18 @@ model Campaign {
   updatedAt          DateTime       @updatedAt
   startedAt          DateTime?
   completedAt        DateTime?
+  
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
 
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
   assistant Assistant   @relation(fields: [assistantId], references: [id])
   leads     Lead[]
   calls     Call[]
   batches   LeadBatch[]
+
+  @@index([tenantId, isDeleted])   
 }
 
 enum CampaignStatus {
@@ -180,6 +186,8 @@ model LeadBatch {
   processingError    String?
   rawFileUrl         String?   // Cloudinary URL for worker to download
   
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
 
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -191,8 +199,8 @@ model LeadBatch {
   leads    Lead[]
   calls    Call[]
 
-  @@index([tenantId])
-  @@index([campaignId])
+  @@index([tenantId, isDeleted])
+  @@index([campaignId, isDeleted])
   @@index([bolnaBatchId])
 }
 
@@ -226,14 +234,17 @@ model Lead {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
   tenant   Tenant     @relation(fields: [tenantId], references: [id])
   campaign Campaign   @relation(fields: [campaignId], references: [id])
   batch    LeadBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
   calls    Call[]
 
   @@unique([phone, campaignId])
-  @@index([tenantId])
-  @@index([campaignId])
+   @@index([tenantId, isDeleted])
+  @@index([campaignId, isDeleted])
   @@index([batchId])
 }
 
@@ -284,6 +295,9 @@ model Call {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
   callAnalysis CallAnalysis?
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
@@ -294,8 +308,9 @@ model Call {
   batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
 
-  @@index([tenantId])
-  @@index([campaignId])
+
+  @@index([tenantId, isDeleted])
+  @@index([campaignId, isDeleted])
   @@index([leadId])
   @@index([batchId])
 }

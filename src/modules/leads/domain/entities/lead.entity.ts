@@ -14,6 +14,8 @@ export interface LeadEntityData {
   metadata: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 export class LeadEntity {
@@ -39,6 +41,13 @@ export class LeadEntity {
   }
   get campaignId(): string {
     return this.data.campaignId;
+  }
+
+  get isDeleted(): boolean {
+    return this.data.isDeleted;
+  }
+  get deletedAt(): Date | null {
+    return this.data.deletedAt;
   }
 
   toPrimitives(): LeadEntityData {
