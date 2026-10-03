@@ -63,9 +63,15 @@ export interface BatchRepository {
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
 
-  reassignLeadsToBatch(oldBatchId: string, newBatchId: string): Promise<number>;
-
   decrementTotalLeads(batchId: string, count: number): Promise<void>;
+
+  reassignCampaignLeadsToBatch(
+    campaignId: string,
+    batchId: string,
+    phones: string[],
+  ): Promise<number>;
+
+  reassignLeadsToBatch(oldBatchId: string, newBatchId: string): Promise<number>;
 
   resetActiveLeadsToPending(batchId: string): Promise<number>;
 

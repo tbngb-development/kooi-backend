@@ -193,6 +193,30 @@ export class PrismaBatchRepository implements BatchRepository {
     }));
   }
 
+  async reassignCampaignLeadsToBatch(
+    campaignId: string,
+    batchId: string,
+    phones: string[],
+  ): Promise<number> {
+    if (phones.length === 0) return 0;
+
+    const result = await prisma.lead.updateMany({
+      where: {
+        campaignId,
+        phone: { in: phones },
+      },
+      data: {
+        batchId,
+        status: LeadStatus.PENDING,
+        stoppedReason: null,
+        isDeleted: false,
+        deletedAt: null,
+      },
+    });
+
+    return result.count;
+  }
+
   async reassignLeadsToBatch(
     oldBatchId: string,
     newBatchId: string,
