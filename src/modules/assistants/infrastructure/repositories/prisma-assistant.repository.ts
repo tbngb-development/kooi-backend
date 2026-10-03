@@ -147,12 +147,6 @@ export class PrismaAssistantRepository implements AssistantRepository {
     });
   }
 
-  async getCampaignReferenceCount(id: string): Promise<number> {
-    return prisma.campaign.count({
-      where: { assistantId: id, isDeleted: false },
-    });
-  }
-
   private toEntityData(a: Assistant): AssistantEntityData {
     return {
       id: a.id,

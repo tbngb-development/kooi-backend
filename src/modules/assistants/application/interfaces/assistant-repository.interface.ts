@@ -64,5 +64,4 @@ export interface AssistantRepository {
   ): Promise<AssistantEntityData>;
   softDelete(tenantId: string, id: string): Promise<void>;
   restore(tenantId: string, id: string): Promise<void>;
-  getCampaignReferenceCount(id: string): Promise<number>;
 }
