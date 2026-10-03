@@ -1,3 +1,4 @@
+import { type Assistant } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
@@ -10,21 +11,24 @@ import type { AssistantEntityData } from "../../domain/entities/assistant.entity
 export class PrismaAssistantRepository implements AssistantRepository {
   async list(tenantId: string): Promise<AssistantEntityData[]> {
     const assistants = await prisma.assistant.findMany({
-      where: { tenantId },
+      where: { tenantId, isDeleted: false },
       orderBy: { createdAt: "desc" },
     });
-
     return assistants.map((a) => this.toEntityData(a));
   }
 
   async findById(
     tenantId: string,
     id: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<AssistantEntityData | null> {
     const assistant = await prisma.assistant.findFirst({
-      where: { id, tenantId },
+      where: {
+        id,
+        tenantId,
+        ...(options?.includeDeleted ? {} : { isDeleted: false }),
+      },
     });
-
     if (!assistant) return null;
     return this.toEntityData(assistant);
   }
@@ -34,14 +38,8 @@ export class PrismaAssistantRepository implements AssistantRepository {
     id: string,
   ): Promise<AssistantWithPlatformAgent | null> {
     const assistant = await prisma.assistant.findFirst({
-      where: { id, tenantId },
-      include: {
-        platformAgent: {
-          include: {
-            industryPack: true,
-          },
-        },
-      },
+      where: { id, tenantId, isDeleted: false },
+      include: { platformAgent: { include: { industryPack: true } } },
     });
 
     if (!assistant) return null;
@@ -84,6 +82,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
     const assistant = await prisma.assistant.findFirst({
       where: {
         platformAgentId,
+        isDeleted: false,
         ...(tenantId && { tenantId }),
       },
     });
@@ -134,27 +133,27 @@ export class PrismaAssistantRepository implements AssistantRepository {
     return this.toEntityData(assistant);
   }
 
-  async delete(tenantId: string, id: string): Promise<void> {
-    await prisma.assistant.delete({
+  async softDelete(tenantId: string, id: string): Promise<void> {
+    await prisma.assistant.update({
       where: { id, tenantId },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+  }
+
+  async restore(tenantId: string, id: string): Promise<void> {
+    await prisma.assistant.update({
+      where: { id, tenantId },
+      data: { isDeleted: false, deletedAt: null },
     });
   }
 
   async getCampaignReferenceCount(id: string): Promise<number> {
     return prisma.campaign.count({
-      where: { assistantId: id },
+      where: { assistantId: id, isDeleted: false },
     });
   }
 
-  private toEntityData(a: {
-    id: string;
-    name: string;
-    tenantId: string;
-    platformAgentId: string;
-    config: unknown;
-    createdAt: Date;
-    updatedAt: Date;
-  }): AssistantEntityData {
+  private toEntityData(a: Assistant): AssistantEntityData {
     return {
       id: a.id,
       name: a.name,
@@ -163,6 +162,8 @@ export class PrismaAssistantRepository implements AssistantRepository {
       config: a.config as Record<string, unknown>,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
+      isDeleted: a.isDeleted,
+      deletedAt: a.deletedAt,
     };
   }
 }

@@ -22,8 +22,6 @@ import type {
   PaginatedCampaignsResult,
 } from "../../application/dto/campaign.dto";
 
-
-
 export class PrismaCampaignRepository implements CampaignRepository {
   async list(
     tenantId: string,
@@ -605,7 +603,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     assistantId: string,
   ): Promise<AssistantWithAgentData | null> {
     const assistant = await prisma.assistant.findFirst({
-      where: { id: assistantId, tenantId },
+      where: { id: assistantId, tenantId, isDeleted: false },
       select: {
         id: true,
         name: true,
@@ -633,7 +631,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  async softDelete(tenantId: string, campaignId: string): Promise<{
+  async softDelete(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
     archivedCalls: number;
     archivedLeads: number;
     archivedBatches: number;
@@ -670,7 +671,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  async restore(tenantId: string, campaignId: string): Promise<{
+  async restore(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
     restoredCalls: number;
     restoredLeads: number;
     restoredBatches: number;
@@ -704,7 +708,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       restoredCalls: callResult.count,
     };
   }
-
 
   private toEntityData(campaign: {
     id: string;

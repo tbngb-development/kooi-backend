@@ -26,6 +26,7 @@ export function buildAdminAssistantRoutes(
   );
   router.patch("/:id", validate(updateAssistantSchema), controller.update);
   router.delete("/:id", controller.remove);
+  router.patch("/:id/restore", controller.restore);
 
   return router;
 }

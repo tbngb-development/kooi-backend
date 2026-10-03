@@ -35,7 +35,11 @@ export interface AssistantWithPlatformAgent {
 
 export interface AssistantRepository {
   list(tenantId: string): Promise<AssistantEntityData[]>;
-  findById(tenantId: string, id: string): Promise<AssistantEntityData | null>;
+  findById(
+    tenantId: string,
+    id: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<AssistantEntityData | null>;
   findByIdWithPlatformAgent(
     tenantId: string,
     id: string,
@@ -58,6 +62,7 @@ export interface AssistantRepository {
     id: string,
     config: Record<string, unknown>,
   ): Promise<AssistantEntityData>;
-  delete(tenantId: string, id: string): Promise<void>;
+  softDelete(tenantId: string, id: string): Promise<void>;
+  restore(tenantId: string, id: string): Promise<void>;
   getCampaignReferenceCount(id: string): Promise<number>;
 }

@@ -109,9 +109,13 @@ model Assistant {
   updatedAt       DateTime @updatedAt
   platformAgentId String
 
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
   platformAgent PlatformAgent @relation(fields: [platformAgentId], references: [id], onDelete: Restrict)
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
   campaigns     Campaign[]
+  @@index([tenantId, isDeleted])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

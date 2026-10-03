@@ -77,3 +77,23 @@ export class PlatformAgentAlreadyAssignedError extends AppError {
     );
   }
 }
+
+export class AssistantAlreadyDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Assistant is already archived",
+      "ASSISTANT_ALREADY_ARCHIVED",
+    );
+  }
+}
+
+export class AssistantNotDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Assistant is not currently archived",
+      "ASSISTANT_NOT_ARCHIVED",
+    );
+  }
+}

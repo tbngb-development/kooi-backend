@@ -11,6 +11,7 @@ import { DeleteAssistantUseCase } from "./application/use-cases/delete-assistant
 import { TenantAssistantController } from "./presentation/tenant-assistant.controller";
 import { AdminAssistantController } from "./presentation/admin-assistant.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
+import { RestoreAssistantUseCase } from "./application/use-cases/restore-assistant.use-case";
 
 export interface AssistantModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -44,6 +45,7 @@ export function buildAssistantModule(
       new RegisterAssistantUseCase(repository, platformAgentRepo, apiKeyRepo),
       new UpdateAssistantUseCase(repository),
       new DeleteAssistantUseCase(repository),
+      new RestoreAssistantUseCase(repository),
     ),
   };
 }

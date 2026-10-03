@@ -11,6 +11,7 @@ import { type RegisterAssistantUseCase } from "../application/use-cases/register
 import { type UpdateAssistantUseCase } from "../application/use-cases/update-assistant.use-case";
 import { type DeleteAssistantUseCase } from "../application/use-cases/delete-assistant.use-case";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
+import type { RestoreAssistantUseCase } from "../application/use-cases/restore-assistant.use-case";
 
 export class AdminAssistantController {
   constructor(
@@ -20,6 +21,7 @@ export class AdminAssistantController {
     private readonly registerAssistantUseCase: RegisterAssistantUseCase,
     private readonly updateAssistantUseCase: UpdateAssistantUseCase,
     private readonly deleteAssistantUseCase: DeleteAssistantUseCase,
+    private readonly restoreAssistantUseCase: RestoreAssistantUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -112,6 +114,22 @@ export class AdminAssistantController {
         param(req, "id"),
       );
       sendSuccess(res, { message: "Assistant removed successfully" });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  restore = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      await this.restoreAssistantUseCase.execute(
+        this.resolveTenantId(req),
+        param(req, "id"),
+      );
+      sendSuccess(res, { id: param(req, "id") }, 200, "Assistant restored");
     } catch (err) {
       next(err);
     }
