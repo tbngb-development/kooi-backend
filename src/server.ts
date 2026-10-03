@@ -18,6 +18,7 @@ const server = app.listen(env.port, () => {
 
   try {
     container.wallet.schedulers.bonusExpiry.start();
+    container.batches.schedulers.batchProcessing.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -28,6 +29,7 @@ const server = app.listen(env.port, () => {
 function gracefulShutdown(signal: string): void {
   logger.info("Graceful shutdown initiated", { signal });
   container.wallet.schedulers.bonusExpiry.stop();
+  container.batches.schedulers.batchProcessing.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);

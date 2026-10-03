@@ -1,47 +1,18 @@
-/**
- * Cleans a raw customer name for voice-agent readability.
- *
- * Rules:
- *  - 1 part  → use as-is (e.g. "Madhuri")
- *  - 2 parts → use the FIRST name (e.g. "Raj Kumar" → "Raj")
- *  - 3+ parts → use the MIDDLE name, but only if it is a "real" name
- *               (> 3 chars and not an initial like "K", "F", "BD").
- *               If the middle fails validation, fall back to the first name.
- *  - Always title-case the result and trim whitespace.
- */
-export function cleanCustomerName(raw: string | undefined | null): string {
-  if (!raw) return "";
+// ── Recognized Prefixes & Junk Names ─────────────────────────────────────────
 
-  const parts = raw.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length === 0) return "";
-  if (parts.length === 1) return titleCase(parts[0]);
-  if (parts.length === 2) return titleCase(parts[0]);
-
-  // 3 or more parts — try the middle name (index 1)
-  const middle = parts[1];
-
-  if (isValidSpokenName(middle)) {
-    return titleCase(middle);
-  }
-
-  // Middle is an initial or too short — fall back to first name
-  return titleCase(parts[0]);
-}
-
-/**
- * A "valid spoken name" must be:
- *  - longer than 3 characters  (rejects "K", "F", "BD", "AK")
- *  - not look like an initial  (e.g. single/double uppercase letters)
- */
-function isValidSpokenName(name: string): boolean {
-  if (name.length <= 3) return false;
-
-  // Reject pure-initial patterns like "AK", "BD", "KMR"
-  if (/^[A-Z]{1,3}$/i.test(name)) return false;
-
-  return true;
-}
+const HONORIFICS_AND_PREFIXES = new Set([
+  // Titles / Honorifics
+  "mr",
+  "mrs",
+  "ms",
+  "miss",
+  "dr",
+  "prof",
+  "er",
+  "adv",
+  "shri",
+  "smt",
+]);
 
 const JUNK_NAMES = new Set([
   "unknown",
@@ -58,9 +29,34 @@ const JUNK_NAMES = new Set([
   "noname",
 ]);
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function titleCase(s: string): string {
+  if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
+
+/**
+ * Determines if a single word is an initial or abbreviation rather than a spoken name.
+ */
+function isInitialOrPrefix(word: string): boolean {
+  const lower = word.toLowerCase();
+
+  // 1. Matches common prefixes
+  if (HONORIFICS_AND_PREFIXES.has(lower)) return true;
+
+  // 2. 1 or 2 letter tokens are initials ("K", "Ab", "Ls", "FF")
+  if (lower.length <= 2) return true;
+
+  // 3. 3-letter tokens with no vowels are abbreviations (e.g. "mdd", "kmr", "skk")
+  //    (Allows valid 3-letter names like "Raj", "Ali", "Sam", "Dev", "Uma", "Joy")
+  const hasVowel = /[aeiouy]/i.test(lower);
+  if (!hasVowel) return true;
+
+  return false;
+}
+
+// ── Main Functions ───────────────────────────────────────────────────────────
 
 /**
  * Checks if a customer name is valid and conversational (not empty, not junk, not a template tag).
@@ -71,20 +67,40 @@ export function isValidCustomerName(name: string | null | undefined): boolean {
   const trimmed = name.trim().toLowerCase();
   if (!trimmed) return false;
 
-  // Reject template syntax like {{customer_name}}, {name}, <name>, etc.
-  if (/^[{<[].*[}>\]]$/.test(trimmed)) {
-    return false;
-  }
+  // Reject template syntax like {{customer_name}}, {name}, <name>, [name], etc.
+  // Fixed: Removed unnecessary escapes inside [...]
+  if (/^[{<([].*[}>)\]]$/.test(trimmed)) return false;
 
   // Reject common dummy/junk names
-  if (JUNK_NAMES.has(trimmed)) {
-    return false;
-  }
+  if (JUNK_NAMES.has(trimmed)) return false;
 
-  // Reject if it's purely numbers or special characters
-  if (!/[a-zA-Z]/.test(trimmed)) {
-    return false;
-  }
+  // Must contain at least one letter
+  if (!/[a-zA-Z]/.test(trimmed)) return false;
 
   return true;
+}
+
+/**
+ * Cleans a raw customer name for voice-agent readability.
+ * Finds and title-cases the FIRST real, conversational name token.
+ */
+export function cleanCustomerName(raw: string | undefined | null): string {
+  if (!isValidCustomerName(raw)) return "";
+
+  // Fixed: Replaces all punctuation and special characters with spaces cleanly
+  // "Md. Abbas-Firdous" -> "Md  Abbas Firdous"
+  const sanitized = raw!.replace(/[^\w\s]/g, " ").trim();
+
+  const parts = sanitized.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+
+  // Find the first valid spoken name that is NOT an initial/prefix
+  for (const part of parts) {
+    if (!isInitialOrPrefix(part)) {
+      return titleCase(part);
+    }
+  }
+
+  // Fallback: if all words were initials (e.g. "R K"), return the last token
+  return titleCase(parts[parts.length - 1]);
 }

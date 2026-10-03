@@ -1,154 +1,192 @@
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { BatchProcessingWorker } from "./batch-processing.worker";
 import prisma from "../../../../shared/config/database/prisma";
-import { PrismaBatchRepository } from "../repositories/prisma-batch.repository"; // ◄ Added
+import { PrismaBatchRepository } from "../repositories/prisma-batch.repository";
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
 
 export class BatchProcessingScheduler {
-  private readonly log: Logger | undefined;
+  private autoRecoveryTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly worker: BatchProcessingWorker,
-    logger?: Logger,
+    private readonly logger?: Logger,
   ) {
-    this.log = logger?.child({ module: "BatchProcessingScheduler" });
+    this.logger = logger?.child({ component: "BatchProcessingScheduler" });
   }
 
   start(): void {
     const queue = getQueue("batch-processing");
 
-    // ── Run Stuck Batches Startup Cleanup ──────────────────────
+    // 1. Run Boot-Time Cleanups
     this.cleanupStuckProcessingBatches().catch((err) => {
-      this.log?.error(
-        "Failed to clean up stuck processing batches on boot",
-        err,
-      );
+      if (this.logger)
+        this.logger.error("Failed cleanup of stuck batches on boot", err);
     });
 
-    // ── Run Stuck Campaigns Startup Cleanup ───────────────────
     this.cleanupStuckRunningCampaigns().catch((err) => {
-      this.log?.error(
-        "Failed to clean up stuck running campaigns on boot",
-        err,
-      );
+      if (this.logger)
+        this.logger.error("Failed cleanup of running campaigns on boot", err);
     });
 
+    // 2. Start Periodic Runtime Auto-Recovery (Every 2 minutes)
+    this.autoRecoveryTimer = setInterval(() => {
+      this.autoRecoverTimedOutBatches().catch((err) => {
+        if (this.logger) this.logger.error("Runtime auto-recovery error", err);
+      });
+    }, 120_000); // 2 minutes
+
+    // 3. Register Worker Processor
     queue.process("process-batch", 2, async (job) => {
       await this.worker.process(job);
     });
 
     queue.on("completed", (job) => {
-      this.log?.info("Queue job completed", {
-        action: "batch.queue.completed",
-        jobId: String(job.id),
-        batchId: job.data.batchId,
-        durationMs: job.finishedOn
-          ? job.finishedOn - (job.processedOn ?? job.timestamp)
-          : undefined,
-      });
+      const msg = `Queue job completed: ${job.id} (batch: ${job.data.batchId})`;
+      if (this.logger) {
+        this.logger.info(msg, {
+          action: "batch.queue.completed",
+          jobId: String(job.id),
+          batchId: job.data.batchId,
+        });
+      } else {
+        console.log(`[BatchQueue] ${msg}`);
+      }
     });
 
     queue.on("failed", (job, err) => {
-      this.log?.error("Queue job failed", err, {
-        action: "batch.queue.failed",
-        jobId: job?.id ? String(job.id) : undefined,
-        batchId: job?.data?.batchId,
-        attemptsMade: job?.attemptsMade,
-        error: err.message,
-      });
+      const msg = `Queue job failed: ${job?.id}: ${err.message}`;
+      if (this.logger) {
+        this.logger.error(msg, err, {
+          action: "batch.queue.failed",
+          jobId: job?.id ? String(job.id) : undefined,
+        });
+      } else {
+        console.error(`[BatchQueue] ${msg}`);
+      }
     });
 
     queue.on("stalled", (jobId) => {
-      this.log?.warn("Queue job stalled (worker may have crashed)", {
-        action: "batch.queue.stalled",
-        jobId: String(jobId),
-      });
+      const msg = `Queue job stalled (re-assigning): ${jobId}`;
+      if (this.logger) {
+        this.logger.warn(msg, {
+          action: "batch.queue.stalled",
+          jobId: String(jobId),
+        });
+      } else {
+        console.warn(`[BatchQueue] ${msg}`);
+      }
     });
 
-    this.log?.info("Batch processing scheduler started", {
-      action: "batch.scheduler.start",
-      concurrency: 2,
+    if (this.logger) {
+      this.logger.info("Batch processing scheduler started", {
+        action: "batch.scheduler.start",
+        concurrency: 2,
+      });
+    } else {
+      console.log("[BatchScheduler] Scheduler started (concurrency: 2)");
+    }
+  }
+
+  /**
+   * Scans for any batch stuck in PROCESSING for > 5 minutes during runtime
+   * and automatically transitions it to FAILED so the UI unlocks.
+   */
+  private async autoRecoverTimedOutBatches(): Promise<void> {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    const timedOut = await prisma.leadBatch.findMany({
+      where: {
+        status: "PROCESSING",
+        createdAt: { lte: fiveMinutesAgo },
+      },
+      select: { id: true, campaignId: true },
     });
+
+    if (timedOut.length === 0) return;
+
+    this.logger?.warn(
+      `Auto-recovering ${timedOut.length} timed-out processing batch(es)`,
+      {
+        action: "batch.auto_recovery",
+        count: timedOut.length,
+      },
+    );
+
+    await prisma.leadBatch.updateMany({
+      where: {
+        status: "PROCESSING",
+        createdAt: { lte: fiveMinutesAgo },
+      },
+      data: {
+        status: "FAILED",
+        processingStage: null,
+        processingProgress: 0,
+        processingError:
+          "Processing timed out. Please delete this batch and upload again.",
+      },
+    });
+
+    const batchRepo = new PrismaBatchRepository();
+    for (const b of timedOut) {
+      await batchRepo.recalculateCampaignStats(b.campaignId);
+    }
   }
 
   private async cleanupStuckProcessingBatches(): Promise<void> {
     try {
       const stuckBatches = await prisma.leadBatch.findMany({
         where: { status: "PROCESSING" },
-        select: { id: true, fileName: true, tenantId: true },
+        select: { id: true },
       });
 
       if (stuckBatches.length === 0) return;
 
-      this.log?.warn(
-        `Found ${stuckBatches.length} stuck processing batch(es) on boot, performing cleanup`,
-        {
-          action: "batch.cleanup.start",
-          stuckCount: stuckBatches.length,
-        },
-      );
-
-      const result = await prisma.leadBatch.updateMany({
+      await prisma.leadBatch.updateMany({
         where: { status: "PROCESSING" },
         data: {
           status: "FAILED",
           processingStage: null,
           processingProgress: 0,
           processingError:
-            "The server restarted while processing this file. Please delete this batch and upload your file again.",
+            "The server restarted while processing this file. Please delete this batch and upload again.",
         },
       });
 
-      this.log?.info("Stuck processing batches successfully cleaned up", {
-        action: "batch.cleanup.success",
-        cleanedCount: result.count,
-      });
+      if (this.logger)
+        this.logger.info(
+          `Cleaned up ${stuckBatches.length} stuck processing batches on startup.`,
+        );
     } catch (err) {
-      this.log?.error("Database error during stuck batch startup cleanup", err);
+      if (this.logger)
+        this.logger.error("Database error during stuck batch cleanup", err);
     }
   }
 
-  /**
-   * Scans for running campaigns on boot and evaluates their status.
-   * If all batches are terminal, it immediately closes the campaign.
-   */
   private async cleanupStuckRunningCampaigns(): Promise<void> {
     try {
       const runningCampaigns = await prisma.campaign.findMany({
         where: { status: "RUNNING" },
-        select: { id: true, name: true },
+        select: { id: true },
       });
 
       if (runningCampaigns.length === 0) return;
 
-      this.log?.info(
-        `Checking ${runningCampaigns.length} running campaign(s) for terminal states`,
-        {
-          action: "campaign.cleanup.start",
-          runningCount: runningCampaigns.length,
-        },
-      );
-
       const batchRepo = new PrismaBatchRepository();
-
       for (const campaign of runningCampaigns) {
-        // Calling this triggers our updated recalculateCampaignStats logic
-        // which transitions campaign status cleanly to COMPLETED/FAILED
         await batchRepo.recalculateCampaignStats(campaign.id);
       }
     } catch (err) {
-      this.log?.error(
-        "Database error during running campaign startup cleanup",
-        err,
-      );
+      if (this.logger)
+        this.logger.error("Database error during campaign cleanup", err);
     }
   }
 
   async stop(): Promise<void> {
+    if (this.autoRecoveryTimer) {
+      clearInterval(this.autoRecoveryTimer);
+      this.autoRecoveryTimer = null;
+    }
     const queue = getQueue("batch-processing");
     await queue.close();
-    this.log?.info("Batch processing scheduler stopped", {
-      action: "batch.scheduler.stop",
-    });
   }
 }

@@ -7,19 +7,21 @@ import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
 import type { ListBatchesUseCase } from "../application/use-cases/list-batches.use-case";
 import type { GetBatchUseCase } from "../application/use-cases/get-batch.use-case";
-import type { CreateBatchUseCase } from "../application/use-cases/create-batch.use-case";
+// import type { CreateBatchUseCase } from "../application/use-cases/create-batch.use-case";
 import type { RunBatchUseCase } from "../application/use-cases/run-batch.use-case";
 import type { ScheduleBatchUseCase } from "../application/use-cases/schedule-batch.use-case";
 import type { StopBatchUseCase } from "../application/use-cases/stop-batch.use-case";
 import type { ResumeBatchUseCase } from "../application/use-cases/resume-batch.use-case";
 import type { DeleteBatchUseCase } from "../application/use-cases/delete-batch.use-case";
 import type { GetBatchStatsUseCase } from "../application/use-cases/get-batch-stats.use-case";
+import type { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batch-upload.use-case";
 
 export class TenantBatchController {
   constructor(
     private readonly listBatchesUseCase: ListBatchesUseCase,
     private readonly getBatchUseCase: GetBatchUseCase,
-    private readonly createBatchUseCase: CreateBatchUseCase,
+    // private readonly createBatchUseCase: CreateBatchUseCase,
+    private readonly enqueueBatchUploadUseCase: EnqueueBatchUploadUseCase,
     private readonly runBatchUseCase: RunBatchUseCase,
     private readonly scheduleBatchUseCase: ScheduleBatchUseCase,
     private readonly stopBatchUseCase: StopBatchUseCase,
@@ -124,7 +126,19 @@ export class TenantBatchController {
         return;
       }
 
-      const data = await this.createBatchUseCase.execute({
+      // const data = await this.createBatchUseCase.execute({
+      //   tenantId,
+      //   campaignId,
+      //   fileBuffer: req.file.buffer,
+      //   fileName: req.file.originalname,
+      //   retryConfig,
+      //   scheduledAt,
+      //   runImmediately,
+      //   termsAccepted: true,
+      //   termsVersion: termsVersion.trim(),
+      // });
+
+      const data = await this.enqueueBatchUploadUseCase.execute({
         tenantId,
         campaignId,
         fileBuffer: req.file.buffer,
