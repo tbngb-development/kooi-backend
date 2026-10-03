@@ -1,3 +1,5 @@
+// modules/batches/presentation/admin-batch.controller.ts
+
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import { sendSuccess } from "../../../shared/utils/response";
@@ -6,6 +8,8 @@ import { param } from "../../../shared/utils/paramHelper";
 import type { ListBatchesUseCase } from "../application/use-cases/list-batches.use-case";
 import type { GetBatchUseCase } from "../application/use-cases/get-batch.use-case";
 import type { GetBatchStatsUseCase } from "../application/use-cases/get-batch-stats.use-case";
+import type { ArchiveBatchUseCase } from "../application/use-cases/archive-batch.use-case";
+import type { RestoreBatchUseCase } from "../application/use-cases/restore-batch.use-case";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 
 export class AdminBatchController {
@@ -13,6 +17,8 @@ export class AdminBatchController {
     private readonly listBatchesUseCase: ListBatchesUseCase,
     private readonly getBatchUseCase: GetBatchUseCase,
     private readonly getBatchStatsUseCase: GetBatchStatsUseCase,
+    private readonly archiveBatchUseCase: ArchiveBatchUseCase,
+    private readonly restoreBatchUseCase: RestoreBatchUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -20,77 +26,57 @@ export class AdminBatchController {
       (req.query.tenantId as string) ??
       (req.body?.tenantId as string) ??
       ((req as AuthRequest).user as TenantAuthContext)?.tenantId;
-
-    if (!tenantId) {
-      throw new TenantBadRequestError(AdminMessages.TENANT_ID_REQUIRED);
-    }
+    if (!tenantId) throw new TenantBadRequestError(AdminMessages.TENANT_ID_REQUIRED);
     return tenantId;
   }
 
   private requireCampaignId(req: Request): string {
     const campaignId = req.query.campaignId as string;
-    if (!campaignId) {
-      throw new Error("campaignId is required");
-    }
+    if (!campaignId) throw new Error("campaignId is required");
     return campaignId;
   }
 
-  list = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
+  list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tenantId = this.resolveTenantId(req);
       const campaignId = this.requireCampaignId(req);
-      sendSuccess(
-        res,
-        await this.listBatchesUseCase.execute(tenantId, campaignId),
-      );
-    } catch (err) {
-      next(err);
-    }
+      sendSuccess(res, await this.listBatchesUseCase.execute(tenantId, campaignId));
+    } catch (err) { next(err); }
   };
 
-  get = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
+  get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tenantId = this.resolveTenantId(req);
       const campaignId = this.requireCampaignId(req);
-      sendSuccess(
-        res,
-        await this.getBatchUseCase.execute(
-          tenantId,
-          campaignId,
-          param(req, "id"),
-        ),
-      );
-    } catch (err) {
-      next(err);
-    }
+      sendSuccess(res, await this.getBatchUseCase.execute(tenantId, campaignId, param(req, "id")));
+    } catch (err) { next(err); }
   };
 
-  stats = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
+  stats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tenantId = this.resolveTenantId(req);
       const campaignId = this.requireCampaignId(req);
-      sendSuccess(
-        res,
-        await this.getBatchStatsUseCase.execute(
-          tenantId,
-          campaignId,
-          param(req, "id"),
-        ),
-      );
-    } catch (err) {
-      next(err);
-    }
+      sendSuccess(res, await this.getBatchStatsUseCase.execute(tenantId, campaignId, param(req, "id")));
+    } catch (err) { next(err); }
+  };
+
+  archive = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const campaignId = this.requireCampaignId(req);
+      const batchId = param(req, "id");
+      await this.archiveBatchUseCase.execute(tenantId, campaignId, batchId);
+      sendSuccess(res, { id: batchId }, 200, "Batch archived by Admin");
+    } catch (err) { next(err); }
+  };
+
+  restore = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const campaignId = this.requireCampaignId(req);
+      const batchId = param(req, "id");
+      await this.restoreBatchUseCase.execute(tenantId, campaignId, batchId);
+      sendSuccess(res, { id: batchId }, 200, "Batch restored by Admin");
+    } catch (err) { next(err); }
   };
 }

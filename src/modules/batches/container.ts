@@ -1,11 +1,11 @@
 // modules/batches/container.ts
+
 import { PrismaBatchRepository } from "./infrastructure/repositories/prisma-batch.repository";
 import { PrismaCampaignRepository } from "../campaigns/infrastructure/repositories/prisma-campaign.repository";
 import { BolnaBatchProviderImpl } from "./infrastructure/bolna-batch-provider";
 import { CloudinaryStorageProvider } from "../../shared/config/external/storage/cloudinary.storage";
 import { ListBatchesUseCase } from "./application/use-cases/list-batches.use-case";
 import { GetBatchUseCase } from "./application/use-cases/get-batch.use-case";
-// import { CreateBatchUseCase } from "./application/use-cases/create-batch.use-case";
 import { RunBatchUseCase } from "./application/use-cases/run-batch.use-case";
 import { ScheduleBatchUseCase } from "./application/use-cases/schedule-batch.use-case";
 import { StopBatchUseCase } from "./application/use-cases/stop-batch.use-case";
@@ -21,6 +21,8 @@ import type { Logger } from "../../shared/logging/logger.interface";
 import { BatchProcessingScheduler } from "./infrastructure/jobs/batch-processing.scheduler";
 import { EnqueueBatchUploadUseCase } from "./application/use-cases/enqueue-batch-upload.use-case";
 import { BatchProcessingWorker } from "./infrastructure/jobs/batch-processing.worker";
+import { ArchiveBatchUseCase } from "./application/use-cases/archive-batch.use-case";
+import { RestoreBatchUseCase } from "./application/use-cases/restore-batch.use-case";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -31,9 +33,7 @@ export interface BatchModuleDeps {
 export interface BatchModule {
   tenantController: TenantBatchController;
   adminController: AdminBatchController;
-  schedulers: {
-    batchProcessing: BatchProcessingScheduler;
-  };
+  schedulers: { batchProcessing: BatchProcessingScheduler };
 }
 
 export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
@@ -49,15 +49,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
   const getBatch = new GetBatchUseCase(batchRepo);
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
-
-  // const createBatch = new CreateBatchUseCase(
-  //   batchRepo,
-  //   campaignRepo,
-  //   storage,
-  //   bolnaProvider,
-  //   planRepo,
-  //   log,
-  // );
+  const archiveBatch = new ArchiveBatchUseCase(batchRepo);
+  const restoreBatch = new RestoreBatchUseCase(batchRepo);
 
   const enqueueBatchUpload = new EnqueueBatchUploadUseCase(
     batchRepo,
@@ -81,7 +74,6 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     tenantController: new TenantBatchController(
       listBatches,
       getBatch,
-      // createBatch,
       enqueueBatchUpload,
       new RunBatchUseCase(
         batchRepo,
@@ -109,14 +101,15 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       ),
       new DeleteBatchUseCase(batchRepo, bolnaProvider, log),
       getBatchStats,
+      archiveBatch,
     ),
     adminController: new AdminBatchController(
       listBatches,
       getBatch,
       getBatchStats,
+      archiveBatch,
+      restoreBatch,
     ),
-    schedulers: {
-      batchProcessing: batchProcessingScheduler, // ◄ Expose to container
-    },
+    schedulers: { batchProcessing: batchProcessingScheduler },
   };
 }

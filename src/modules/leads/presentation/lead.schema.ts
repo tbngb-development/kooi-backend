@@ -20,6 +20,10 @@ export const listLeadsQuerySchema = z.object({
   limit: z
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
+  includeDeleted: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .default(false),
 });
 
 export const getLeadsStatsQuerySchema = z.object({

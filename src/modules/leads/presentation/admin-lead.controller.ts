@@ -11,12 +11,16 @@ import type {
   AdminGetLeadsStatsQuery,
   AdminListLeadsQuery,
 } from "./lead.schema";
+import type { ArchiveLeadUseCase } from "../application/use-cases/archive-lead.use-case";
+import type { RestoreLeadUseCase } from "../application/use-cases/restore-lead.use-case";
 
 export class AdminLeadController {
   constructor(
     private readonly listLeadsUseCase: ListLeadsUseCase,
     private readonly getLeadDetailsUseCase: GetLeadUseCase,
     private readonly getLeadStatsUseCase: GetLeadStatsUseCase,
+    private readonly archiveLeadUseCase: ArchiveLeadUseCase,
+    private readonly restoreLeadUseCase: RestoreLeadUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -24,7 +28,6 @@ export class AdminLeadController {
       (req.query.tenantId as string) ??
       (req.body?.tenantId as string) ??
       ((req as AuthRequest).user as TenantAuthContext)?.tenantId;
-
 
     if (!tenantId) {
       throw new TenantBadRequestError(AdminMessages.TENANT_ID_REQUIRED);
@@ -90,6 +93,34 @@ export class AdminLeadController {
         query.campaignId,
       );
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  archive = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      await this.archiveLeadUseCase.execute(tenantId, param(req, "id"));
+      sendSuccess(res, { id: param(req, "id") }, 200, "Lead archived by Admin");
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  restore = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      await this.restoreLeadUseCase.execute(tenantId, param(req, "id"));
+      sendSuccess(res, { id: param(req, "id") }, 200, "Lead restored by Admin");
     } catch (err) {
       next(err);
     }

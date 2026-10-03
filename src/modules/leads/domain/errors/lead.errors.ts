@@ -18,3 +18,15 @@ export class MissingRequiredHeaderError extends AppError {
     this.detectedHeaders = detectedHeaders;
   }
 }
+
+export class LeadAlreadyDeletedError extends AppError {
+  constructor() {
+    super(HttpStatus.CONFLICT, "Lead is already archived", "LEAD_ALREADY_ARCHIVED");
+  }
+}
+
+export class LeadNotDeletedError extends AppError {
+  constructor() {
+    super(HttpStatus.CONFLICT, "Lead is not currently archived", "LEAD_NOT_ARCHIVED");
+  }
+}

@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/admin-campaign.routes.ts
+
 import { Router } from "express";
 import type { AdminCampaignController } from "./admin-campaign.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
@@ -16,6 +18,10 @@ export function buildAdminCampaignRoutes(
   router.get("/", controller.list);
   router.get("/:id", controller.get);
   router.get("/:id/stats", controller.stats);
+
+  // Administrative soft delete capabilities
+  router.patch("/:id/archive", controller.archive);
+  router.patch("/:id/restore", controller.restore);
 
   return router;
 }

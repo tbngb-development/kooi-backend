@@ -1,3 +1,5 @@
+// modules/batches/application/interfaces/batch-repository.interface.ts
+
 import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import type {
@@ -6,13 +8,9 @@ import type {
   CreateLeadData,
 } from "../dto/batch.dto";
 
-// ── List Item ────────────────────────────────────────────────────────────────
-
 export interface BatchListItem extends LeadBatchEntityData {
   _count: { leads: number; calls: number };
 }
-
-// ── Pending Lead (for resume) ────────────────────────────────────────────────
 
 export interface PendingLeadRow {
   id: string;
@@ -23,8 +21,6 @@ export interface PendingLeadRow {
   metadata: Record<string, unknown> | null;
 }
 
-// ── Repository Interface ─────────────────────────────────────────────────────
-
 export interface BatchRepository {
   list(tenantId: string, campaignId: string): Promise<BatchListItem[]>;
 
@@ -32,6 +28,7 @@ export interface BatchRepository {
     tenantId: string,
     campaignId: string,
     batchId: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<LeadBatchEntityData | null>;
 
   findByIdWithCounts(
@@ -97,4 +94,11 @@ export interface BatchRepository {
   updateRawFileUrl(batchId: string, url: string): Promise<void>;
 
   updateTotalLeads(batchId: string, count: number): Promise<void>;
+
+  softDelete(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<void>;
+  restore(tenantId: string, campaignId: string, batchId: string): Promise<void>;
 }

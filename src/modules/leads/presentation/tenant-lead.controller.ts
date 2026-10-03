@@ -5,13 +5,18 @@ import { param } from "../../../shared/utils/paramHelper";
 import type { ListLeadsUseCase } from "../application/use-cases/list-leads.use-case";
 import type { GetLeadUseCase } from "../application/use-cases/get-lead.use-case";
 import type { GetLeadStatsUseCase } from "../application/use-cases/get-lead-stats.use-case";
-import type { AdminGetLeadsStatsQuery, AdminListLeadsQuery } from "./lead.schema";
+import type {
+  AdminGetLeadsStatsQuery,
+  AdminListLeadsQuery,
+} from "./lead.schema";
+import type { ArchiveLeadUseCase } from "../application/use-cases/archive-lead.use-case";
 
 export class TenantLeadController {
   constructor(
     private readonly listLeadsUseCase: ListLeadsUseCase,
     private readonly getLeadDetailsUseCase: GetLeadUseCase,
     private readonly getLeadStatsUseCase: GetLeadStatsUseCase,
+    private readonly archiveLeadUseCase: ArchiveLeadUseCase,
   ) {}
 
   list = async (
@@ -34,6 +39,7 @@ export class TenantLeadController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
+        includeDeleted: query.includeDeleted,
       });
 
       sendSuccess(res, data);
@@ -73,6 +79,25 @@ export class TenantLeadController {
         query.campaignId,
       );
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  archive = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      await this.archiveLeadUseCase.execute(tenantId, param(req, "id"));
+      sendSuccess(
+        res,
+        { id: param(req, "id") },
+        200,
+        "Lead archived successfully",
+      );
     } catch (err) {
       next(err);
     }

@@ -1,3 +1,5 @@
+// modules/batches/infrastructure/repositories/prisma-batch.repository.ts
+
 import prisma from "../../../../shared/config/database/prisma";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import type {
@@ -21,7 +23,7 @@ import {
 export class PrismaBatchRepository implements BatchRepository {
   async list(tenantId: string, campaignId: string): Promise<BatchListItem[]> {
     const batches = await prisma.leadBatch.findMany({
-      where: { campaignId, tenantId },
+      where: { campaignId, tenantId, isDeleted: false },
       orderBy: { createdAt: "desc" },
       include: {
         _count: { select: { leads: true, calls: true } },
@@ -35,9 +37,15 @@ export class PrismaBatchRepository implements BatchRepository {
     tenantId: string,
     campaignId: string,
     batchId: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<LeadBatchEntityData | null> {
     const batch = await prisma.leadBatch.findFirst({
-      where: { id: batchId, campaignId, tenantId },
+      where: {
+        id: batchId,
+        campaignId,
+        tenantId,
+        ...(options?.includeDeleted ? {} : { isDeleted: false }),
+      },
     });
 
     if (!batch) return null;
@@ -50,7 +58,7 @@ export class PrismaBatchRepository implements BatchRepository {
     batchId: string,
   ): Promise<BatchListItem | null> {
     const batch = await prisma.leadBatch.findFirst({
-      where: { id: batchId, campaignId, tenantId },
+      where: { id: batchId, campaignId, tenantId, isDeleted: false },
       include: {
         _count: { select: { leads: true, calls: true } },
       },
@@ -73,25 +81,19 @@ export class PrismaBatchRepository implements BatchRepository {
         termsAccepted: data.termsAccepted,
         termsAcceptedAt: data.termsAcceptedAt,
         termsVersion: data.termsVersion,
+        isDeleted: false,
       },
     });
 
     return this.toEntityData(batch);
   }
 
-  /**
-   * Mark all never-dialed (PENDING) leads in this batch as STOPPED
-   * since the batch has been terminated.
-   */
   async markPendingLeadsAsStopped(
     batchId: string,
     reason: LeadStopReason,
   ): Promise<number> {
     const result = await prisma.lead.updateMany({
-      where: {
-        batchId,
-        status: "PENDING",
-      },
+      where: { batchId, status: "PENDING" },
       data: { status: "STOPPED", stoppedReason: reason },
     });
     return result.count;
@@ -146,25 +148,25 @@ export class PrismaBatchRepository implements BatchRepository {
     batchId: string,
   ): Promise<BatchStatsResult> {
     const batch = await prisma.leadBatch.findFirst({
-      where: { id: batchId, campaignId, tenantId },
+      where: { id: batchId, campaignId, tenantId, isDeleted: false },
     });
 
     if (!batch) throw new Error("Batch not found");
 
     const leadStats = await prisma.lead.groupBy({
       by: ["status"],
-      where: { batchId },
+      where: { batchId, isDeleted: false },
       _count: true,
     });
 
     const callStats = await prisma.call.groupBy({
       by: ["status"],
-      where: { batchId },
+      where: { batchId, isDeleted: false },
       _count: true,
     });
 
     const costAgg = await prisma.call.aggregate({
-      where: { batchId, cost: { not: null } },
+      where: { batchId, cost: { not: null }, isDeleted: false },
       _sum: { cost: true },
     });
 
@@ -178,7 +180,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
   async findPendingLeads(batchId: string): Promise<PendingLeadRow[]> {
     const leads = await prisma.lead.findMany({
-      where: { batchId, status: "PENDING", doNotCall: false },
+      where: { batchId, status: "PENDING", doNotCall: false, isDeleted: false },
     });
 
     return leads.map((l) => ({
@@ -230,7 +232,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
   async getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]> {
     const batches = await prisma.leadBatch.findMany({
-      where: { campaignId },
+      where: { campaignId, isDeleted: false },
       select: { status: true },
     });
 
@@ -239,7 +241,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
   async recalculateCampaignStats(campaignId: string): Promise<void> {
     const agg = await prisma.leadBatch.aggregate({
-      where: { campaignId },
+      where: { campaignId, isDeleted: false },
       _sum: {
         totalLeads: true,
         calledLeads: true,
@@ -248,27 +250,23 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
-    // 1. Fetch all batches for this campaign
     const batches = await prisma.leadBatch.findMany({
-      where: { campaignId },
+      where: { campaignId, isDeleted: false },
       select: { status: true },
     });
 
     const statuses = batches.map((b) => b.status);
 
-    // 2. Check if there are any active / pending batches
     const hasActiveBatches = statuses.some(
       (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
     );
 
-    // 3. Determine if campaign should be completed or failed
     let campaignStatusUpdate: {
       status?: "COMPLETED" | "FAILED";
       completedAt?: Date;
     } = {};
 
     if (statuses.length > 0 && !hasActiveBatches) {
-      // Check if all batches are terminal (COMPLETED, STOPPED, or FAILED)
       const allTerminal = statuses.every(
         (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
       );
@@ -282,7 +280,6 @@ export class PrismaBatchRepository implements BatchRepository {
       }
     }
 
-    // 4. Update campaign aggregates and status in a single query
     await prisma.campaign.update({
       where: { id: campaignId },
       data: {
@@ -309,10 +306,6 @@ export class PrismaBatchRepository implements BatchRepository {
     return new Set(existing.map((l) => l.phone));
   }
 
-  /**
-   * Safe non-throwing progress update for background workers.
-   * Uses updateMany so it never throws P2025 if the batch was deleted mid-flight.
-   */
   async updateProgress(
     batchId: string,
     stage: string,
@@ -327,9 +320,6 @@ export class PrismaBatchRepository implements BatchRepository {
     });
   }
 
-  /**
-   * Safe non-throwing error update for background workers.
-   */
   async updateProcessingError(batchId: string, error: string): Promise<void> {
     await prisma.leadBatch.updateMany({
       where: { id: batchId },
@@ -342,9 +332,6 @@ export class PrismaBatchRepository implements BatchRepository {
     });
   }
 
-  /**
-   * Safe non-throwing raw file URL update.
-   */
   async updateRawFileUrl(batchId: string, url: string): Promise<void> {
     await prisma.leadBatch.updateMany({
       where: { id: batchId },
@@ -352,9 +339,6 @@ export class PrismaBatchRepository implements BatchRepository {
     });
   }
 
-  /**
-   * Safe non-throwing totalLeads update.
-   */
   async updateTotalLeads(batchId: string, count: number): Promise<void> {
     await prisma.leadBatch.updateMany({
       where: { id: batchId },
@@ -362,7 +346,61 @@ export class PrismaBatchRepository implements BatchRepository {
     });
   }
 
-  // ── Private Mapper ───────────────────────────────────────────────────────
+  async softDelete(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<void> {
+    const now = new Date();
+
+    await prisma.$transaction([
+      // 1. Archive the batch
+      prisma.leadBatch.update({
+        where: { id: batchId, campaignId, tenantId },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+      // 2. Cascade archive all leads in this batch
+      prisma.lead.updateMany({
+        where: { batchId, tenantId, isDeleted: false },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+      // 3. Cascade archive all calls in this batch
+      prisma.call.updateMany({
+        where: { batchId, tenantId, isDeleted: false },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+    ]);
+
+    // Update parent campaign stats (active counts will decrease)
+    await this.recalculateCampaignStats(campaignId);
+  }
+
+  async restore(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<void> {
+    await prisma.$transaction([
+      // 1. Restore the batch
+      prisma.leadBatch.update({
+        where: { id: batchId, campaignId, tenantId },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+      // 2. Cascade restore all leads in this batch
+      prisma.lead.updateMany({
+        where: { batchId, tenantId, isDeleted: true },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+      // 3. Cascade restore all calls in this batch
+      prisma.call.updateMany({
+        where: { batchId, tenantId, isDeleted: true },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+    ]);
+
+    // Update parent campaign stats (active counts will restore)
+    await this.recalculateCampaignStats(campaignId);
+  }
 
   private toEntityData(batch: {
     id: string;
@@ -385,6 +423,8 @@ export class PrismaBatchRepository implements BatchRepository {
     termsVersion: string | null;
     createdAt: Date;
     updatedAt: Date;
+    isDeleted: boolean;
+    deletedAt: Date | null;
   }): LeadBatchEntityData {
     return {
       id: batch.id,
@@ -407,6 +447,8 @@ export class PrismaBatchRepository implements BatchRepository {
       termsVersion: batch.termsVersion,
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
+      isDeleted: batch.isDeleted,
+      deletedAt: batch.deletedAt,
     };
   }
 }

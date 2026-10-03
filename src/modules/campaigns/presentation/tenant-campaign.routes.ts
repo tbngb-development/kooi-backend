@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/tenant-campaign.routes.ts
+
 import { Router } from "express";
 import type { TenantCampaignController } from "./tenant-campaign.controller";
 import type { TenantBatchController } from "../../batches/presentation/tenant-batch.controller";
@@ -55,6 +57,13 @@ export function buildTenantCampaignRoutes(
     "/:id/parse-leads",
     leadsUploadMemory.single("file"),
     controller.parseLeads,
+  );
+
+  // Archive (Soft Delete) Campaign
+  router.patch(
+    "/:id/archive",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    controller.archive,
   );
 
   // Single resource

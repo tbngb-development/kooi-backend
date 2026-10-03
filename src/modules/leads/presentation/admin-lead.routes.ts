@@ -26,5 +26,8 @@ export function buildAdminLeadRoutes(
   router.get("/", validateQuery(adminListLeadsQuerySchema), controller.list);
   router.get("/:id", controller.get);
 
+  router.patch("/:id/archive", controller.archive);
+  router.patch("/:id/restore", controller.restore);
+
   return router;
 }

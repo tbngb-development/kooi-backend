@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/tenant-campaign.controller.ts
+
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import type { CreateCampaignInput } from "../application/dto/campaign.dto";
@@ -13,6 +15,7 @@ import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campa
 import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
+import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 
 export class TenantCampaignController {
   constructor(
@@ -24,6 +27,7 @@ export class TenantCampaignController {
     private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
     private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
     private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
+    private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -47,6 +51,7 @@ export class TenantCampaignController {
         sortOrder: req.query.sortOrder as "asc" | "desc" | undefined,
         page: req.query.page ? Number(req.query.page) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
+        includeDeleted: req.query.includeDeleted === "true",
       });
       sendSuccess(res, data);
     } catch (err) {
@@ -221,6 +226,26 @@ export class TenantCampaignController {
       });
 
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  archive = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      await this.archiveCampaignUseCase.execute(tenantId, campaignId);
+      sendSuccess(
+        res,
+        { id: campaignId },
+        HttpStatus.OK,
+        "Campaign archived successfully",
+      );
     } catch (err) {
       next(err);
     }

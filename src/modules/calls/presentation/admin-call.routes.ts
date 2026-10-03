@@ -1,3 +1,5 @@
+// modules/calls/presentation/admin-call.routes.ts
+
 import { Router } from "express";
 import type { AdminCallController } from "./admin-call.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
@@ -18,7 +20,6 @@ export function buildAdminCallRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  // Use the admin-specific schemas that allow tenantId
   router.get(
     "/stats",
     validateQuery(adminGetCallStatsQuerySchema),
@@ -27,6 +28,11 @@ export function buildAdminCallRoutes(
   router.get("/", validateQuery(adminListCallsQuerySchema), controller.list);
   router.get("/available-filters", controller.getAvailableFilters);
   router.get("/:id/transcript", controller.getTranscript);
+
+  // Admin soft delete & restore
+  router.patch("/:id/archive", controller.archive);
+  router.patch("/:id/restore", controller.restore);
+
   router.get("/:id", controller.get);
 
   return router;

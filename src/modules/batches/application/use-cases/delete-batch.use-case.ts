@@ -1,3 +1,5 @@
+// modules/batches/application/use-cases/delete-batch.use-case.ts
+
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import {
   BatchNotFoundError,
@@ -37,7 +39,7 @@ export class DeleteBatchUseCase {
       }
     }
 
-    await this.batchRepo.delete(batchId);
+   await this.batchRepo.softDelete(tenantId, campaignId, batchId);
     await this.batchRepo.recalculateCampaignStats(campaignId);
 
     this.logger?.info("Batch deleted", {

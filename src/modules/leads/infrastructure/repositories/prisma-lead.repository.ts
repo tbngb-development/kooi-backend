@@ -57,6 +57,10 @@ export class PrismaLeadRepository implements LeadRepository {
       ];
     }
 
+    if (!filters.includeDeleted) {
+      where.isDeleted = false;
+    }
+
     // Explicit sorting fields whitelist checking
     const validSortFields = ["createdAt", "name", "updatedAt"];
     const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
@@ -92,6 +96,8 @@ export class PrismaLeadRepository implements LeadRepository {
         metadata: l.metadata as Record<string, unknown> | null,
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,
+        isDeleted: l.isDeleted,
+        deletedAt: l.deletedAt,
         campaign: l.campaign,
       })),
       pagination: {
@@ -106,9 +112,14 @@ export class PrismaLeadRepository implements LeadRepository {
   async findById(
     tenantId: string,
     id: string,
+    options?: { includeDeleted?: boolean },
   ): Promise<DetailedLeadResult | null> {
     const lead = await prisma.lead.findFirst({
-      where: { id, tenantId },
+      where: {
+        id,
+        tenantId,
+        ...(options?.includeDeleted ? {} : { isDeleted: false }),
+      },
       include: {
         campaign: {
           select: {
@@ -153,6 +164,8 @@ export class PrismaLeadRepository implements LeadRepository {
       metadata: lead.metadata as Record<string, unknown> | null,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
+      isDeleted: lead.isDeleted,
+      deletedAt: lead.deletedAt,
       campaign: lead.campaign,
       calls: lead.calls.map((c) => ({
         id: c.id,
@@ -179,6 +192,7 @@ export class PrismaLeadRepository implements LeadRepository {
   ): Promise<LeadStatsResult> {
     const where: Prisma.LeadWhereInput = {
       tenantId,
+      isDeleted: false,
       ...(campaignId && { campaignId }),
     };
 
@@ -201,5 +215,19 @@ export class PrismaLeadRepository implements LeadRepository {
       failed,
       noAnswer,
     };
+  }
+
+  async softDelete(leadId: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+  }
+
+  async restore(leadId: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { isDeleted: false, deletedAt: null },
+    });
   }
 }

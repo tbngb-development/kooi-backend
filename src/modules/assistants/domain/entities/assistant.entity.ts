@@ -45,4 +45,6 @@ export interface AssistantEntityData {
   config: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }

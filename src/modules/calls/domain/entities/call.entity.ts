@@ -1,3 +1,5 @@
+// modules/calls/domain/entities/call.entity.ts
+
 import { type CallStatus } from "@prisma/client";
 
 export interface CallEntityData {
@@ -22,6 +24,8 @@ export interface CallEntityData {
   endedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 export class CallEntity {
@@ -51,12 +55,17 @@ export class CallEntity {
   get cost(): number | null {
     return this.data.cost;
   }
-
   get ourCostPaisa(): number | null {
     return this.data.platformCost;
   }
   get billableSeconds(): number | null {
     return this.data.billableSeconds;
+  }
+  get isDeleted(): boolean {
+    return this.data.isDeleted;
+  }
+  get deletedAt(): Date | null {
+    return this.data.deletedAt;
   }
 
   toPrimitives(): CallEntityData {

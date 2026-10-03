@@ -1,3 +1,5 @@
+// modules/batches/presentation/admin-batch.routes.ts
+
 import { Router } from "express";
 import type { AdminBatchController } from "./admin-batch.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
@@ -16,6 +18,8 @@ export function buildAdminBatchRoutes(
   router.get("/", controller.list);
   router.get("/:id", controller.get);
   router.get("/:id/stats", controller.stats);
+  router.patch("/:id/archive", controller.archive);
+  router.patch("/:id/restore", controller.restore);
 
   return router;
 }

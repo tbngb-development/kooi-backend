@@ -1,3 +1,5 @@
+// app/container.ts
+
 import { PrismaAuthRepository } from "../modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { JwtTokenService } from "../modules/auth/infrastructure/services/jwt-token.service";
 import { JwtPasswordResetTokenService } from "../modules/auth/infrastructure/services/jwt-password-reset-token.service";
@@ -177,14 +179,12 @@ export function buildContainer(): AppContainer {
     tokenService,
     emailService: email,
   });
-
-  // ── Assembled Domain Modules ────────────────────────────────────────
   return {
     logger,
     auth,
     assistants: buildAssistantModule({ bolnaClientFactory }),
     tenants: buildTenantModule(),
-    campaigns: buildCampaignModule(),
+    campaigns: buildCampaignModule({ logger }),
     batches: buildBatchModule({
       bolnaClientFactory,
       checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
