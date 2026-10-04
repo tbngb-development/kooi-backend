@@ -16,6 +16,7 @@ import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/e
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
+import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
 
 export class TenantCampaignController {
   constructor(
@@ -28,6 +29,7 @@ export class TenantCampaignController {
     private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
     private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
+    private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -161,6 +163,27 @@ export class TenantCampaignController {
       });
 
       sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  parseManual = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "campaignId");
+
+      const data = await this.parseManualLeadsUseCase.execute({
+        tenantId,
+        campaignId,
+        leads: req.body.leads,
+      });
+
+      sendSuccess(res, data);
     } catch (err) {
       next(err);
     }

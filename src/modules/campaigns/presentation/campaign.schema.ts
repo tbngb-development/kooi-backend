@@ -42,6 +42,25 @@ export const extractVariablesSchema = z.object({
   assistantId: z.uuid("Invalid assistant ID"),
 });
 
+// ── Manual Leads Parsing / Preview ─────────────────────────────────────────
+
+export const parseManualLeadsSchema = z.object({
+  leads: z
+    .array(
+      z.object({
+        contact_number: z
+          .string()
+          .min(1, "contact_number is required")
+          .max(20, "contact_number is too long"),
+        customer_name: z.string().min(1).max(100).optional(),
+      }),
+    )
+    .min(1, "At least one lead is required")
+    .max(1000, "Maximum 1000 leads per manual submission"),
+});
+
+export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
+
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
 export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
 export type ExtractVariablesBody = z.infer<typeof extractVariablesSchema>;

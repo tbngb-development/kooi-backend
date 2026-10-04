@@ -24,14 +24,75 @@ export interface DispositionSeed {
 
 export const dispositionsSeedData: DispositionSeed[] = [
   {
+    slug: "general-language-support-required",
+    name: "general_language_support_required",
+    displayName: "Language Issue",
+    tag: null,
+    question:
+      "Does the customer require support in a different language because they cannot comfortably continue the conversation in the language used by the agent?",
+    systemPrompt:
+      "Use only the customer's own statements, responses, or clearly observable communication difficulty during the call.\nReturn a value only when there is clear evidence that the customer cannot comfortably continue because the required language is not supported by the agent.\nDo not infer a language-support requirement merely because the customer:\n- has an accent,\n- uses a few words from another language,\n- switches briefly between languages,\n- speaks another language but still continues the conversation successfully,\n- or because the agent mentions language options.\nIf the customer can understand and continue the conversation in the current language, return no value.\nIf there is no clear evidence of a language barrier, return no value.\nDo not guess.\nIf the condition is not clearly met, return no value.",
+    model: "gpt-4o-mini",
+    isSubjective: false,
+    isObjective: true,
+    subjectiveType: "text",
+    subjectiveTypeConfig: null,
+    objectiveOptions: [
+      {
+        value: "YES",
+        condition:
+          "Return YES only when the customer clearly needs another language in order to continue the conversation. Examples include: - the customer asks the agent to speak in another language, - the customer says they do not understand or are not comfortable with the current language, - the customer repeatedly responds in another language and meaningful conversation cannot continue, - the customer asks for someone who can speak their preferred language, - the call cannot progress because of the language barrier. Do not return YES when the customer merely uses another language occasionally but still understands and communicates successfully.",
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
+      },
+    ],
+    description: null,
+    isActive: true,
+    showInOverview: true,
+    showInInsights: false,
+  },
+  {
+    slug: "general-callback-required",
+    name: "general_callback_required",
+    displayName: "Callback Later",
+    tag: null,
+    question: "Did the customer clearly ask to call back later?",
+    systemPrompt:
+      "Use when a cusomer ask to callback later or said i don't have time now, can you call later.\nThe callback request may happen at any point during the conversation; it does not have to be the final outcome.\nDo not return a value merely because:\n- the agent offered to call later,\n- the agent said my team will callback,\n- the customer asked only for WhatsApp or email details,\n- the customer agreed to a consultant or human follow-up instead,\n- the customer was simply busy without asking for another call.\nIf the customer initially asks for a callback but later cancels or declines it, return no value.\nIf there is no clear callback request or agreement, return as null with low confidence.\nDo not guess.",
+    model: "gpt-4o-mini",
+    isSubjective: false,
+    isObjective: true,
+    subjectiveType: "text",
+    subjectiveTypeConfig: null,
+    objectiveOptions: [
+      {
+        value: "YES",
+        condition:
+          'Only when the customer explicitly requests or clearly agrees to another phone call at a later time. Examples: - "Call me later." - "Call me tomorrow." - "Call me after 10 minutes" - "I\'m busy now, call me in the evening." - "Can you call me back?" - "Call after 5 PM." - "Speak to me next week." - Agent: "Shall I call you later?" Customer: "Yes." If the condition is not clearly met, return no value. Do not return YES when the customer only agrees to a human consultant or sales representative follow-up. That should be captured separately under the consultant follow-up disposition.',
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
+      },
+    ],
+    description: null,
+    isActive: true,
+    showInOverview: true,
+    showInInsights: false,
+  },
+  {
     slug: "real-estate-consultant-followup",
     name: "real_estate_consultant_followup",
     displayName: "Consultant Follow-up",
     tag: null,
     question:
-      "What date, time, or time window did the customer specify for the consultant or human follow-up call?",
+      "Did the customer explicitly agree to or request a callback from a human consultant, advisor, senior representative, sales expert, or other team member?",
     systemPrompt:
-      'Capture the date, time, or time window personally stated or confirmed by the customer for a follow-up call from a human sales consultant, advisor, relationship manager, or representative.\n\nReturn the agreed consultant callback schedule as a concise dynamic text value.\n\nExamples:\n\n"Ask the consultant to call me tomorrow." → Tomorrow\n"Someone can call me after 6 PM." → After 6 PM\n"Please ask your sales person to call on Saturday morning." → Saturday morning\n"Monday around 11 would be good." → Monday around 11 AM\n"Anytime next week is fine." → Next week\n"Ask them to call between 3 and 5." → Between 3 PM and 5 PM\n\nOnly capture a schedule when a consultant or human follow-up has been requested, accepted, or confirmed.\n\nDo not use the timing of a general callback if it is not specifically related to the consultant or human follow-up.\n\nDo not extract a date or time merely because the agent suggested it unless the customer clearly agrees.\n\nIf the customer agrees to a consultant follow-up but does not provide any specific date, time, or time window, return NOT_SHARED.\n\nIf multiple timings are discussed, capture the final confirmed consultant callback schedule.\n\nPreserve relative timing such as Tomorrow, Monday evening, or Next week unless your system separately performs absolute date normalization.\n\nReturn only the consultant callback schedule or NOT_SHARED. Do not add explanations.',
+      'This disposition should return a value only when there is clear evidence that the customer wants or accepts a human follow-up call from another person such as a consultant, advisor, senior consultant, sales representative, expert, relationship manager, or team member.\nDo not treat general follow-up actions as consultant follow-up.\nDo not return a value when the customer only:\n- asks to receive details,\n- asks for WhatsApp or email information,\n- asks the current agent to call again later,\n- requests a brochure, pricing, floor plan, or other information,\n- shows interest in the project,\n- asks general questions,\n- agrees to a site visit,\n- or simply says "okay" to a vague statement about future contact.\nThe human-follow-up intent must be explicit.\nA valid consultant follow-up happens only when either:\n1. The agent specifically asks permission to arrange a call from a human consultant, advisor, senior consultant, expert, sales representative, team member, relationship manager, or similar person, and the customer clearly agrees.\nOR\n2. The customer explicitly asks to speak with or receive a callback from a human consultant, advisor, expert, senior person, sales representative, or team member.\nIf neither condition is clearly met, return no value.\nDo not infer consultant follow-up from SHARE_DETAILS, CALL_BACK_LATER, customer interest, or any other disposition.\nDo not return NO. Do not guess.',
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -41,12 +102,12 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "Yes",
         condition:
-          "Return the agreed consultant callback schedule as a concise dynamic text value.",
+          'Return YES only when one of these is clearly true: - Agent: "Can I arrange a callback from our senior consultant?"   Customer: "Yes." - Agent: "Would you like one of our property advisors to call you?"   Customer: "Yes, please." - Customer: "Can I speak with a consultant?" - Customer: "Please ask someone from your sales team to call me." - Customer: "I want to speak with an expert before deciding." - Customer: "Can a senior person call me?" Do not return YES for: - "Share the details on WhatsApp." - "Send me the brochure." - "Email me the price." - "Call me later." - "I\'m not interested, but send me the details." - "Okay, send the information." - Agent says "Someone may call you later" and customer does not explicitly agree.',
       },
       {
-        value: "No",
+        value: "NO_DATA",
         condition:
-          "If the customer agrees to a consultant follow-up but does not provide any specific date, time, or time window, return NOT_SHARED.",
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -60,8 +121,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Consultant Follow-up Time",
     tag: null,
     question:
-      'Determine whether the customer explicitly requested, agreed to, or clearly accepted a follow-up phone call from a human sales consultant, advisor, relationship manager, or other representative.\n\nReturn YES when the customer:\n\nasks to speak with a consultant or sales representative,\nagrees when the agent offers to arrange a consultant callback,\nasks for someone from the sales team to call,\nclearly accepts a human follow-up call.\n\nExamples:\n\n"Yes, ask your sales person to call me." → YES\n"Can someone explain this to me in detail?" and agrees to a consultant callback → YES\nAgent says "Shall I arrange a consultant call?" and customer says "Yes." → YES\n\nReturn NO when the customer explicitly declines a consultant or human callback.\n\nExamples:\n\n"No, I don\'t want anyone to call me." → NO\n"Just send the details, no need for a sales call." → NO\n\nReturn only YES or NO. Do not add explanations.',
-    systemPrompt: null,
+      "What date, time, or time window did the customer clearly state or confirm for the human consultant follow-up call?",
+    systemPrompt:
+      'Use only the customer\'s own stated or explicitly confirmed schedule for a consultant, sales representative, relationship manager, advisor, or other human follow-up call.\nCapture the schedule as concise dynamic text.\nOnly extract a value when a human consultant follow-up has been requested, accepted, or clearly confirmed.\nDo not use the timing of a general callback unless it is specifically associated with the consultant or human follow-up.\nDo not extract a date or time merely because the agent suggested it. The customer must clearly accept or confirm the timing.\nIf multiple timings are discussed, capture the final confirmed schedule.\nPreserve relative timing naturally, such as:\n- Tomorrow\n- Tomorrow evening\n- Saturday morning\n- After 6 PM\n- Next week\n- Between 3 PM and 5 PM\nDo not convert relative expressions into absolute dates unless your system separately performs date normalization.\nIf the customer agrees to a consultant follow-up but does not specify or confirm any date, time, or time window, return no value.\nIf there is no consultant follow-up agreement, return no value.\nDo not guess.\nExamples\n- "Ask the consultant to call me tomorrow." → Tomorrow\n- "Someone from sales can call after 6 PM." → After 6 PM\n- "Saturday morning would be good." → Saturday morning\n- "Ask them to call next week." → Next week\n- Agent: "Can our consultant call you at 4 PM?" Customer: "Yes." → 4 PM\n- Customer agrees to a consultant call but gives no timing → no extraction\nReturn only the concise schedule text when clearly available.',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: false,
@@ -72,7 +134,7 @@ export const dispositionsSeedData: DispositionSeed[] = [
       "Did the customer agree to receive a follow-up call from a human sales consultant, advisor, or representative?",
     isActive: true,
     showInOverview: false,
-    showInInsights: true,
+    showInInsights: false,
   },
   {
     slug: "general-callback-schedule",
@@ -80,9 +142,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Callback Time",
     tag: null,
     question:
-      "Did the customer specify a preferred date, time, or time window for a callback?",
+      "What date, time, or time window did the customer clearly state or confirm for the callback?",
     systemPrompt:
-      'Capture the callback date, time, or time window personally stated or confirmed by the customer.\n\nReturn the customer\'s requested callback schedule as a concise dynamic text value.\n\nExamples:\n\n"Call me tomorrow." → Tomorrow\n"Call me tomorrow evening." → Tomorrow evening\n"Call after 5 PM." → After 5 PM\n"Call me on Monday around 11." → Monday around 11 AM\n"Call next week." → Next week\n"Call me after lunch." → After lunch\n"Call me sometime between 4 and 6." → Between 4 PM and 6 PM\n\nCapture only a schedule stated or clearly agreed by the customer.\n\nDo not extract a date or time merely because the agent suggested it unless the customer clearly accepts or confirms it.\n\nIf the customer requests a callback but does not specify any date, time, or time window, return NOT_SHARED.\n\nIf multiple callback timings are discussed, capture the final confirmed callback schedule.\n\nDo not convert relative expressions such as "tomorrow", "next Monday", or "evening" into an absolute date unless the system separately provides and requires date normalization. Preserve the customer\'s intended timing.\n\nReturn only the callback schedule or NOT_SHARED. Do not add explanations',
+      'Use only the customer\'s own stated or explicitly confirmed callback timing.\nCapture the schedule as concise dynamic text.\nOnly extract a value when the customer has requested or agreed to a general callback.\nDo not use consultant or human follow-up timing here. Consultant callback timing should be captured separately in real_estate.consultant_callback_schedule.\nDo not extract a date or time merely because the agent suggested it. The customer must clearly accept or confirm the timing.\nIf multiple callback timings are discussed, capture the final confirmed schedule.\nPreserve relative timing naturally, such as:\n- Tomorrow\n- Tomorrow evening\n- After 5 PM\n- Monday morning\n- Next week\n- Between 4 PM and 6 PM\nDo not convert relative expressions into absolute dates unless your system separately performs date normalization.\nIf the customer asks for a callback but does not provide or confirm any date, time, or time window, return no value.\nIf there is no callback request, return no value.\nDo not guess.\nExamples\n- "Call me tomorrow." → Tomorrow\n- "Call after 6 PM." → After 6 PM\n- "Monday morning is fine." → Monday morning\n- "Call me sometime next week." → Next week\n- Agent: "Can I call you at 4 PM?" Customer: "Yes." → 4 PM\n- Customer says "Call me later" but gives no timing → no extraction\nReturn only the concise callback schedule text when clearly available.',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: false,
@@ -92,32 +154,6 @@ export const dispositionsSeedData: DispositionSeed[] = [
     description: null,
     isActive: true,
     showInOverview: false,
-    showInInsights: true,
-  },
-  {
-    slug: "general-callback-required",
-    name: "general_callback_required",
-    displayName: "Callback Later",
-    tag: null,
-    question:
-      "Did the customer ask to be called back later at any point during the conversation?",
-    systemPrompt:
-      'Determine whether the customer explicitly requested, agreed to, or clearly indicated that they should be contacted again by phone at a later time.\n\nReturn TRUE when the customer says or clearly implies any of the following:\n\n"Call me later."\n"Call me tomorrow."\n"Call me in the evening."\n"I\'m busy now, call me after some time."\n"Can you call me back?"\n"Speak to me next week."\n"Call after 5 PM."\nAny other clear request for a future phone callback.\n\nThe callback request may occur at any point during the conversation. It does not need to be the final outcome of the call.\n\nReturn TRUE even if another action is also agreed, for example:\n\ncustomer asks for details now and also asks for a callback tomorrow,\ncustomer agrees to a consultant follow-up and also asks to be called later,\ncustomer shows interest but requests another call at a more convenient time.\n\nDo not return TRUE when:\n\nthe agent merely offers to call later and the customer does not agree,\nthe customer asks for WhatsApp or email only,\nthe customer says they will call the company themselves,\nthe customer requests a site visit without asking for a callback,\nthere is no clear indication that another phone call is wanted.\n\nIf there is no clear callback request, leave the value empty.\n\nReturn only TRUE when applicable. Do not add explanations.',
-    model: "gpt-4o-mini",
-    isSubjective: true,
-    isObjective: true,
-    subjectiveType: "boolean",
-    subjectiveTypeConfig: null,
-    objectiveOptions: [
-      {
-        value: "YES",
-        condition:
-          "Return YES even if another action is also agreed, for example:  customer asks for details now and also asks for a callback tomorrow, customer agrees to a consultant follow-up and also asks to be called later, customer shows interest but requests another call at a more convenient time.",
-      },
-    ],
-    description: null,
-    isActive: true,
-    showInOverview: true,
     showInInsights: false,
   },
   {
@@ -128,7 +164,7 @@ export const dispositionsSeedData: DispositionSeed[] = [
     question:
       "Based on the customer's responses during the call, is the customer interested in the property, project, or real-estate opportunity being discussed or identified?",
     systemPrompt:
-      "Review the customer's responses throughout the conversation and classify their interest as exactly one of:\n\nINTERESTED\nNOT_INTERESTED\nUNCLEAR\n\nDo not classify the customer as INTERESTED merely because they answered the call or confirmed that they are generally looking to purchase property.\n\nDo not classify the customer as NOT_INTERESTED merely because they have an objection regarding price, location, configuration, timing, or another requirement. If they continue exploring the opportunity despite the objection, evaluate the overall conversation.\n\nUse the customer's final position when their interest changes during the call.\n\nReturn exactly one value only. Do not add explanations.",
+      "Classify the customer's interest based on the overall conversation, using only the customer's own statements, questions, responses, and explicitly confirmed actions.\nDo not classify interest based only on the agent's enthusiasm, sales pitch, project features, or suggested next steps.\nUse the customer's final position when their interest changes during the call.\nDo not treat a customer as INTERESTED merely because they:\n- answered the call,\n- confirmed they are generally looking to buy property,\n- listened to the agent,\n- gave basic demographic or requirement information,\n- or agreed to receive a callback without discussing the project meaningfully.\nDo not treat a customer as NOT_INTERESTED merely because they:\n- are busy,\n- ask to be called later,\n- raise an objection,\n- say the price is high,\n- prefer another location,\n- have a longer purchase timeline,\n- or need more information before deciding.\nIf the conversation does not provide enough evidence to confidently determine interest or disinterest, return UNCLEAR.\nReturn exactly one objective value.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -138,17 +174,17 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "INTERESTED",
         condition:
-          "Return INTERESTED when the customer clearly shows genuine interest in the property or project.",
+          'Return INTERESTED when the customer clearly shows genuine interest in the property or project being discussed. Evidence may include: - explicitly saying they are interested, - asking meaningful questions about price, availability, configuration, location, amenities, possession, payment plan, or similar details, - sharing requirements in the context of evaluating the project, - requesting project details or brochure, - agreeing to a consultant follow-up, - agreeing to or requesting a site visit, - indicating that the property or project may suit their requirement. Examples: - "Yes, this sounds interesting." - "What is the price for the 3 BHK?" - "Please send me the brochure." - "I want to visit the project this weekend." Do not return INTERESTED when there is only general property-buying intent without evidence of interest in the specific project or opportunity being discussed.',
       },
       {
         value: "NOT_INTERESTED",
         condition:
-          "Return NOT_INTERESTED when the customer clearly indicates that they are not interested in the property or project being discussed.",
+          'Return NOT_INTERESTED when the customer clearly indicates that they are not interested in the property, project, or opportunity being discussed. Examples: - "I\'m not interested." - "This project is not for me." - "I don\'t want this property." - "The location doesn\'t work for me, so I\'m not considering it." - "No, I\'m not interested in this project." Use the customer\'s final position if they initially engage but later clearly reject the opportunity. Do not return NOT_INTERESTED merely because the customer has an objection or mismatch if they still continue evaluating the opportunity.',
       },
       {
         value: "UNCLEAR",
         condition:
-          "Return UNCLEAR when there is not enough evidence to reliably determine interest.",
+          "Return UNCLEAR when there is not enough evidence to reliably classify the customer as interested or not interested. Examples: - customer says they are busy and asks for a callback, - conversation ends before meaningful discussion, - customer gives only short or neutral responses, - customer confirms they are generally looking for property but does not meaningfully engage with the specific project, - language or call-quality issues prevent interest from being established, - customer asks only a basic factual question without showing a clear positive or negative position. Use UNCLEAR only when the customer's interest genuinely cannot be determined from the conversation.",
       },
     ],
     description: null,
@@ -161,17 +197,31 @@ export const dispositionsSeedData: DispositionSeed[] = [
     name: "real_estate_preferred_property_type",
     displayName: "Property Type",
     tag: null,
-    question: "What type of property is the customer looking for?",
-    systemPrompt: null,
+    question:
+      "What property type or property types did the customer clearly state or confirm they are interested in?",
+    systemPrompt:
+      'Use only the customer\'s own statements or explicit confirmations.\nIf the customer\'s preferred property type clearly matches one or more configured objective values, return the corresponding objective value or values.\nThe configured objective values are:\nAPARTMENT\nVILLA\nPLOT\nUse the subjective output only when the customer clearly states a property type that is outside the configured objective list, but don\'t consider unit configuration as property type, example: 2 BHK, 3 BHK are not property type, its unit configuration.\nDo not use subjective text merely to add descriptions or extra characteristics to an objective property type if the underlying property type is still clearly Apartment, Villa, or Plot.\nFor example:\n- "Luxury apartment" → APARTMENT\n- "Gated community villa" → VILLA\n- "Residential plot" → PLOT\nIf the customer mentions multiple supported property types, return all applicable objective values.\nIf the customer mentions both a supported objective type and an unsupported type, preserve the unsupported requirement as subjective text as well, if your extraction architecture supports both outputs.\nDo not treat property types mentioned only by the agent, project description, campaign context, inventory, or examples as the customer\'s preference.\nDo not infer property type from configuration, budget, location, purchase purpose, or any other information.\nIf the customer changes or corrects their preference, use the final confirmed preference.\nIf the customer does not state or confirm any preferred property type, return no value.\nDo not guess.\n\nSubjective fallback rule\nReturn concise subjective text only when the customer clearly states a property type that does not map to APARTMENT, VILLA, or PLOT.\nExamples:\n- "I\'m looking for a row house." → Subjective: Row house\n- "I want an independent house." → Subjective: Independent house\n- "I\'m looking for a townhouse." → Subjective: Townhouse\n- "I need a farmhouse." → Subjective: Farmhouse\nIf the customer says:\n"Apartment or villa"\n\nreturn objective values:\nAPARTMENT, VILLA\n—not subjective text.\nAnd if the customer never mentions a property type, there should be no extraction at all.',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: true,
     subjectiveType: "text",
     subjectiveTypeConfig: null,
     objectiveOptions: [
-      { value: "APARTMENT", condition: "I'm looking for an apartment." },
-      { value: "VILLA", condition: "I prefer a villa." },
-      { value: "PLOT", condition: "I'm looking for a residential plot." },
+      {
+        value: "APARTMENT",
+        condition:
+          'Only when the customer clearly states or confirms that they are interested in an apartment, flat, or equivalent apartment-type residential unit. Examples: - "I\'m looking for an apartment." - "looking for a flat." - "Apartment"',
+      },
+      {
+        value: "VILLA",
+        condition:
+          'Only when the customer clearly states or confirms that they are interested in a villa. Examples: - "I\'m looking for a villa." - "I prefer villas." - "villa"',
+      },
+      {
+        value: "PLOT",
+        condition:
+          'Only when the customer clearly states or confirms that they are interested in purchasing a plot or land for residential/property purposes. Examples: - "I\'m looking for a plot." - "I want residential land." - "plots"',
+      },
     ],
     description: null,
     isActive: true,
@@ -184,31 +234,11 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Looking for Property",
     tag: null,
     question:
-      "Did the customer confirm that they are currently looking to buy a property?",
+      "Did the customer clearly confirm that they are currently looking to buy a property?",
     systemPrompt:
-      'Determine whether the customer confirms that they are currently looking for, considering, or planning to purchase a property.\n\nReturn TRUE when the customer gives a clear positive response indicating that they are looking to buy a property.\n\nExamples that should return TRUE:\n\n"Yes."\n"Yes, I\'m looking for a property."\n"I\'m looking for a flat."\n"We are planning to buy."\n"Yes, looking for a 3 BHK."\n"I\'m searching for a villa."\n"I am exploring some properties right now."\n"Maybe, I\'m looking at a few options." — if this clearly indicates they are actively considering a purchase.\n\nThe positive intent can be expressed at any point in the conversation; it does not have to be an exact response to the agent\'s initial question.\n\nDo not return TRUE merely because the customer discusses property prices, locations, configurations, or asks general questions. There must be reasonable evidence that the customer themselves is considering purchasing a property.\n\nDo not return TRUE when the customer clearly says:\n\nthey are not looking for a property,\nthey already completed their purchase and are no longer looking,\nthey are only a broker, agent, or channel partner and are not enquiring for their own property requirement,\nthe number belongs to the wrong person,\nthere is insufficient conversation to establish purchase intent.\n\nBecause this disposition is intended specifically to identify customers who positively confirmed property-purchase intent, if a positive confirmation is not present, leave the value empty.\n\nReturn only TRUE when applicable. Do not add explanations',
+      "Use only the customer's own statements or explicit confirmation.\nThis disposition is intended to identify customers who positively confirm that they are currently looking for, considering, or planning to purchase a property.\nThe positive confirmation may happen at any point during the conversation; it does not need to be an exact answer to the initial question.\nDo not return a value merely because the customer:\n- discusses property prices or locations,\n- asks a general real-estate question,\n- listens to the project introduction,\n- is a broker or channel partner,\n- already completed a property purchase and is no longer looking,\n- or because the agent assumes they are a property buyer.\nDo not infer purchase intent from budget, configuration, location preference, income, family situation, or any other contextual information.\nIf the customer initially appears interested but later clearly states that they are not actually looking to purchase a property, return no value.\nIf there is no clear positive confirmation that the customer is looking to buy a property, return no value.\nDo not return NO. Do not guess.",
     model: "gpt-4o-mini",
-    isSubjective: true,
-    isObjective: false,
-    subjectiveType: "boolean",
-    subjectiveTypeConfig: null,
-    objectiveOptions: null,
-    description: null,
-    isActive: true,
-    showInOverview: false,
-    showInInsights: true,
-  },
-  {
-    slug: "general-language-support-required",
-    name: "general_language_support_required",
-    displayName: "Language Issue",
-    tag: null,
-    question:
-      "Does the customer require support in a different language because they cannot comfortably continue the conversation in the language used by the agent?",
-    systemPrompt:
-      "Prompt\n\nDetermine whether the customer is unable or unwilling to continue the conversation because the agent does not support the customer's preferred language.\n\nReturn TRUE only when there is clear evidence of a language barrier, such as when the customer:\n\nasks the agent to speak in another language,\nsays they do not understand or are not comfortable with the language being used,\nrepeatedly responds in another language and is unable to meaningfully continue the conversation,\nindicates that they need someone who can speak their preferred language,\ncannot complete the conversation because the required language is not supported by the agent.\n\nDo not return TRUE merely because the customer:\n\nuses a few words or short phrases from another language,\nhas a non-English accent,\nswitches languages while still comfortably continuing the conversation,\nspeaks another language but still understands and communicates successfully with the agent.\n\nIf there is no clear language-support issue, leave the value empty.\n\nDo not return FALSE unless the system specifically requires a Boolean false value.\n\nReturn only TRUE when language support is required. Do not add explanations.",
-    model: "gpt-4o-mini",
-    isSubjective: true,
+    isSubjective: false,
     isObjective: true,
     subjectiveType: "boolean",
     subjectiveTypeConfig: null,
@@ -216,7 +246,12 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "YES",
         condition:
-          "Return YES only when there is clear evidence of a language barrier",
+          'Return YES only when the customer clearly confirms that they are currently looking for, considering, or planning to purchase a property. Examples: - "Yes, I\'m looking for a property." - "Yes, we\'re planning to buy." - "I\'m searching for a flat." - "I\'m looking for a villa." - "We are considering buying a property." - "Yes, I\'m checking a few projects." - Agent asks, "Are you looking to buy a property?" and the customer clearly says "Yes." Do not return YES when the customer only discusses real estate generally without confirming personal purchase intent. If the condition is not clearly met, return no value.',
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -231,7 +266,7 @@ export const dispositionsSeedData: DispositionSeed[] = [
     tag: null,
     question: "What are the most important facts and outcomes from this call?",
     systemPrompt:
-      "Write a concise 2 to 4 sentence factual summary of the conversation from the customer's perspective.\n\nInclude, when available:\n\nthe customer's overall interest, intent, or purpose,\nimportant requirements, preferences, or needs mentioned,\nkey questions asked by the customer,\nobjections, concerns, limitations, or mismatches,\nany important decisions or confirmations made during the conversation,\nthe final next action agreed,\nany requested follow-up, callback, appointment, information sharing, escalation, or human assistance,\nany specific follow-up date, time, or preferred communication channel mentioned.\n\nPrioritize information that would help a business or operations team quickly understand what happened during the call, what the customer needs, and what should happen next.\n\nOnly include information explicitly stated, clearly confirmed, or directly supported by the conversation. Do not infer, assume, exaggerate, or add information that was not discussed.\n\nDo not summarize every part of the conversation. Focus on meaningful customer requirements, decisions, objections, commitments, and outcomes.\n\nIf information is corrected or clarified during the conversation, include only the final confirmed value. Mention the clarification only when it is important to understanding the outcome.\n\nIf the customer mentions multiple acceptable options or preferences, preserve that meaning rather than reducing it to a single option.\n\nIf the conversation ends before a meaningful discussion is completed, briefly state the relevant reason or outcome, such as the customer requesting a callback, not being interested, wrong contact, language barrier, call disconnection, insufficient conversation, or no meaningful response.\n\nDo not include internal system codes, disposition names, extraction labels, or classifications. Describe the outcome naturally in plain language.\n\nReturn only the summary. Do not add headings, bullet points, labels, or explanations.",
+      '"Write a concise 2 to 4 sentence factual summary of the conversation from the customer\'s perspective.\n\nInclude, when available:\n\nthe customer\'s overall interest or intent,\nkey requirements or preferences mentioned,\npreferred location, property type, configuration, budget, or purchase timeline if relevant,\nimportant questions asked by the customer,\nobjections, concerns, or mismatches,\nany meaningful reason for lack of interest,\nthe final next action agreed,\nany callback, consultant follow-up, site visit, or information-sharing commitment,\nany specific follow-up timing mentioned.\n\nPrioritize information that would help a sales or operations team understand what happened in the call and what should happen next.\n\nOnly include information explicitly stated, clearly confirmed, or directly supported by the conversation. Do not infer, assume, exaggerate, or add information that was not discussed.\n\nDo not repeat every detail from the conversation. Focus only on meaningful customer requirements, decisions, objections, and outcomes.\n\nIf information is corrected or clarified during the call, include only the final confirmed value. Do not include earlier incorrect or misheard values unless the clarification itself is important to understanding the call.\n\nIf the customer uses multiple acceptable options, preserve that meaning. For example, if the customer is considering both 2 BHK and 3 BHK, do not reduce it to only one configuration.\n\nIf the conversation ends before meaningful qualification, briefly state what happened, such as:\n\ncustomer requested a callback,\ncustomer was not interested,\nwrong number,\nlanguage barrier,\ncall dropped,\ninsufficient conversation,\nno meaningful response.\n\nDo not describe agent behaviour unless it materially affected the outcome of the call.\n\nDo not include internal disposition codes such as HOT, WARM, CALLBACK_REQUESTED, or SHARE_DETAILS. Express the outcome naturally in plain language.\n\nReturn only the summary. Do not add headings, labels, bullet points, or explanations.\n\nOne small change from your old prompt: I would remove ""Mention if clarification was needed during the call"" as a general rule. That can make summaries noisy. I would only mention clarification when it materially mattered, such as a customer initially giving an unclear configuration or location and later confirming it. Otherwise, storing the final confirmed value is enough.\n\nFor example, a strong output would look like:\n\nThe customer is interested in a 3 BHK apartment around Whitefield with a budget of approximately ₹1.5 crore and is considering a purchase within six months. They asked about pricing and availability and requested the project details on WhatsApp. The customer also agreed to a consultant follow-up tomorrow evening.\n\nWhereas for a short unsuccessful call:\n\nThe customer said they were busy and requested a callback tomorrow afternoon. No property requirements or purchase preferences were discussed.\n\nThis version should work better as the human-readable master summary, while your other dispositions remain the structured data source for dashboards and analytics."',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: false,
@@ -251,7 +286,7 @@ export const dispositionsSeedData: DispositionSeed[] = [
     question:
       "What is the next action agreed with or requested by the customer at the during of the conversation?",
     systemPrompt:
-      'Identify the single most appropriate next action based on what the customer explicitly requested, agreed to, or clearly accepted during the conversation.\n\nReturn one of these values:\n\nCONSULTANT_FOLLOWUP\nSITE_VISIT\nCALL_BACK_LATER\nSHARE_DETAILS\nNONE\n\nIf multiple next actions are discussed, return the one that represents the strongest or most immediate agreed next step at the end of the conversation.\n\nFor example:\n\nCustomer asks for brochure first and then agrees to speak with a consultant → CONSULTANT_FOLLOWUP\nCustomer asks for details and confirms a site visit → SITE_VISIT\nCustomer only asks to receive information → SHARE_DETAILS\nCustomer says "call me tomorrow" → CALL_BACK_LATER\n\nDo not infer a next action merely because the agent offered it. The customer must request, agree to, or clearly accept the action.\n\nReturn the value only. Do not add explanations.',
+      "Determine the customer's final agreed next step based only on the customer's own statements or explicit confirmations.\nDo not treat an action suggested only by the agent as the customer's next action unless the customer clearly agrees to it.\nReturn exactly one objective value.\nUse the strongest and most specific agreed next action when multiple actions are discussed.\nIf the customer changes their mind during the call, use the final confirmed next action.\nDo not infer a next action from interest level alone.\n\nPriority when multiple actions occur\nWhen multiple actions are agreed, return the action that best represents the primary final next step.\nRecommended priority:\nSITE_VISIT → CONSULTANT_FOLLOWUP → CALL_BACK_LATER → SHARE_DETAILS → NONE\nFor example, if the customer asks for the brochure and then agrees to visit the site, return SITE_VISIT.\nIf they ask for details and also agree to a consultant call, return CONSULTANT_FOLLOWUP.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -261,27 +296,27 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "CONSULTANT_FOLLOWUP",
         condition:
-          "Return CONSULTANT_FOLLOWUP when the customer agrees to or requests a follow-up conversation with a sales consultant, advisor, relationship manager, or similar human representative.",
+          'Return CONSULTANT_FOLLOWUP when the customer explicitly requests or clearly agrees to a follow-up call from a human consultant, sales representative, advisor, relationship manager, or similar person. Examples: - "Ask your sales person to call me." - Agent asks whether a consultant can call, and the customer clearly agrees. - "I want to speak with someone from your sales team." Do not return this merely because the agent says someone will call without customer agreement.',
       },
       {
         value: "SITE_VISIT",
         condition:
-          "Return SITE_VISIT when the customer agrees to, requests, or clearly expresses intent to visit the project or property site.",
+          'Return SITE_VISIT when the customer explicitly requests, agrees to, or clearly confirms a visit to the property, project, sales office, model unit, or site. Examples: - "I can visit this weekend." - "Can I come and see the property?" - Customer agrees when the agent proposes a site visit. Do not return SITE_VISIT merely because the agent discusses or offers a visit.',
       },
       {
         value: "CALL_BACK_LATER",
         condition:
-          "Return CALL_BACK_LATER when the customer asks to be contacted again at a later time, including when they are busy now or request another call later.",
+          'Return CALL_BACK_LATER when the customer asks to continue the conversation through another phone call at a later time. Examples: - "Call me later." - "I\'m busy now, call tomorrow." - "Can you call me in the evening?" This refers to a general callback and does not necessarily mean a human consultant follow-up. If the customer specifically agrees to a consultant or sales-person callback, use CONSULTANT_FOLLOWUP instead.',
       },
       {
         value: "SHARE_DETAILS",
         condition:
-          "Return SHARE_DETAILS when the customer asks for project information, brochure, pricing, floor plans, location details, or other information to be sent to them.",
+          'Return SHARE_DETAILS when the customer asks for or clearly agrees to receive information such as project details, brochure, pricing, floor plans, availability, location information, or similar material. Examples: - "Send me the details." - "Please WhatsApp the brochure." - "Email me the price details." Do not return this merely because the agent says they will send information unless the customer requests or clearly accepts it.',
       },
       {
         value: "NONE",
         condition:
-          "Return NONE when no clear next action is agreed or requested.",
+          "Return NONE when there is enough conversation to determine that no follow-up action was requested or agreed. Examples: - Customer clearly says they are not interested and ends the call. - Customer discusses the project but declines further action. - Customer gives a clear response but no callback, consultant follow-up, site visit, or information sharing is requested or agreed. Do not use NONE when the call is too short, unclear, disconnected, or otherwise insufficient to determine whether there was a next action. In those cases, return no value rather than forcing NONE.",
       },
     ],
     description: null,
@@ -295,9 +330,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Share Details",
     tag: null,
     question:
-      "Which channel/medium did the customer request or agree to use for receiving or sharing the details?",
+      "Which communication channel did the customer clearly request or agree to use for receiving the details?",
     systemPrompt:
-      "Identify the communication channel through which the customer explicitly requested or agreed to receive information or details.\n\nReturn one of these values:\n\nWHATSAPP\nEMAIL\n\nDo not select a channel merely because the agent mentioned or offered it. The customer must explicitly request, choose, or clearly agree to that channel.\n\nIf both WhatsApp and email are clearly requested or accepted, return both values separated by a comma:\n\nWHATSAPP, EMAIL\n\nIf the customer asks for details but does not specify or agree to either WhatsApp or email, leave the value empty.\n\nDo not infer the preferred channel from the phone number, email address, previous communication, or any other context.\n\nReturn only the applicable value or values. Do not add explanations.",
+      "Use only the customer's own request or explicit confirmation.\nDo not select a channel merely because the agent suggested, mentioned, or normally uses that channel.\nReturn one or more objective values only when the customer clearly requests or agrees to receive the information through that channel.\nIf the customer requests both channels, return both applicable values.\nIf the customer asks to receive details but does not specify or confirm WhatsApp or email, return no value.\nDo not infer the channel from:\n- the customer's phone number,\n- presence of an email address,\n- previous communication,\n- campaign settings,\n- agent workflow,\n- or any other contextual information.\nDo not guess.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -307,12 +342,17 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "WHATSAPP",
         condition:
-          "Return WHATSAPP when the customer asks for or agrees to receive details through WhatsApp.",
+          'Return WHATSAPP only when the customer explicitly requests or clearly agrees to receive the details through WhatsApp. Examples: - "Send it on WhatsApp." - "You can WhatsApp me the brochure." - Agent asks, "Can I send the details on WhatsApp?" and the customer clearly agrees. Do not return WHATSAPP merely because the agent says they will send the details on WhatsApp without customer confirmation.',
       },
       {
         value: "EMAIL",
         condition:
-          "Return EMAIL when the customer asks for or agrees to receive details through email.",
+          'Return EMAIL only when the customer explicitly requests or clearly agrees to receive the details through email. Examples: - "Please email me the details." - "Send the brochure to my email." - Agent asks whether the details can be emailed and the customer clearly agrees. Do not return EMAIL merely because an email address is available or the agent mentions email.',
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -326,9 +366,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Location Preferences",
     tag: null,
     question:
-      "What location, area, neighbourhood, city, or region did the customer say they prefer for the property?",
+      "What location, area, neighbourhood, city, region, or proximity preference did the customer clearly state or confirm for the property?",
     systemPrompt:
-      'Capture the location preference personally stated or confirmed by the customer during the conversation.\n\nPreserve the customer\'s meaningful location requirement as dynamic text. This may include:\n\nlocality or neighbourhood,\nnearby landmark,\nroad or corridor,\ncity,\nregion,\npreferred side of the city,\nmultiple acceptable locations,\ndistance or proximity requirement when relevant.\n\nExamples:\n\n"I am looking near Whitefield" → Whitefield\n"Somewhere around Sarjapur Road" → Sarjapur Road\n"Either Kanakapura Road or Bannerghatta Road" → Kanakapura Road or Bannerghatta Road\n"I want something close to Electronic City, within around 5 km" → Within around 5 km of Electronic City\n"South Bangalore is preferred" → South Bangalore\n"Anywhere between Mysore Road and Kengeri is fine" → Mysore Road to Kengeri area\n\nCapture only the customer\'s preference. Do not return the project location merely because the agent mentioned it.\n\nIf the customer changes or corrects their preferred location during the call, capture the final confirmed preference.\n\nIf the customer mentions multiple acceptable locations, preserve all relevant locations in one concise text value.\n\nIf the customer does not state or confirm any location preference, return NOT_SHARED.\n\nReturn only the extracted location text or NOT_SHARED. Do not add explanations.',
+      'Use only the customer\'s own stated or explicitly confirmed location preference.\nCapture the customer\'s preference as concise dynamic text for insights.\nDo not treat the project location, nearby landmarks, connectivity points, or other locations mentioned only by the agent as the customer\'s preference.\nDo not infer a preferred location from:\n- the customer\'s current residence,\n- workplace,\n- native place,\n- phone number,\n- project location,\n- travel route,\n- budget,\n- property type,\n- or any other contextual information.\nCapture any meaningful location-related preference, including:\n- specific locality or neighbourhood,\n- road or corridor,\n- city or region,\n- preferred side of a city,\n- multiple acceptable locations,\n- proximity to a landmark, workplace, school, airport, metro, or other place,\n- preferred distance or travel-time requirement.\nIf the customer mentions multiple acceptable locations, preserve all of them.\nIf the customer changes or corrects their location preference during the conversation, capture the final confirmed preference.\nIf the customer does not state or confirm any location preference, return no value.\nDo not return NOT_SHARED, UNKNOWN, or any inferred location.\nDo not guess.\nExamples\n- "I\'m looking around Whitefield." → Whitefield\n- "Sarjapur Road or HSR would work." → Sarjapur Road or HSR\n- "I want something close to Electronic City." → Close to Electronic City\n- "Within 5 km of the airport." → Within 5 km of the airport\n- "South Bangalore is preferred." → South Bangalore\n- "Anywhere between Kengeri and Mysore Road is fine." → Kengeri to Mysore Road area\n- Customer only says "I\'m not interested." → no extraction\n- Agent says "The project is in Devanahalli" and customer says "Okay." → no extraction\nReturn only the concise location preference text when one is clearly provided.',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: false,
@@ -346,9 +386,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Looking at Different Location",
     tag: null,
     question:
-      "Is the customer looking for a property in a different location from the project being discussed?",
+      "does customer prefer a different location from the project being discussed?",
     systemPrompt:
-      "Determine whether the customer clearly indicates that they are looking for a property in a different location, area, neighbourhood, city, or region from the project location being discussed in the call.\n\nReturn YES when the customer:\n\nexplicitly says they prefer another location,\nsays the current project location is not suitable and mentions or implies another location,\nasks specifically for properties in a different area,\nindicates that they are only interested in another location.\n\nDo not return YES merely because the customer:\n\nasks about connectivity, nearby areas, or landmarks,\ncompares the project location with another area,\nasks whether there are projects in other locations without expressing a preference,\nsays the current location is acceptable but also mentions another area,\ndoes not mention any location preference.\n\nIf there is no clear evidence that the customer prefers a different location, leave the value empty.\n\nReturn only YES when applicable. Do not return an explanation.",
+      "Only use the customer's own statements or explicit confirmations.\nThe project location mentioned by the agent is not evidence of the customer's preferred location.\nDo not infer a location mismatch merely because another location appears in the conversation.\nIf there is no clear evidence of a different preferred location, return as null with low confidence.\n\nReturn YES when the customer:\n\nexplicitly says they prefer another location,\nsays the current project location is not suitable and mentions or implies another location,\nindicates that they are only interested in another location.\n\nDo not return YES merely because the customer:\n\nasks about connectivity, nearby areas, or landmarks,\ncompares the project location with another area,\ndoes not mention or discussed any location preference.\n\nIf there is no clear evidence that the customer prefers a different location, leave the value null.\nReturn only YES when applicable. Do not return an explanation.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -358,7 +398,12 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "YES",
         condition:
-          "Return YES when the customer:  explicitly says they prefer another location, says the current project location is not suitable and mentions or implies another location, asks specifically for properties in a different area, indicates that they are only interested in another location.",
+          "Only when the customer explicitly states or clearly confirms that they prefer a different location from the project being discussed. Examples include saying i am not looking at this location, and naming another preferred area, or clearly asking for properties in another location. Otherwise return no value.",
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -371,9 +416,10 @@ export const dispositionsSeedData: DispositionSeed[] = [
     name: "real_estate_purchase_timeline",
     displayName: "Purchase Timeline",
     tag: null,
-    question: "When is the customer planning to purchase a property?",
+    question:
+      "When is the customer planning or expecting to purchase a property?",
     systemPrompt:
-      'Identify the customer\'s stated or clearly indicated timeline for purchasing a property.\n\nReturn one of these values:\n\nWITHIN_3_MONTHS\nWITHIN_6_MONTHS\nWITHIN_1_YEAR\nAFTER_1_YEAR\nFLEXIBLE\nNOT_DECIDED\n\nUse the customer\'s own stated timeframe or intent.\n\nClassification guidance:\n\nExamples:\n\n"I want to buy in the next two months" → WITHIN_3_MONTHS\n"Maybe around four or five months from now" → WITHIN_6_MONTHS\n"Sometime later this year" → WITHIN_1_YEAR, if the timing clearly falls within one year\n"Probably after one or two years" → AFTER_1_YEAR\n"No fixed timeline, if I find something good I can proceed" → FLEXIBLE\n"I haven\'t thought about when to buy yet" → NOT_DECIDED\n\nUse only the customer\'s purchase timeline. Do not infer it from project possession dates, payment plans, loan availability, agent suggestions, or other contextual information.\n\nIf the customer changes or clarifies the timeline during the conversation, use the final confirmed timeline.\n\nReturn the value only. Do not add explanations.',
+      "Use only the customer's own stated or explicitly confirmed purchase timeline.\nDo not infer the timeline from:\n- project possession date,\n- payment plan,\n- loan approval,\n- agent suggestions,\n- campaign context,\n- urgency created by the agent,\n- or any other information not confirmed by the customer.\nMap the customer's stated timeline to the closest applicable objective value only when the meaning is clear.\nIf the customer changes or corrects their timeline during the conversation, use the final confirmed timeline.\nIf the customer gives an unclear or conflicting timeframe that cannot be reliably mapped, return no value rather than guessing.\nIf no purchase timeline is stated or confirmed at all, return no value.\nThis distinction is important:\n- No timeline mentioned → no extraction\n- Customer explicitly says they haven't decided → NOT_DECIDED\n- Customer says timing is open/flexible → FLEXIBLE",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -383,31 +429,37 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "WITHIN_3_MONTHS",
         condition:
-          "customer plans to purchase immediately, within a few weeks, or within 3 months.",
+          'Return WITHIN_3_MONTHS when the customer clearly indicates they are planning to purchase immediately or within the next 3 months. Examples: - "I want to buy this month." - "Within 2 months." - "Probably in the next few weeks." - "As soon as possible."',
       },
       {
         value: "WITHIN_6_MONTHS",
         condition:
-          "customer plans to purchase after 3 months but within 6 months.",
+          'Return WITHIN_6_MONTHS when the customer clearly indicates a purchase timeline of more than 3 months but within 6 months. Examples: - "Around 4 months." - "Maybe in 5 or 6 months." - "Within the next half year."',
       },
       {
         value: "WITHIN_1_YEAR",
-        condition: "Customer said within a year or by end of year",
+        condition:
+          'Return WITHIN_1_YEAR when the customer clearly indicates a purchase timeline of more than 6 months but within 1 year. Examples: - "Within this year." - "Maybe in 8 or 10 months." - "Before next year." Only use this when the timing clearly falls within one year.',
       },
       {
         value: "AFTER_1_YEAR",
         condition:
-          "customer clearly says the purchase is planned more than one year later.",
+          'Return AFTER_1_YEAR when the customer clearly indicates that the purchase is planned more than one year from now. Examples: - "Maybe after 1.5 years." - "Probably in 2 years." - "Not before next year."',
       },
       {
         value: "FLEXIBLE",
         condition:
-          "customer is open to purchasing whenever the right property or opportunity is found and does not have a fixed timeline.",
+          'Return FLEXIBLE when the customer clearly indicates that they do not have a fixed timeline and are willing to purchase whenever the right property or opportunity is found. Examples: - "No fixed timeline, if I find something good I can proceed." - "Anytime is fine if the property suits me." - "I\'m flexible on timing." Do not use FLEXIBLE merely because the customer is unsure.',
       },
       {
         value: "NOT_DECIDED",
         condition:
-          "customer is unsure, has not decided, or does not provide enough information to determine a purchase timeline.",
+          'When the customer explicitly says they have not decided the purchase timeline yet or are unsure when they will buy. Examples: - "I haven\'t decided yet." - "Not sure when I\'ll buy." - "Still thinking about it." Do not return NOT_DECIDED simply because the customer did not mention a timeline.',
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -422,7 +474,7 @@ export const dispositionsSeedData: DispositionSeed[] = [
     tag: null,
     question: "What property configuration is the customer looking for?",
     systemPrompt:
-      'Identify the property configuration or configurations the customer personally stated or confirmed they are interested in.\n\nWhen the customer\'s requirement clearly matches one of the standard configurations below, return the corresponding objective key:\n\nSTUDIO\n1_BHK\n2_BHK\n3_BHK\n4_BHK\n5_BHK\n6_BHK\n\nTreat obvious spoken or transcription variants such as 3BHK, 3 BHK, three BHK, three bedroom, or three-bedroom flat as the same standard configuration.\n\nIf the customer mentions multiple standard configurations, return all applicable objective keys separated by a comma.\n\nExamples:\n\n"I\'m looking for 2 or 3 BHK." → 2_BHK, 3_BHK\n"Either a 4 bedroom or 5 bedroom home." → 4_BHK, 5_BHK\n"I need a studio apartment." → STUDIO\n\nIf the customer gives additional meaningful requirements beyond the standard configuration, preserve the full requirement as dynamic text instead of reducing it to only the objective key.\n\nExamples:\n\n"I need a 3 BHK with office room." → 3 BHK with office room\n"Looking for a 4 BHK duplex." → 4 BHK duplex\n"I need a 6 BHK duplex villa." → 6 BHK duplex villa\n\nIf the customer mentions a configuration outside the standard list, preserve it as dynamic text.\n\nExamples:\n\n"I need a 7 BHK." → 7 BHK\n"I\'m looking for a 2.5 BHK." → 2.5 BHK\n"I need a 3 bedroom plus study." → 3 bedroom plus study\n\nUse only the customer\'s stated or confirmed requirement. Do not extract a configuration merely because the agent mentions that it is available.\n\nIf the customer changes or corrects their requirement, capture the final confirmed requirement.\n\nDo not infer the configuration from budget, family size, project inventory, or any other information.\n\nIf no configuration is stated or confirmed, return NOT_SHARED.\n\nReturn only the extracted value. Do not add explanations.',
+      'Use only the customer\'s own statements or explicit confirmations.\nDo not treat configurations mentioned only by the agent, project description, campaign context, inventory, examples, or available units as the customer\'s preference.\nDo not infer a configuration from the customer\'s budget, family size, property type, purchase purpose, or any other information.\nIf the customer clearly states or confirms a preferred configuration that matches one or more configured objective values, return the corresponding objective key or keys.\nIf the customer\'s requirement does not fit the configured objective values, or includes meaningful additional detail that should be preserved, return the customer\'s requirement as concise subjective text.\nIf the customer mentions multiple acceptable configurations, preserve all clearly confirmed options.\nIf the customer changes or corrects their preference during the conversation, use the final confirmed requirement.\nIf the customer does not state or confirm any preferred configuration, return no value. Do not return NOT_SHARED, UNKNOWN, or the closest available option.\nDo not guess.\n\nSubjective fallback behavior\nUse subjective text when the customer\'s requirement is outside the configured objective values or contains important extra detail.\nExamples:\n- "I\'m looking for a 2 or 3 BHK." → Subjective: 2_BHK, 3_BHK\n- "I need a 3 BHK with an office room." → Subjective: 3 BHK with office room\n- "I\'m looking for a 6 BHK duplex." → Subjective: 6 BHK duplex\n- "I need a 2.5 BHK." → Subjective: 2.5 BHK\n- "Either a 3 BHK villa or 4 BHK apartment." → Subjective: 3 BHK villa or 4 BHK apartment\nOne subtle rule I would keep: if the customer simply says "3 BHK", use the objective value 3_BHK. If they say "3 BHK with study room", prefer subjective text so the extra requirement is not lost.\nAnd if the customer only says "Not interested", this disposition should produce no extraction at all.',
     model: "gpt-4o-mini",
     isSubjective: true,
     isObjective: true,
@@ -432,31 +484,42 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "STUDIO",
         condition:
-          "studio, studio apartment, 1 RK, one-room kitchen, or equivalent studio-style unit.",
+          "Return STUDIO only when the customer clearly states or confirms that they are looking for a studio, studio apartment, 1 RK, or an equivalent studio-type configuration",
       },
       {
         value: "1_BHK",
-        condition: "1 BHK, one BHK, one-bedroom apartment/flat/home.",
+        condition:
+          "Return 1_BHK only when the customer clearly states or confirms that they are looking for a 1 BHK, one-bedroom, or equivalent configuration.",
       },
       {
         value: "2_BHK",
-        condition: "2 BHK, two BHK, two-bedroom apartment/flat/home.",
+        condition:
+          "Return 2_BHK only when the customer clearly states or confirms that they are looking for a 2 BHK, two-bedroom, or equivalent configuration.",
       },
       {
         value: "3_BHK",
-        condition: "3 BHK, three BHK, three-bedroom apartment/flat/home.",
+        condition:
+          "Return 3_BHK only when the customer clearly states or confirms that they are looking for a 3 BHK, three-bedroom, or equivalent configuration.",
       },
       {
         value: "4_BHK",
-        condition: "4 BHK, four BHK, four-bedroom apartment/flat/home.",
+        condition:
+          "Return 4_BHK only when the customer clearly states or confirms that they are looking for a 4 BHK, four-bedroom, or equivalent configuration.",
       },
       {
         value: "5_BHK",
-        condition: "5 BHK, five BHK, five-bedroom apartment/flat/home.",
+        condition:
+          "Return 5_BHK only when the customer clearly states or confirms that they are looking for a 5 BHK, five-bedroom, or equivalent configuration.",
       },
       {
         value: "6_BHK",
-        condition: "6 BHK, six BHK, six-bedroom apartment/flat/home.",
+        condition:
+          "Return 6_BHK only when the customer clearly states or confirms that they are looking for a 6 BHK, six-bedroom, or equivalent configuration.",
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -470,9 +533,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Purchase Purpose",
     tag: null,
     question:
-      "What is the customer's primary purpose for purchasing the property?",
+      "Did the customer state or confirm whether they are buying the property for personal use, investment, or both?",
     systemPrompt:
-      'Identify the customer\'s stated or clearly confirmed purpose for purchasing the property.\n\nReturn exactly one of these values:\n\nOWN_USE\nINVESTMENT\nBOTH\n\nExamples:\n\n"I\'m buying this for my family to stay." → OWN_USE\n"This is for my own residence." → OWN_USE\n"I\'m looking mainly for investment." → INVESTMENT\n"I want something with good rental returns." → INVESTMENT\n"I\'m buying now as an investment, but I may use it myself later." → BOTH\n"I\'m considering it for both living and investment." → BOTH\n\nUse only the customer\'s own stated or confirmed purchase purpose.\n\nDo not infer the purpose from:\n\nthe customer\'s budget,\nproperty type,\nlocation,\nprofession or income,\nwhether they currently own another property,\nexpected rental yield,\ncomments made only by the agent.\n\nIf the customer changes or clarifies their purpose during the conversation, use the final confirmed purpose.\n\nIf the customer does not state or confirm a purchase purpose, return NOT_SHARED.\n\nReturn only the value. Do not add explanations.',
+      '"Identify the purpose of purchase explicitly stated or clearly confirmed by the customer.\n\nReturn one of these values:\n\nOWN_USE\nINVESTMENT\nBOTH\nNOT_SHARED\n\nOWN_USE - the customer says they are buying for themselves, their family, or to live in.\nINVESTMENT - the customer says they are buying as an investment, for rental income, or for resale/appreciation.\nBOTH - the customer says they are buying for both personal use and investment.\nNOT_SHARED - the customer does not explicitly state or confirm a purchase purpose.\n\nIf the customer does not explicitly state a purchase purpose, return NOT_SHARED. Never default to OWN_USE.\n\nExamples:\n\n""I want to buy a property."" -> NOT_SHARED\n""I\'m looking for a 2 BHK."" -> NOT_SHARED\n""I\'m not looking for property."" -> NOT_SHARED\n""I\'m buying it as an investment."" -> INVESTMENT\n""I\'m buying it for my family."" -> OWN_USE\n""Both investment and personal use."" -> BOTH\n\nDo not infer the purpose from configuration, budget, location, property type, or family size. Do not select a value merely because the agent suggested it; the customer must accept or confirm it.\n\nIf the customer changes or corrects the purpose during the call, return the final confirmed purpose.\n\nReturn only the value. Do not add explanations."',
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -482,17 +545,22 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "OWN_USE",
         condition:
-          "the customer is purchasing primarily to live in the property themselves or for their family.",
+          "Return when the customer says they are buying for themselves, their family, or to live in the property.",
       },
       {
         value: "INVESTMENT",
         condition:
-          "the customer is purchasing primarily as an investment, for capital appreciation, rental income, resale, or another investment purpose.",
+          "Return when the customer says they are buying for investment, rental income, resale, or appreciation.",
       },
       {
         value: "BOTH",
         condition:
-          "the customer clearly indicates that the property is intended for both personal use and investment purposes, or they are genuinely considering both.",
+          "Return when the customer explicitly states they are buying for both personal use and investment.",
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -508,37 +576,74 @@ export const dispositionsSeedData: DispositionSeed[] = [
     question:
       "What budget range did the customer personally state or indicate for the property purchase?",
     systemPrompt:
-      'Identify the customer\'s own stated property budget or budget range.\n\nUse the predefined values when the customer\'s requirement clearly fits one of these ranges:\n\nBELOW_1_CR\n1_TO_2_CR\n2_TO_3_CR\nABOVE_3_CR\n\nIf the customer gives a more specific, approximate, multiple, flexible, or otherwise meaningful budget that should not be reduced to a broad predefined range, preserve the customer\'s requirement as dynamic text.\n\nExamples:\n\n"My budget is around 80 lakhs" → BELOW_1_CR\n"I can spend between 1.2 and 1.5 crore" → 1_TO_2_CR\n"Around 2.5 crore" → 2_TO_3_CR\n"Anything above 3 crore is fine" → ABOVE_3_CR\n"Around 1 crore, maybe slightly more if the project is good" → Around 1 crore, flexible slightly above\n"I am looking between 90 lakhs and 1.1 crore" → 90 lakhs to 1.1 crore\n"For an apartment I can spend 1.5 crore, but for a villa up to 2.5 crore" → Apartment: 1.5 crore; Villa: up to 2.5 crore\n\nCapture only the budget stated or confirmed by the customer.\n\nDo not use the project price, unit price, offer price, EMI amount, loan eligibility, or any pricing information mentioned only by the agent as the customer\'s budget.\n\nIf the customer initially states one budget and later changes, corrects, or expands it, capture the final confirmed requirement.\n\nDo not infer a budget from the customer\'s profession, income, preferred configuration, location, or other information.\n\nIf the customer says the budget is flexible without providing any amount, return FLEXIBLE.\n\nIf the customer does not state or confirm any budget information, return NOT_SHARED.\n\nReturn only the extracted value. Do not add explanations.',
+      'Use only the customer\'s own stated or explicitly confirmed budget.\nDo not treat project pricing, unit pricing, offers, payment plans, EMI amounts, loan eligibility, or budget figures mentioned only by the agent as the customer\'s budget.\nDo not infer the customer\'s budget from their preferred configuration, property type, profession, income, location, purchase purpose, or any other information.\nIf the customer\'s stated budget clearly falls within one of the configured objective ranges, return the corresponding objective key.\nIf the customer\'s budget crosses multiple configured ranges, is highly specific, flexible around a threshold, conditional, or otherwise contains meaningful detail that would be lost by forcing it into one predefined range, return concise subjective text instead.\nIf the customer changes or corrects their budget during the conversation, use the final confirmed budget.\nIf the customer does not state or confirm any budget, return no value. Do not return NOT_SHARED, UNKNOWN, or infer the closest range.\nDo not guess.\n\nSubjective fallback behavior\nUse subjective text when the customer\'s budget contains important nuance that should not be lost.\nExamples:\n- "Around 90 lakhs to 1.1 crore." → Subjective: ₹90 lakh to ₹1.1 crore\n- "Around 1 crore, but I can stretch slightly." → Subjective: Around ₹1 crore, flexible slightly above\n- "For an apartment, up to 1.5 crore; for a villa, up to 2.5 crore." → Subjective: Apartment up to ₹1.5 crore; villa up to ₹2.5 crore\n- "Budget depends on the location." → Subjective: Budget depends on location\nAnd if the customer only says something like "Send me the details" or "I\'m not interested", this disposition should return no extraction.',
     model: "gpt-4o-mini",
     isSubjective: true,
-    isObjective: false,
+    isObjective: true,
     subjectiveType: "text",
     subjectiveTypeConfig: null,
-    objectiveOptions: null,
+    objectiveOptions: [
+      {
+        value: "BELOW_1_CR",
+        condition:
+          'Only when the customer clearly states or confirms a budget below ₹1 crore. Examples: - "Around 70 lakhs." - "My budget is 90 lakhs." - "Below one crore."',
+      },
+      {
+        value: "1_TO_2_CR",
+        condition:
+          'Only when the customer\'s clearly stated budget falls from ₹1 crore up to ₹2 crore. Examples: - "Around 1.2 crore." - "My budget is 1.5 crore." - "Between 1 and 2 crore."',
+      },
+      {
+        value: "2_TO_3_CR",
+        condition:
+          'Only when the customer\'s clearly stated budget falls above ₹2 crore and up to ₹3 crore. Examples: - "Around 2.5 crore." - "My budget is 2.8 crore." - "Between 2 and 3 crore."',
+      },
+      {
+        value: "ABOVE_3_CR",
+        condition:
+          'Only when the customer clearly states or confirms a budget above ₹3 crore. Examples: - "Around 4 crore." - "Anything above 3 crore is fine." - "My budget can go up to 5 crore."',
+      },
+      {
+        value: "FLEXIBLE",
+        condition:
+          "Return when the customer explicitly says their budget is flexible, negotiable, or not strictly limited to a specific range.",
+      },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't recieve any other objective values or customer didn't share or discuss about this disposition",
+      },
+    ],
     description: null,
     isActive: true,
-    showInOverview: false,
-    showInInsights: false,
+    showInOverview: true,
+    showInInsights: true,
   },
   {
     slug: "general-do-not-call",
     name: "general_do_not_call",
     displayName: "Do Not Call",
     tag: null,
-    question: "Did the customer request not to be contacted again?",
+    question:
+      "Did the customer clearly ask not to be contacted or called again?",
     systemPrompt:
-      "Determine whether the customer explicitly asked not to receive further calls or contact.\n\nReturn YES if the customer said or clearly indicated any of the following:\n\nDo not call again.\nRemove my number from your list.\nStop contacting me.\nI do not want any further calls.\nDo not contact me again through this number.\nAny other clear request to stop future communication.\n\nReturn NO if the customer did not make such a request.\n\nDo not return YES merely because the customer:\n\nis not interested,\nis busy,\nasks to be called later,\ndisconnects the call,\nrefuses the current offer,\nsays they already purchased elsewhere.\n\nOnly classify as YES when there is a clear request to stop future contact.\n\nReturn the value only: YES or NO.",
+      "Use only the customer's own statements or explicit confirmation.\nThis disposition is intended to capture clear requests to stop future contact.\nReturn a value only when the customer explicitly asks not to be called or contacted again, asks to be removed from the calling/contact list, or otherwise clearly refuses future contact.\nDo not return a value merely because the customer:\n- says they are not interested,\n- is busy,\n- asks to be called later,\n- ends the current call,\n- rejects the current offer,\n- says they already purchased elsewhere,\n- or does not want to continue the current conversation.\nA rejection of the current opportunity is not automatically a Do Not Call request.\nIf the customer initially asks not to be contacted but later clearly withdraws that request, use the final confirmed intent.\nIf there is no clear request to stop future contact, return no value.\nDo not return NO. Do not guess.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
-    subjectiveType: "text",
+    subjectiveType: "boolean",
     subjectiveTypeConfig: null,
     objectiveOptions: [
       {
         value: "YES",
-        condition: "Customer explicitly requested no further calls",
+        condition:
+          'Return YES only when the customer clearly requests that future calls or contact should stop. Examples: - "Do not call me again." - "Please remove my number from your list." - "Stop calling me." - "I don\'t want any more calls." - "Don\'t contact me again." - "Please delete my number." - "No more calls from your company." Do not return YES for statements such as: - "I\'m not interested." - "Not now." - "I\'m busy." - "Call me later." - "I already bought a property." If the condition is not clearly met, return no value.',
       },
-      { value: "NO", condition: "No such request was made" },
+      {
+        value: "NO_DATA",
+        condition:
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
+      },
     ],
     description: null,
     isActive: true,
@@ -550,18 +655,55 @@ export const dispositionsSeedData: DispositionSeed[] = [
     name: "general_customer_language",
     displayName: "Customer Language",
     tag: null,
-    question: "What primary language was the customer speaking?",
+    question:
+      "What language is the customer primarily speaking during the call?",
     systemPrompt:
-      "Identify the primary language spoken by the customer during the conversation. Determine the language based only on the customer's speech, not the agent's speech. Return one of: ENGLISH, MALAYALAM, HINDI, KANNADA, TAMIL, TELUGU, OTHER, NON_ENGLISH_UNIDENTIFIED, NOT_DETERMINED. If the customer predominantly speaks one identifiable language, return that language. If the customer repeatedly speaks a non-English language but it cannot be reliably identified, return NON_ENGLISH_UNIDENTIFIED. If there is insufficient customer speech to determine the language, return NOT_DETERMINED. Return the value only.",
+      "Identify the customer's language from the customer's own speech only. Do not use the agent's language, campaign language, customer name, location, accent, or any other contextual information as evidence.\nReturn a value only when the customer's speech provides enough evidence to identify the language reliably.\nIf the customer uses more than one language, select the language they predominantly use during the meaningful part of the conversation.\nIf the customer speaks a non-English language but the specific language cannot be identified reliably after multiple usable utterances, return NON_ENGLISH_UNIDENTIFIED.\nIf there is not enough customer speech to determine the language at all, return NOT_DETERMINED.\nDo not guess.",
     model: "gpt-4o-mini",
-    isSubjective: true,
+    isSubjective: false,
     isObjective: true,
     subjectiveType: "text",
     subjectiveTypeConfig: null,
     objectiveOptions: [
       {
-        value: "Non-English",
-        condition: "Customer needed a language other than English",
+        value: "ENGLISH",
+        condition:
+          "Return English when the customer predominantly communicates in English during the conversation. Do not return English merely because the customer uses a few English words or phrases.",
+      },
+      {
+        value: "MALAYALAM",
+        condition:
+          "Return Malayalam when the customer predominantly communicates in Malayalam.",
+      },
+      {
+        value: "HINDI",
+        condition:
+          "Return Hindi when the customer predominantly communicates in Hindi.",
+      },
+      {
+        value: "KANNADA",
+        condition:
+          "Return Kannada when the customer predominantly communicates in Kannada.",
+      },
+      {
+        value: "TAMIL",
+        condition:
+          "Return Tamil when the customer predominantly communicates in Tamil.",
+      },
+      {
+        value: "TELUGU",
+        condition:
+          "Return Telugu when the customer predominantly communicates in Telugu.",
+      },
+      {
+        value: "NON_ENGLISH_UNIDENTIFIED",
+        condition:
+          "Return NON_ENGLISH_UNIDENTIFIED when there is clear evidence that the customer is speaking a non-English language, but the specific language cannot be identified reliably. Use this only when there are multiple meaningful customer utterances indicating a non-English language. Do not use this when there is too little speech to determine whether the language is English or non-English.",
+      },
+      {
+        value: "NOT_DETERMINED",
+        condition:
+          "Return NOT_DETERMINED when there is insufficient usable customer speech to reliably identify the language. Examples include: - only a very short response, - mostly silence, - call disconnects almost immediately, - speech is too unclear or incomplete to identify the language. Do not use NOT_DETERMINED when it is clear that the customer is speaking a non-English language but the exact language is unknown; use NON_ENGLISH_UNIDENTIFIED instead.",
       },
     ],
     description: null,
@@ -575,9 +717,9 @@ export const dispositionsSeedData: DispositionSeed[] = [
     displayName: "Lead Temperature",
     tag: null,
     question:
-      "What is the lead temperature of the customer based on their overall buying intent, urgency, engagement, and agreed next action?",
+      "What is the customer's lead temperature based on their overall buying intent, engagement, purchase readiness, and next-step commitment?",
     systemPrompt:
-      "Review the entire conversation and classify the customer into exactly one of the following lead temperatures:\n\n\nUse the customer's final state when their behaviour changes during the conversation.\n\nDo not classify a lead as HOT only because they asked many questions. There must also be strong buying intent, urgency, or a meaningful next step.\n\nDo not classify a lead as WARM simply because they said \"yes\" to looking for a property. There should be genuine engagement or qualification.\n\nDo not classify a lead as COLD when the customer is merely busy, asks for a callback, or has a long purchase timeline. Use NURTURE when future buying interest still exists.\n\nIf both HOT and WARM indicators are present, prefer HOT only when there is a clear near-term action or strong purchase urgency.\n\nIf both WARM and NURTURE indicators are present, use the customer's purchase readiness and timeline as the deciding factor:\n\nactively evaluating with reasonable near-term intent → WARM\ngenuine interest but clearly not ready soon → NURTURE\n\nReturn exactly one value only. Do not add explanations.",
+      "Review the entire conversation and classify the customer based on their overall real-estate buying intent and readiness.\nUse only the customer's own statements, responses, requirements, questions, objections, timeline, and agreed actions.\nDo not classify based only on:\n- the agent's sales pitch,\n- project attractiveness,\n- agent enthusiasm,\n- one isolated statement,\n- or the fact that the customer answered the call.\nUse the customer's final state when their interest or intent changes during the conversation.\nLead temperature should reflect both interest and readiness to act.\nDo not classify a customer as HOT merely because they asked questions or requested details.\nDo not classify a customer as COLD merely because they are busy, have a long timeline, ask for a callback, or raise objections.\nUse NOT_APPLICABLE when there is not enough meaningful prospect interaction to assign a real lead temperature.\nReturn exactly one objective value.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -587,27 +729,27 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "WARM",
         condition:
-          "Return WARM when the customer has genuine interest and is actively evaluating the opportunity, but is not yet ready for an immediate purchase decision.",
+          'Return WARM when the customer shows genuine interest and is actively evaluating the opportunity but is not yet ready for an immediate decision. Typical indicators: - shares meaningful requirements, - asks relevant project questions, - requests details, - agrees to follow-up, - compares the project with other options, - has a realistic medium-term purchase intention. Examples: - "Send me the brochure, I\'m comparing a few projects." - "I\'m looking for a 3 BHK around this budget." - "I may buy within six months."',
       },
       {
         value: "HOT",
         condition:
-          "Return HOT when the customer shows strong and actionable buying intent and is ready for an immediate or near-term next step.",
+          'Return HOT when the customer shows strong buying intent and is ready for an immediate or near-term action. Typical indicators: - agrees to or requests a site visit, - wants to speak with a consultant soon, - has a near-term purchase timeline, - discusses specific requirements and wants to proceed, - asks about booking, availability, negotiation, payment, or immediate next steps. Examples: - "I want to visit this weekend." - "Ask your consultant to call me today." - "I\'m planning to buy within two months."',
       },
       {
         value: "NURTURE",
         condition:
-          "Return NURTURE when the customer has some genuine property-buying interest but is not ready to act in the near future.",
+          'Return NURTURE when the customer has genuine future buying potential but is not ready to act in the near term. Typical indicators: - purchase planned after a long period, - early-stage research, - waiting for finances, family decision, job change, market conditions, or another future event, - interested but not currently ready to proceed. Examples: - "Maybe next year." - "I\'m just exploring for now." - "I\'m interested, but I won\'t buy anytime soon." Use NURTURE instead of COLD when future purchase intent still exists.',
       },
       {
         value: "COLD",
         condition:
-          "Return COLD when the customer is a genuine prospect but clearly has little or no interest in the current opportunity.",
+          'Return COLD when the customer is a genuine prospect but clearly has little or no interest in the current opportunity. Typical indicators: - clearly says they are not interested, - rejects the project, - says the opportunity is unsuitable and does not want to continue, - does not want further information or follow-up. Examples: - "I\'m not interested." - "This project is not for me." - "The location doesn\'t work for me, so I\'m not considering it." Do not use COLD for calls that never reached a genuine prospect.',
       },
       {
-        value: "NOT_APPLICABLE",
+        value: "NO_DATA",
         condition:
-          "Return NOT_APPLICABLE when lead temperature cannot meaningfully be assigned because the call did not involve a valid or qualifiable prospect.",
+          "Only when we didn't receive any other objective values or customer didn't share or discuss about this disposition",
       },
     ],
     description: null,
@@ -620,9 +762,10 @@ export const dispositionsSeedData: DispositionSeed[] = [
     name: "real_estate_final_outcome",
     displayName: "Final Outcome",
     tag: null,
-    question: "What was the final outcome of the call?",
+    question:
+      "What single outcome best represents how the call ultimately ended?",
     systemPrompt:
-      "Review the entire conversation and determine the single most appropriate final outcome based on how the call ended and what the customer ultimately requested, agreed to, or clearly indicated.\n\nWhen more than one outcome applies, return the outcome that best represents the final and most meaningful state of the call.\n\nUse this priority guidance when needed:\n\nDO_NOT_CALL\ntakes priority over any other outcome if the customer explicitly requests no further contact.\n\nSITE_VISIT\ntakes priority when a site visit is actually agreed, even if details will also be shared.\n\nCONSULTANT_FOLLOWUP\ntakes priority when a consultant follow-up is the agreed next step.\n\nCALLBACK_REQUESTED\ntakes priority when the customer asks to continue the conversation at another time and no stronger next action is agreed.\n\nSHARE_DETAILS\napplies when sharing information is the primary agreed next step.\n\nDo not classify based only on what the agent proposed. Base the outcome on the customer's final response and the actual state of the conversation.\n\nReturn one value only. Do not add explanations.",
+      "Review the entire conversation and return exactly one final outcome that best represents the customer's final state or the actual reason the call ended.\nUse the customer's own statements, explicit confirmations, and the actual call interaction. Do not classify based only on actions proposed by the agent.\nThe final outcome is different from other dispositions such as customer interest, lead temperature, callback required, or consultant follow-up. Those may capture additional facts, while this disposition should identify the single primary outcome of the call.\nWhen several events occur during the conversation, use the most meaningful final or committed outcome, not every action that happened.\nFor example:\n- customer requests details and then confirms a site visit → SITE_VISIT\n- customer requests details and then agrees to a consultant call → CONSULTANT_FOLLOWUP\n- customer initially appears interested but finally says they are not interested → NOT_INTERESTED\n- customer says they are not interested and explicitly asks never to be called again → DO_NOT_CALL\nDo not force a positive sales outcome when the conversation does not support one.\nUse technical/contact outcomes such as NO_RESPONSE, WRONG_NUMBER, LANGUAGE_ISSUE, CALL_DROPPED, or INSUFFICIENT_CONVERSATION only when they accurately describe why a meaningful sales outcome could not be established.\nUse OTHER only when there is a clear meaningful outcome but none of the configured values reasonably represents it.\nReturn exactly one configured objective value.\n\nRecommended outcome priority\nWhen multiple outcomes genuinely apply, I would make the extraction follow this precedence logic:\nDO_NOT_CALL → SITE_VISIT → CONSULTANT_FOLLOWUP → CALLBACK_REQUESTED → SHARE_DETAILS → INTERESTED_NO_ACTION\nThe special-status outcomes such as ALREADY_PURCHASED, BROKER_OR_CHANNEL_PARTNER, WRONG_NUMBER, and LANGUAGE_ISSUE should be used whenever they are the actual reason the lead cannot proceed.",
     model: "gpt-4o-mini",
     isSubjective: false,
     isObjective: true,
@@ -632,77 +775,77 @@ export const dispositionsSeedData: DispositionSeed[] = [
       {
         value: "SITE_VISIT",
         condition:
-          "customer agrees to or requests a property/project site visit.",
+          'Return SITE_VISIT when the customer clearly requests, agrees to, or confirms a visit to the property, project, sales office, model unit, or site. Examples: - "I\'ll visit this Saturday." - "Can I come and see the project?" - Customer accepts a proposed site visit. If details or a consultant conversation are also part of arranging the visit, use SITE_VISIT when the site visit is the primary committed next step.',
       },
       {
         value: "CONSULTANT_FOLLOWUP",
         condition:
-          "customer wants or agrees to speak with a sales consultant, advisor, relationship manager, or other human representative.",
+          'Return CONSULTANT_FOLLOWUP when the customer clearly requests or agrees to a follow-up call from a human consultant, sales representative, relationship manager, advisor, or equivalent person. Examples: - "Ask your sales person to call me." - "I\'d like to speak with a consultant." - Customer accepts the agent\'s offer to arrange a consultant call. If details are also being shared but the customer has agreed to a consultant conversation, use CONSULTANT_FOLLOWUP.',
       },
       {
         value: "CALLBACK_REQUESTED",
         condition:
-          "customer asks to be called again later, including when they are busy or unavailable at the moment.",
+          'Return CALLBACK_REQUESTED when the customer\'s primary outcome is a request to be called again later. Examples: - "I\'m busy. Call me this evening." - "Call me tomorrow." - "Can you call back later?" Use this for a general callback. If the customer specifically agrees to a human consultant or sales representative call, use CONSULTANT_FOLLOWUP instead.',
       },
       {
         value: "SHARE_DETAILS",
         condition:
-          "customer asks for project information such as brochure, pricing, floor plan, location, availability, or similar details to be sent.",
+          'Return SHARE_DETAILS when the primary agreed next action is to send the customer information such as a brochure, pricing, floor plans, availability, project details, location details, or similar material. Examples: - "Send me the brochure on WhatsApp." - "Please email the price details." - Customer agrees to receive project information and no stronger next action is agreed. Do not return SHARE_DETAILS merely because the agent says they will send information without customer agreement. If a stronger action such as a site visit or consultant follow-up is subsequently agreed, use that stronger final outcome instead.',
       },
       {
         value: "INTERESTED_NO_ACTION",
         condition:
-          "customer shows genuine interest, but no specific next action is agreed or requested.",
+          "Return INTERESTED_NO_ACTION when the customer clearly demonstrates genuine interest in the project or opportunity, but no specific next action is requested or agreed. Examples: - customer meaningfully discusses their requirements and expresses interest but says they will think about it, - customer says the project sounds interesting but does not request details, callback, consultant follow-up, or site visit. Do not use this simply because the customer is generally looking for property. There must be clear interest in the opportunity being discussed.",
       },
       {
         value: "NOT_INTERESTED",
         condition:
-          "customer clearly indicates that they are not interested in the property, project, or offer.",
+          'Return NOT_INTERESTED when the customer clearly states or demonstrates that they are not interested in the project or opportunity being discussed. Examples: - "I\'m not interested." - "This project isn\'t suitable for me." - "No thanks, I\'m not considering this." Do not use NOT_INTERESTED merely because the customer is busy, has an objection, prefers another location, or has a long purchase timeline while remaining interested. If the customer also explicitly asks not to receive future contact, use DO_NOT_CALL instead.',
       },
       {
         value: "DO_NOT_CALL",
         condition:
-          "customer explicitly asks not to be called or contacted again, or asks to be removed from the contact list.",
+          'Return DO_NOT_CALL when the customer explicitly asks not to be called or contacted again, or asks to be removed from the contact list. Examples: - "Don\'t call me again." - "Remove my number." - "Stop contacting me." This takes precedence over NOT_INTERESTED.',
       },
       {
         value: "ALREADY_PURCHASED",
         condition:
-          "customer says they have already purchased or finalized another property and are therefore no longer looking.",
+          'Return ALREADY_PURCHASED when the customer clearly states that they have already purchased or finalized another property and are no longer looking because of that purchase. Examples: - "I\'ve already bought a flat." - "We finalized another property last month." Do not use this merely because the customer already owns another property. The statement should indicate that an existing/recent purchase makes the current opportunity no longer relevant.',
       },
       {
         value: "BROKER_OR_CHANNEL_PARTNER",
         condition:
-          "the person identifies themselves as a broker, agent, channel partner, or intermediary rather than an end customer/prospect.",
+          "Return BROKER_OR_CHANNEL_PARTNER when the person identifies themselves as a broker, property agent, channel partner, intermediary, or similar industry professional rather than the intended end-customer prospect. Do not infer this from the person's questions or real-estate knowledge alone.",
       },
       {
         value: "LANGUAGE_ISSUE",
         condition:
-          "the conversation cannot meaningfully continue because the customer requires a language that the agent cannot support.",
+          "Return LANGUAGE_ISSUE when the conversation cannot meaningfully continue or be qualified because the customer requires a language that the agent cannot support. Examples: - customer asks for another language and the agent cannot continue in it, - meaningful communication repeatedly fails because of the language barrier. Do not use this merely because the customer speaks another language if the conversation successfully continues.",
       },
       {
         value: "WRONG_NUMBER",
         condition:
-          "the person says the number is incorrect, the intended customer is not associated with the number, or the agent clearly reached the wrong person.",
+          'Return WRONG_NUMBER when there is clear evidence that the call reached the wrong person or an incorrect/unrelated phone number. Examples: - "You have the wrong number." - "There is nobody by that name here." - recipient clearly confirms they are unrelated to the intended customer. Do not use this simply because the recipient is not interested.',
       },
       {
         value: "NO_RESPONSE",
         condition:
-          "the call connects but no meaningful customer response is received, such as silence, unanswered interaction, or no usable customer speech.",
+          "Return NO_RESPONSE when the call connects but there is no meaningful customer response. Examples: - silence throughout the interaction, - repeated agent attempts receive no usable response, - no meaningful customer speech is captured. Do not use NO_RESPONSE if the customer actually begins a meaningful conversation before the call disconnects.",
       },
       {
         value: "CALL_DROPPED",
         condition:
-          "a meaningful conversation begins but the call disconnects or ends unexpectedly before a clear outcome is reached.",
+          'Return CALL_DROPPED when a meaningful conversation has started but the call unexpectedly disconnects before a clear final outcome is reached. Do not use this just because the customer intentionally ends the call after clearly communicating an outcome. Example: Customer: "I\'m not interested." disconnects → NOT_INTERESTED, not CALL_DROPPED. Customer is discussing requirements and the connection suddenly ends before any outcome is established → CALL_DROPPED.',
       },
       {
         value: "INSUFFICIENT_CONVERSATION",
         condition:
-          "there is some interaction, but not enough meaningful conversation to determine the customer's intent or a valid outcome.",
+          "When some customer interaction occurs, but there is not enough meaningful conversation to determine another valid final outcome. Examples: - customer gives one or two ambiguous responses and ends the call, - extremely short interaction without clear intent, - conversation starts but never progresses enough to establish interest or another outcome. Distinguish this from: - no meaningful customer response at all → NO_RESPONSE - meaningful conversation interrupted unexpectedly → CALL_DROPPED",
       },
       {
         value: "OTHER",
         condition:
-          "The conversation has a clear outcome that does not reasonably fit any of the defined values.",
+          "Only when the conversation has a clear and meaningful final outcome that does not reasonably match any other configured final-outcome value. Do not use OTHER simply because the outcome is unclear. If there is insufficient information, use INSUFFICIENT_CONVERSATION.",
       },
     ],
     description: null,

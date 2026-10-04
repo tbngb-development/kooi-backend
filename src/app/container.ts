@@ -191,7 +191,7 @@ export function buildContainer(): AppContainer {
       logger,
     }),
     leads: buildLeadModule(),
-    calls: buildCallModule(),
+    calls: buildCallModule({ logger }),
     dashboard: buildDashboardModule(),
     users: buildUserModule({ passwordService }),
     webhooks: buildWebhookModule({
