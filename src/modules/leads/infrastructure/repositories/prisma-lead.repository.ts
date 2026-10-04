@@ -135,12 +135,6 @@ export class PrismaLeadRepository implements LeadRepository {
             callAnalysis: {
               select: {
                 id: true,
-                disposition: true,
-                leadTemperature: true,
-                preferredConfiguration: true,
-                budgetRange: true,
-                purchaseTimeline: true,
-                preferredNextAction: true,
               },
             },
           },
