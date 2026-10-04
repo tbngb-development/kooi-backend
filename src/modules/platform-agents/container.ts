@@ -26,16 +26,24 @@ import { SyncExtractionsToBolnaUseCase } from "./application/use-cases/sync-extr
 
 import { AdminPlatformAgentController } from "./presentation/admin-platform-agent.controller";
 import { UpdatePlatformAgentVariablesUseCase } from "./application/use-cases/update_platform-agent-variables";
+import type { Logger } from "../../shared/logging/logger.interface";
+
+export interface PlatformAgentModuleDeps {
+  logger?: Logger;
+}
 
 export interface PlatformAgentModule {
   adminController: AdminPlatformAgentController;
 }
-export function buildPlatformAgentModule(): PlatformAgentModule {
+
+export function buildPlatformAgentModule(
+  deps?: PlatformAgentModuleDeps,
+): PlatformAgentModule {
   const repository = new PrismaPlatformAgentRepository();
   const extractionRepository = new PrismaExtractionRepository();
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
-
   const templateProvider = new BolnaTemplateProviderImpl(apiKeyRepository);
+  const log = deps?.logger?.child({ module: "platform-agent" });
 
   // Injected with apiKeyRepository for workspace isolation
   const bolnaExtractionProvider = new BolnaExtractionProviderImpl(
@@ -79,6 +87,7 @@ export function buildPlatformAgentModule(): PlatformAgentModule {
         repository,
         extractionRepository,
         bolnaExtractionSyncService,
+        log,
       ),
       new UpdatePlatformAgentVariablesUseCase(repository),
     ),
