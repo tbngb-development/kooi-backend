@@ -217,9 +217,11 @@ export class SyncExtractionsToBolnaUseCase {
           model: full.model,
           isSubjective: full.isSubjective,
           isObjective: full.isObjective,
-          subjectiveType: full.subjectiveType,
-          subjectiveTypeConfig: full.subjectiveTypeConfig,
-          objectiveOptions: full.objectiveOptions,
+          subjectiveType: full.isSubjective ? full.subjectiveType : null,
+          subjectiveTypeConfig: full.isSubjective
+            ? full.subjectiveTypeConfig
+            : null,
+          objectiveOptions: full.isObjective ? full.objectiveOptions : null,
         };
 
         try {
