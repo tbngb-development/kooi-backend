@@ -16,12 +16,14 @@ import type { DeleteBatchUseCase } from "../application/use-cases/delete-batch.u
 import type { GetBatchStatsUseCase } from "../application/use-cases/get-batch-stats.use-case";
 import type { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batch-upload.use-case";
 import type { ArchiveBatchUseCase } from "../application/use-cases/archive-batch.use-case";
+import type { EnqueueManualBatchUploadUseCase } from "../application/use-cases/enqueue-manual-batch-upload.use-case";
 
 export class TenantBatchController {
   constructor(
     private readonly listBatchesUseCase: ListBatchesUseCase,
     private readonly getBatchUseCase: GetBatchUseCase,
     private readonly enqueueBatchUploadUseCase: EnqueueBatchUploadUseCase,
+    private readonly enqueueManualBatchUploadUseCase: EnqueueManualBatchUploadUseCase,
     private readonly runBatchUseCase: RunBatchUseCase,
     private readonly scheduleBatchUseCase: ScheduleBatchUseCase,
     private readonly stopBatchUseCase: StopBatchUseCase,
@@ -109,12 +111,10 @@ export class TenantBatchController {
       const termsVersion = req.body.termsVersion as string | undefined;
 
       if (!termsAccepted) {
-        res
-          .status(HttpStatus.BAD_REQUEST)
-          .json({
-            success: false,
-            error: "You must accept the Terms & Conditions to upload leads.",
-          });
+        res.status(HttpStatus.BAD_REQUEST).json({
+          success: false,
+          error: "You must accept the Terms & Conditions to upload leads.",
+        });
         return;
       }
       if (!termsVersion || termsVersion.trim().length === 0) {
@@ -134,6 +134,32 @@ export class TenantBatchController {
         runImmediately,
         termsAccepted: true,
         termsVersion: termsVersion.trim(),
+      });
+
+      sendSuccess(res, data, HttpStatus.CREATED);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createManual = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "campaignId");
+
+      const data = await this.enqueueManualBatchUploadUseCase.execute({
+        tenantId,
+        campaignId,
+        leads: req.body.leads,
+        retryConfig: req.body.retryConfig,
+        scheduledAt: req.body.scheduledAt,
+        runImmediately: req.body.runImmediately,
+        termsAccepted: req.body.termsAccepted,
+        termsVersion: req.body.termsVersion,
       });
 
       sendSuccess(res, data, HttpStatus.CREATED);

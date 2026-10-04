@@ -23,6 +23,7 @@ import { EnqueueBatchUploadUseCase } from "./application/use-cases/enqueue-batch
 import { BatchProcessingWorker } from "./infrastructure/jobs/batch-processing.worker";
 import { ArchiveBatchUseCase } from "./application/use-cases/archive-batch.use-case";
 import { RestoreBatchUseCase } from "./application/use-cases/restore-batch.use-case";
+import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue-manual-batch-upload.use-case";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -60,6 +61,11 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     log,
   );
 
+  const enqueueManualBatchUpload = new EnqueueManualBatchUploadUseCase(
+    enqueueBatchUpload,
+    log,
+  );
+
   const worker = new BatchProcessingWorker(
     batchRepo,
     campaignRepo,
@@ -75,6 +81,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       listBatches,
       getBatch,
       enqueueBatchUpload,
+      enqueueManualBatchUpload,
       new RunBatchUseCase(
         batchRepo,
         campaignRepo,

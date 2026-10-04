@@ -16,8 +16,8 @@ import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/ge
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
 import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
+import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
-
 export interface CampaignModuleDeps {
   logger: Logger;
 }
@@ -40,17 +40,27 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const getCampaign = new GetCampaignUseCase(campaignRepo);
   const getCampaignStats = new GetCampaignStatsUseCase(campaignRepo);
 
+  const parseLeads = new ParseLeadsUseCase(
+    campaignRepo,
+    batchRepo,
+    planRepo,
+    walletRepo,
+    log,
+  );
+
   const extractVariables = new ExtractCampaignVariablesUseCase(
     campaignRepo,
     log,
   );
-  
+
   const getExtractionOverview = new GetCampaignExtractionOverviewUseCase(
     campaignRepo,
   );
   const getExtractionInsights = new GetCampaignExtractionInsightsUseCase(
     campaignRepo,
   );
+
+  const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
 
   // Clean dependency injection: repository owns atomic database access
   const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
@@ -67,6 +77,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       getExtractionOverview,
       getExtractionInsights,
       archiveCampaign,
+      parseManualLeads,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,
