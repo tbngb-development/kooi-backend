@@ -273,6 +273,7 @@ export class BatchProcessingWorker {
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batchId}.csv`,
         retryConfig: retryConfig ?? undefined,
+        fromPhoneNumbers: ["+918064261668"],
         webhookUrl,
       });
 
