@@ -1,11 +1,12 @@
 import { z } from "zod";
 
-
 const requiredVariableSchema = z.object({
   name: z.string().min(1).max(50),
   label: z.string().min(1).max(100),
   required: z.boolean().default(true),
   isEditable: z.boolean().default(true),
+  inputType: z.enum(["text", "textarea"]).default("text"),
+  defaultValue: z.string().max(2000).nullable().default(null),
 });
 
 const genderSchema = z.enum(["MALE", "FEMALE"]);

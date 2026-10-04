@@ -359,11 +359,15 @@ export interface ExtractionResultConfig {
   disposition: string;
 }
 
+export type VariableInputType = "text" | "textarea";
+
 export interface RequiredVariable {
   name: string;
   label: string;
   required: boolean;
   isEditable: boolean;
+  inputType?: VariableInputType;
+  defaultValue?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
