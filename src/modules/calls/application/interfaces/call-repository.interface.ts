@@ -137,4 +137,24 @@ export interface CallRepository {
   softDelete(callId: string): Promise<void>;
 
   restore(callId: string): Promise<void>;
+
+  findInboundLeadContext(
+    agentId: string,
+    phone: string,
+  ): Promise<{
+    lead: {
+      id: string;
+      name: string | null;
+      phone: string;
+      email: string | null;
+      company: string | null;
+      metadata: Record<string, unknown> | null;
+    };
+    campaign: {
+      id: string;
+      name: string;
+      variables: Record<string, string> | null;
+      tenantId: string;
+    };
+  } | null>;
 }

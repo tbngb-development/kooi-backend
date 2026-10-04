@@ -31,6 +31,7 @@ import { buildAdminUserRoutes } from "../modules/users/presentation/admin-user.r
 import { buildAdminPlatformAgentRoutes } from "../modules/platform-agents/presentation/admin-platform-agent.routes";
 import { buildAdminExtractionRoutes } from "../modules/extractions/presentation/admin-extraction.routes";
 import { buildAdminIndustryPackRoutes } from "../modules/industry-packs/presentation/admin-industry-pack.routes";
+import { buildInboundCallerMatchRoutes } from "../modules/calls/presentation/inbound-caller-match.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -84,6 +85,11 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+  router.use(
+    "/v1/public/inbound",
+    buildInboundCallerMatchRoutes(c.calls.inboundCallerController),
+  );
+  
   router.use(
     "/v1/dashboard",
     buildTenantDashboardRoutes(c.dashboard.tenantController, c.authenticate),
