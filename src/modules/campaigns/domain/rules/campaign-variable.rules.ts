@@ -13,7 +13,9 @@ export interface VariableValidationResult {
  * - Variables with `isEditable: false` are stripped from user input (their
  *   values come from the agent's prompt/config, not the campaign).
  * - Variables with `required: true` AND `isEditable: true` must be present
- *   and non-empty in the user input.
+ *   and non-empty in the user input, OR have a `defaultValue` defined.
+ * - When a required editable variable is missing/empty but has a non-empty
+ *   `defaultValue`, the default is applied automatically.
  * - Variables with `required: false` are optional and kept if provided.
  */
 export function validateAndCleanVariables(
@@ -39,13 +41,22 @@ export function validateAndCleanVariables(
     }
   }
 
-  // Check required + editable variables
+  // Check required + editable variables, applying defaultValue fallback
   const missing: string[] = [];
   for (const def of definitions) {
     if (def.required && def.isEditable) {
       const value = cleaned[def.name];
-      if (!value || value.trim() === "") {
-        missing.push(def.name);
+      const isEmpty = !value || value.trim() === "";
+
+      if (isEmpty) {
+        const defaultValue = def.defaultValue?.trim() ?? "";
+
+        if (defaultValue) {
+          // Apply default value silently
+          cleaned[def.name] = defaultValue;
+        } else {
+          missing.push(def.name);
+        }
       }
     }
   }
