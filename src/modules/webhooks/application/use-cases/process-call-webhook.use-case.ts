@@ -525,6 +525,7 @@ export class ProcessCallWebhookUseCase {
           entry.localDispositionSlug &&
           entry.objective !== null &&
           entry.objective.trim() !== "" &&
+          entry.objective !== "NO_DATA" &&
           entry.confidence &&
           entry.confidence > 0.5
         ) {
@@ -607,6 +608,7 @@ export class ProcessCallWebhookUseCase {
           entry.localDispositionSlug &&
           entry.subjective !== null &&
           entry.subjective.trim() !== "" &&
+          entry.subjective !== "NO_DATA" &&
           entry.confidence &&
           entry.confidence > 0.5
         ) {
