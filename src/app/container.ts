@@ -131,7 +131,7 @@ export function buildContainer(): AppContainer {
     bolnaClientFactory,
   });
 
-  const platformAgentModule = buildPlatformAgentModule();
+  const platformAgentModule = buildPlatformAgentModule({ logger });
 
   // shared repository
   const rechargeRepository = new PrismaRechargeRepository();
@@ -198,7 +198,7 @@ export function buildContainer(): AppContainer {
       debitWalletForCall: wallet.useCases.debitWalletForCall,
       logger,
     }),
-    platformAgents: buildPlatformAgentModule(),
+    platformAgents: platformAgentModule,
     extractions: buildExtractionModule(),
     industryPacks: buildIndustryPackModule(),
 
