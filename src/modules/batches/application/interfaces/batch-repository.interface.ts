@@ -1,5 +1,3 @@
-// modules/batches/application/interfaces/batch-repository.interface.ts
-
 import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import type {
@@ -22,13 +20,17 @@ export interface PendingLeadRow {
 }
 
 export interface BatchRepository {
-  list(tenantId: string, campaignId: string): Promise<BatchListItem[]>;
+  list(
+    tenantId: string,
+    campaignId: string,
+    isDeleted?: boolean,
+  ): Promise<BatchListItem[]>;
 
   findById(
     tenantId: string,
     campaignId: string,
     batchId: string,
-    options?: { includeDeleted?: boolean },
+    options?: { isDeleted?: boolean }, // Unified pattern
   ): Promise<LeadBatchEntityData | null>;
 
   findByIdWithCounts(

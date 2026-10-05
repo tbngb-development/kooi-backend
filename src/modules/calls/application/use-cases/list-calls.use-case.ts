@@ -22,7 +22,7 @@ export class ListCallsUseCase {
       page: input.page,
       limit: input.limit,
       dynamicFilters: input.dynamicFilters,
-      includeDeleted: input.includeDeleted,
+      isDeleted: input.isDeleted,
     });
   }
 }

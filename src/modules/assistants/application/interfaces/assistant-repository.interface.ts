@@ -6,6 +6,7 @@ export interface RegisterAssistantData {
   name: string;
   config: Record<string, unknown>;
 }
+
 export interface AssistantWithPlatformAgent {
   id: string;
   name: string;
@@ -19,9 +20,9 @@ export interface AssistantWithPlatformAgent {
     bolnaId: string;
     name: string;
     slug: string;
-    systemPrompt: string | null; // Already present
+    systemPrompt: string | null;
     welcomeMessage: string | null;
-    requiredVariables: RequiredVariable[] | null; // [ADD]
+    requiredVariables: RequiredVariable[] | null;
     description: string | null;
     category: string | null;
     isFeatured: boolean;
@@ -35,11 +36,7 @@ export interface AssistantWithPlatformAgent {
 
 export interface AssistantRepository {
   list(tenantId: string): Promise<AssistantEntityData[]>;
-  findById(
-    tenantId: string,
-    id: string,
-    options?: { includeDeleted?: boolean },
-  ): Promise<AssistantEntityData | null>;
+  findById(tenantId: string, id: string): Promise<AssistantEntityData | null>;
   findByIdWithPlatformAgent(
     tenantId: string,
     id: string,

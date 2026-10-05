@@ -17,6 +17,7 @@ import type { GetCampaignExtractionOverviewUseCase } from "../application/use-ca
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
+import type { ListCampaignsQuery } from "./campaign.schema";
 
 export class TenantCampaignController {
   constructor(
@@ -43,18 +44,14 @@ export class TenantCampaignController {
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
-      const data = await this.listCampaignsUseCase.execute({
+      const query = req.query as unknown as ListCampaignsQuery;
+
+      const payload = {
         tenantId,
-        search: req.query.search as string | undefined,
-        status: req.query.status as string | undefined,
-        dateFrom: req.query.dateFrom as string | undefined,
-        dateTo: req.query.dateTo as string | undefined,
-        sortBy: req.query.sortBy as "createdAt" | "totalLeads" | undefined,
-        sortOrder: req.query.sortOrder as "asc" | "desc" | undefined,
-        page: req.query.page ? Number(req.query.page) : undefined,
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
-        includeDeleted: req.query.includeDeleted === "true",
-      });
+        ...query,
+      };
+
+      const data = await this.listCampaignsUseCase.execute(payload);
       sendSuccess(res, data);
     } catch (err) {
       next(err);

@@ -91,13 +91,11 @@ export interface CampaignRepository {
   findById(
     tenantId: string,
     campaignId: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<CampaignEntityData | null>;
 
   findByIdWithRelations(
     tenantId: string,
     campaignId: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<
     | (CampaignEntityData & {
         assistant: {

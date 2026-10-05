@@ -30,7 +30,7 @@ export class PrismaCallRepository implements CallRepository {
       sortOrder = "desc",
       page = 1,
       limit = 15,
-      includeDeleted = false,
+      isDeleted = false,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -39,9 +39,7 @@ export class PrismaCallRepository implements CallRepository {
 
     const where: Prisma.CallWhereInput = { tenantId };
 
-    if (!includeDeleted) {
-      where.isDeleted = false;
-    }
+    where.isDeleted = isDeleted ?? false;
 
     if (campaignId) where.campaignId = campaignId;
     if (leadId) where.leadId = leadId;
@@ -202,16 +200,15 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
+  // Update the findById method inside the class to support explicit isDeleted filtering
   async findById(
     tenantId: string,
     id: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<DetailedCallResult | null> {
     const call = await prisma.call.findFirst({
       where: {
         id,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
       },
       include: {
         lead: {

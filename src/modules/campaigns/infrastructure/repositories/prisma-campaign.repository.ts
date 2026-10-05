@@ -36,7 +36,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       sortOrder = "desc",
       page = 1,
       limit = 20,
-      includeDeleted = false,
+      isDeleted = false,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -47,9 +47,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     const where: Prisma.CampaignWhereInput = { tenantId };
 
     // Apply exclusion filters for soft deleted data unless explicitly requested
-    if (!includeDeleted) {
-      where.isDeleted = false;
-    }
+    where.isDeleted = isDeleted;
 
     if (search && search.trim() !== "") {
       const term = search.trim();
@@ -86,7 +84,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         include: {
           assistant: { select: { id: true, name: true } },
           batches: {
-            where: !includeDeleted ? { status: { not: "FAILED" } } : undefined, // respect soft-delete contextual filtering
+            where: { isDeleted },
             select: {
               id: true,
               status: true,
@@ -100,7 +98,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         take: limitNum,
       }),
       prisma.campaign.count({ where }),
-      this.getTenantCampaignOverview(tenantId, includeDeleted),
+      this.getTenantCampaignOverview(tenantId, isDeleted),
     ]);
 
     return {
@@ -118,11 +116,11 @@ export class PrismaCampaignRepository implements CampaignRepository {
   // Helper isolation for tenant aggregated overview metrics
   private async getTenantCampaignOverview(
     tenantId: string,
-    includeDeleted: boolean,
+    isDeleted: boolean,
   ): Promise<CampaignListOverview> {
     const baseWhere = {
       tenantId,
-      ...(!includeDeleted && { isDeleted: false }),
+      isDeleted,
     };
 
     const [totalCampaigns, totalLeads, totalCalls, runningCampaigns] =
@@ -193,13 +191,11 @@ export class PrismaCampaignRepository implements CampaignRepository {
   async findById(
     tenantId: string,
     campaignId: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<CampaignEntityData | null> {
     const campaign = await prisma.campaign.findFirst({
       where: {
         id: campaignId,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
       },
     });
 
@@ -211,7 +207,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
   async findByIdWithRelations(
     tenantId: string,
     campaignId: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<
     | (CampaignEntityData & {
         assistant: {
@@ -227,7 +222,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       where: {
         id: campaignId,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
       },
       include: {
         assistant: {

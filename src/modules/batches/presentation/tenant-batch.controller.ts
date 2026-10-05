@@ -44,9 +44,11 @@ export class TenantBatchController {
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
+      const isDeleted = req.query.isDeleted === "true";
       const data = await this.listBatchesUseCase.execute(
         tenantId,
         param(req, "campaignId"),
+        isDeleted,
       );
       sendSuccess(res, data);
     } catch (err) {

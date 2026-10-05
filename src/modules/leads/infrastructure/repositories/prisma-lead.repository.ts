@@ -23,6 +23,7 @@ export class PrismaLeadRepository implements LeadRepository {
       sortOrder = "desc",
       page = 1,
       limit = 20,
+      isDeleted,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -56,10 +57,7 @@ export class PrismaLeadRepository implements LeadRepository {
         { phone: { contains: search } },
       ];
     }
-
-    if (!filters.includeDeleted) {
-      where.isDeleted = false;
-    }
+    where.isDeleted = isDeleted ?? false;
 
     // Explicit sorting fields whitelist checking
     const validSortFields = ["createdAt", "name", "updatedAt"];
@@ -109,16 +107,15 @@ export class PrismaLeadRepository implements LeadRepository {
     };
   }
 
+  // Update the findById method inside the class to support explicit isDeleted filtering
   async findById(
     tenantId: string,
     id: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<DetailedLeadResult | null> {
     const lead = await prisma.lead.findFirst({
       where: {
         id,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
       },
       include: {
         campaign: {

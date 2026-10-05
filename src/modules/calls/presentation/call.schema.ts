@@ -38,7 +38,7 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
   dynamicFilters: dynamicFiltersSchema,
-  includeDeleted: z
+  isDeleted: z
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),

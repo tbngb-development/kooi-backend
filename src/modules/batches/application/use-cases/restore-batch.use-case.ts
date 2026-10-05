@@ -1,5 +1,3 @@
-// modules/batches/application/use-cases/restore-batch.use-case.ts
-
 import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import {
   BatchNotFoundError,
@@ -14,8 +12,9 @@ export class RestoreBatchUseCase {
     campaignId: string,
     batchId: string,
   ): Promise<void> {
+    // Explicitly check for isDeleted: true
     const raw = await this.batchRepo.findById(tenantId, campaignId, batchId, {
-      includeDeleted: true,
+      isDeleted: true,
     });
     if (!raw) throw new BatchNotFoundError();
     if (!raw.isDeleted) throw new BatchNotDeletedError();

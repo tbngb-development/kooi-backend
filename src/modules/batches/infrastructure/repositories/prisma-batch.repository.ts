@@ -21,9 +21,13 @@ import {
 } from "@prisma/client";
 
 export class PrismaBatchRepository implements BatchRepository {
-  async list(tenantId: string, campaignId: string): Promise<BatchListItem[]> {
+  async list(
+    tenantId: string,
+    campaignId: string,
+    isDeleted: boolean = false,
+  ): Promise<BatchListItem[]> {
     const batches = await prisma.leadBatch.findMany({
-      where: { campaignId, tenantId, isDeleted: false },
+      where: { campaignId, tenantId, isDeleted },
       orderBy: { createdAt: "desc" },
       include: {
         _count: { select: { leads: true, calls: true } },
@@ -33,18 +37,19 @@ export class PrismaBatchRepository implements BatchRepository {
     return batches as unknown as BatchListItem[];
   }
 
+  // Update the findById method inside the class to support explicit isDeleted
   async findById(
     tenantId: string,
     campaignId: string,
     batchId: string,
-    options?: { includeDeleted?: boolean },
+    options?: { isDeleted?: boolean },
   ): Promise<LeadBatchEntityData | null> {
     const batch = await prisma.leadBatch.findFirst({
       where: {
         id: batchId,
         campaignId,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
+        isDeleted: options?.isDeleted ?? false,
       },
     });
 

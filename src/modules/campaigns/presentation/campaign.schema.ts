@@ -32,7 +32,7 @@ export const listCampaignsQuerySchema = z.object({
   sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  includeDeleted: z
+  isDeleted: z
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),

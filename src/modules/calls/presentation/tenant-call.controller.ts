@@ -44,7 +44,7 @@ export class TenantCallController {
         page: query.page,
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
-        includeDeleted: query.includeDeleted,
+        isDeleted: query.isDeleted,
       });
 
       sendSuccess(res, data);

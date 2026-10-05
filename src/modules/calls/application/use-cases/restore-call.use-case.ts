@@ -1,5 +1,3 @@
-// modules/calls/application/use-cases/restore-call.use-case.ts
-
 import type { CallRepository } from "../interfaces/call-repository.interface";
 import {
   CallNotFoundError,
@@ -10,9 +8,7 @@ export class RestoreCallUseCase {
   constructor(private readonly callRepo: CallRepository) {}
 
   async execute(tenantId: string, callId: string): Promise<void> {
-    const call = await this.callRepo.findById(tenantId, callId, {
-      includeDeleted: true,
-    });
+    const call = await this.callRepo.findById(tenantId, callId);
 
     if (!call) {
       throw new CallNotFoundError();
