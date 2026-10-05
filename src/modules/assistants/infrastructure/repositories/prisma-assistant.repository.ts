@@ -20,13 +20,11 @@ export class PrismaAssistantRepository implements AssistantRepository {
   async findById(
     tenantId: string,
     id: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<AssistantEntityData | null> {
     const assistant = await prisma.assistant.findFirst({
       where: {
         id,
         tenantId,
-        ...(options?.includeDeleted ? {} : { isDeleted: false }),
       },
     });
     if (!assistant) return null;
@@ -58,7 +56,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         name: assistant.platformAgent.name,
         slug: assistant.platformAgent.slug,
         systemPrompt: assistant.platformAgent.systemPrompt,
-        welcomeMessage: assistant.platformAgent.welcomeMessage, // [ADD]
+        welcomeMessage: assistant.platformAgent.welcomeMessage,
         requiredVariables: assistant.platformAgent.requiredVariables as
           RequiredVariable[] | null,
         description: assistant.platformAgent.description,

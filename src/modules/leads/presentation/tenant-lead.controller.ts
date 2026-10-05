@@ -5,9 +5,9 @@ import { param } from "../../../shared/utils/paramHelper";
 import type { ListLeadsUseCase } from "../application/use-cases/list-leads.use-case";
 import type { GetLeadUseCase } from "../application/use-cases/get-lead.use-case";
 import type { GetLeadStatsUseCase } from "../application/use-cases/get-lead-stats.use-case";
-import type {
-  AdminGetLeadsStatsQuery,
-  AdminListLeadsQuery,
+import {
+  listLeadsQuerySchema,
+  type AdminGetLeadsStatsQuery,
 } from "./lead.schema";
 import type { ArchiveLeadUseCase } from "../application/use-cases/archive-lead.use-case";
 
@@ -26,20 +26,11 @@ export class TenantLeadController {
   ): Promise<void> => {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      const query = req.query as unknown as AdminListLeadsQuery;
+      const query = listLeadsQuerySchema.parse(req.query);
 
       const data = await this.listLeadsUseCase.execute({
         tenantId,
-        campaignId: query.campaignId,
-        status: query.status,
-        search: query.search,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-        sortBy: query.sortBy,
-        sortOrder: query.sortOrder,
-        page: query.page,
-        limit: query.limit,
-        includeDeleted: query.includeDeleted,
+        ...query,
       });
 
       sendSuccess(res, data);

@@ -11,6 +11,7 @@ import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.u
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { RestoreCampaignUseCase } from "../application/use-cases/restore-campaign.use-case";
+import { listCampaignsQuerySchema } from "./campaign.schema";
 
 export class AdminCampaignController {
   constructor(
@@ -40,18 +41,13 @@ export class AdminCampaignController {
   ): Promise<void> => {
     try {
       const tenantId = this.resolveTenantId(req);
-      const data = await this.listCampaignsUseCase.execute({
+      const query = listCampaignsQuerySchema.parse(req.query);
+
+      const payload = {
         tenantId,
-        search: req.query.search as string | undefined,
-        status: req.query.status as string | undefined,
-        dateFrom: req.query.dateFrom as string | undefined,
-        dateTo: req.query.dateTo as string | undefined,
-        sortBy: req.query.sortBy as "createdAt" | "totalLeads" | undefined,
-        sortOrder: req.query.sortOrder as "asc" | "desc" | undefined,
-        page: req.query.page ? Number(req.query.page) : undefined,
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
-        includeDeleted: req.query.includeDeleted === "true", // Admins can optionally pull archived entries
-      });
+        ...query,
+      };
+      const data = await this.listCampaignsUseCase.execute(payload);
       sendSuccess(res, data);
     } catch (err) {
       next(err);

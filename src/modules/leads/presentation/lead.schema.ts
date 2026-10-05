@@ -20,7 +20,7 @@ export const listLeadsQuerySchema = z.object({
   limit: z
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
-  includeDeleted: z
+  isDeleted: z
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),

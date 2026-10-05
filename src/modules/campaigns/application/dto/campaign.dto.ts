@@ -75,7 +75,7 @@ export interface ListCampaignsFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
-  includeDeleted?: boolean; // Added support for showing soft deleted items (primarily for Admin views)
+  isDeleted?: boolean;
 }
 
 export interface CampaignListOverview {

@@ -18,5 +18,5 @@ export interface ListCallsInput {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
-  includeDeleted?: boolean;
+  isDeleted?: boolean;
 }

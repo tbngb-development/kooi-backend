@@ -12,9 +12,7 @@ export class ArchiveCampaignUseCase {
   constructor(private readonly campaignRepo: CampaignRepository) {}
 
   async execute(tenantId: string, campaignId: string): Promise<void> {
-    const raw = await this.campaignRepo.findById(tenantId, campaignId, {
-      includeDeleted: true,
-    });
+    const raw = await this.campaignRepo.findById(tenantId, campaignId);
     if (!raw) throw new CampaignNotFoundError();
 
     const campaign = new CampaignEntity(raw);

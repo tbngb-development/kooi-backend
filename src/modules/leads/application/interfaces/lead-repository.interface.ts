@@ -3,7 +3,7 @@ import { type LeadEntityData } from "../../domain/entities/lead.entity";
 
 export interface ListLeadsFilters {
   campaignId?: string;
-  status?: string; // Comma-separated or single
+  status?: string;
   dateFrom?: string;
   dateTo?: string;
   search?: string;
@@ -11,7 +11,7 @@ export interface ListLeadsFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
-  includeDeleted?: boolean; 
+  isDeleted?: boolean;
 }
 
 export interface PaginatedLeadsResult {
@@ -68,12 +68,12 @@ export interface LeadRepository {
     tenantId: string,
     filters: ListLeadsFilters,
   ): Promise<PaginatedLeadsResult>;
+
   findById(
     tenantId: string,
     id: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<DetailedLeadResult | null>;
-  
+
   getStats(tenantId: string, campaignId?: string): Promise<LeadStatsResult>;
   softDelete(leadId: string): Promise<void>;
   restore(leadId: string): Promise<void>;

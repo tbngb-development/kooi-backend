@@ -7,9 +7,9 @@ import type { ListLeadsUseCase } from "../application/use-cases/list-leads.use-c
 import type { GetLeadUseCase } from "../application/use-cases/get-lead.use-case";
 import type { GetLeadStatsUseCase } from "../application/use-cases/get-lead-stats.use-case";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
-import type {
-  AdminGetLeadsStatsQuery,
-  AdminListLeadsQuery,
+import {
+  adminListLeadsQuerySchema,
+  type AdminGetLeadsStatsQuery,
 } from "./lead.schema";
 import type { ArchiveLeadUseCase } from "../application/use-cases/archive-lead.use-case";
 import type { RestoreLeadUseCase } from "../application/use-cases/restore-lead.use-case";
@@ -41,20 +41,10 @@ export class AdminLeadController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const tenantId = this.resolveTenantId(req);
-      const query = req.query as unknown as AdminListLeadsQuery;
+      const query = adminListLeadsQuerySchema.parse(req.query);
 
       const data = await this.listLeadsUseCase.execute({
-        tenantId,
-        campaignId: query.campaignId,
-        status: query.status,
-        search: query.search,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-        sortBy: query.sortBy,
-        sortOrder: query.sortOrder,
-        page: query.page,
-        limit: query.limit,
+        ...query,
       });
 
       sendSuccess(res, data);

@@ -60,7 +60,7 @@ export class AdminCallController {
         page: query.page,
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
-        includeDeleted: query.includeDeleted, // Admins can toggle
+        isDeleted: query.isDeleted, 
       });
 
       sendSuccess(res, data);

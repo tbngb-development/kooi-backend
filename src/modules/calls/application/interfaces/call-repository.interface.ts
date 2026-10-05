@@ -1,5 +1,3 @@
-// modules/calls/application/interfaces/call-repository.interface.ts
-
 import { type CallEntityData } from "../../domain/entities/call.entity";
 import type {
   AvailableFiltersResponse,
@@ -19,7 +17,7 @@ export interface ListCallsFilters {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
-  includeDeleted?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface PaginatedCallsResult {
@@ -114,7 +112,6 @@ export interface CallRepository {
   findById(
     tenantId: string,
     id: string,
-    options?: { includeDeleted?: boolean },
   ): Promise<DetailedCallResult | null>;
 
   findTranscriptById(

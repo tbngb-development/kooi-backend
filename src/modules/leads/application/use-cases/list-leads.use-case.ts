@@ -18,7 +18,7 @@ export class ListLeadsUseCase {
       sortOrder: input.sortOrder,
       page: input.page,
       limit: input.limit,
-      includeDeleted: input.includeDeleted,
+      isDeleted: input.isDeleted,
     });
   }
 }
