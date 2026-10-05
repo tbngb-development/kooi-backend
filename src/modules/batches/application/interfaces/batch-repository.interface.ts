@@ -6,13 +6,9 @@ import type {
   CreateLeadData,
 } from "../dto/batch.dto";
 
-// ── List Item ────────────────────────────────────────────────────────────────
-
 export interface BatchListItem extends LeadBatchEntityData {
   _count: { leads: number; calls: number };
 }
-
-// ── Pending Lead (for resume) ────────────────────────────────────────────────
 
 export interface PendingLeadRow {
   id: string;
@@ -23,15 +19,18 @@ export interface PendingLeadRow {
   metadata: Record<string, unknown> | null;
 }
 
-// ── Repository Interface ─────────────────────────────────────────────────────
-
 export interface BatchRepository {
-  list(tenantId: string, campaignId: string): Promise<BatchListItem[]>;
+  list(
+    tenantId: string,
+    campaignId: string,
+    isDeleted?: boolean,
+  ): Promise<BatchListItem[]>;
 
   findById(
     tenantId: string,
     campaignId: string,
     batchId: string,
+    options?: { isDeleted?: boolean }, // Unified pattern
   ): Promise<LeadBatchEntityData | null>;
 
   findByIdWithCounts(
@@ -66,9 +65,15 @@ export interface BatchRepository {
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
 
-  reassignLeadsToBatch(oldBatchId: string, newBatchId: string): Promise<number>;
-
   decrementTotalLeads(batchId: string, count: number): Promise<void>;
+
+  reassignCampaignLeadsToBatch(
+    campaignId: string,
+    batchId: string,
+    phones: string[],
+  ): Promise<number>;
+
+  reassignLeadsToBatch(oldBatchId: string, newBatchId: string): Promise<number>;
 
   resetActiveLeadsToPending(batchId: string): Promise<number>;
 
@@ -97,4 +102,11 @@ export interface BatchRepository {
   updateRawFileUrl(batchId: string, url: string): Promise<void>;
 
   updateTotalLeads(batchId: string, count: number): Promise<void>;
+
+  softDelete(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<void>;
+  restore(tenantId: string, campaignId: string, batchId: string): Promise<void>;
 }

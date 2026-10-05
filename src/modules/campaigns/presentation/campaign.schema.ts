@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/campaign.schema.ts
+
 import { z } from "zod";
 
 export const createCampaignSchema = z.object({
@@ -20,7 +22,7 @@ export const createCampaignSchema = z.object({
 
 export const listCampaignsQuerySchema = z.object({
   search: z.string().trim().optional(),
-  status: z.string().optional(), // comma-separated: "RUNNING,COMPLETED"
+  status: z.string().optional(),
   dateFrom: z
     .string()
     .datetime({ message: "Invalid dateFrom format" })
@@ -30,11 +32,34 @@ export const listCampaignsQuerySchema = z.object({
   sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  isDeleted: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .default(false),
 });
 
 export const extractVariablesSchema = z.object({
   assistantId: z.uuid("Invalid assistant ID"),
 });
+
+// ── Manual Leads Parsing / Preview ─────────────────────────────────────────
+
+export const parseManualLeadsSchema = z.object({
+  leads: z
+    .array(
+      z.object({
+        contact_number: z
+          .string()
+          .min(1, "contact_number is required")
+          .max(20, "contact_number is too long"),
+        customer_name: z.string().min(1).max(100).optional(),
+      }),
+    )
+    .min(1, "At least one lead is required")
+    .max(1000, "Maximum 1000 leads per manual submission"),
+});
+
+export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
 
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
 export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;

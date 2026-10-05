@@ -8,8 +8,8 @@ import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import prisma from "../../../../shared/config/database/prisma";
-import type { InputJsonValue } from "@prisma/client/runtime/library";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -81,7 +81,6 @@ export class ProcessCallWebhookUseCase {
           new Date(),
         );
 
-        // [NEW] Check credit limit when in-flight count increases
         if (this.stopBatchesOnInsufficientBalance) {
           this.stopBatchesOnInsufficientBalance
             .execute({ tenantId: resolved.tenantId })
@@ -262,7 +261,6 @@ export class ProcessCallWebhookUseCase {
         );
       }
     } catch (err) {
-      // Best-effort — don't fail the webhook if extraction mapping fails
       this.logger?.error("Dynamic extraction mapping failed", err, {
         action: "webhook.call.extraction_failed",
         callId: call.id,
@@ -270,7 +268,6 @@ export class ProcessCallWebhookUseCase {
       });
     }
 
-    // ── Step 1: Persist terminal state (Bolna cost in `cost` field) ──
     await this.webhookRepo.updateCallTerminalState(call.id, {
       status: "COMPLETED",
       transcript,
@@ -291,7 +288,6 @@ export class ProcessCallWebhookUseCase {
       "COMPLETED",
     );
 
-    // ── Step 2: Debit wallet + snapshot immutable pricing terms ──
     if (this.debitWalletForCall && duration && duration > 0) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
@@ -383,12 +379,6 @@ export class ProcessCallWebhookUseCase {
     await this.checkBatchCompletion(call);
   }
 
-  /**
-   * Maps Bolna's extracted_data to local disposition IDs and stores
-   * the result in CallAnalysis.dynamicExtractions + extractionDispositionId.
-   *
-   * Replaces the old GenerateDynamicExtractionsUseCase.
-   */
   private async mapCallExtractions(
     callId: string,
     tenantId: string,
@@ -404,16 +394,15 @@ export class ProcessCallWebhookUseCase {
         create: {
           callId,
           tenantId,
-          extractionResult: extractedData as InputJsonValue,
+          extractionResult: extractedData as unknown as InputJsonValue,
         },
         update: {
-          extractionResult: extractedData as InputJsonValue,
+          extractionResult: extractedData as unknown as InputJsonValue,
         },
       });
       return null;
     }
 
-    // Build lookup — all dispositions come through categories now
     const dispositionLookup = new Map<
       string,
       {
@@ -515,22 +504,11 @@ export class ProcessCallWebhookUseCase {
     return dynamicResult;
   }
 
-  /**
-   * Auto-generates structured overview rows for every objective disposition
-   * that returned a value. No manual ExtractionConfig needed.
-   *
-   * One row per (call, objective disposition) — enables GROUP BY aggregation
-   * for campaign performance overview dashboards.
-   *
-   * Idempotent: deletes previous rows for this call before inserting
-   * (handles webhook retries safely).
-   */
   private async materializeExtractionOverview(
     callId: string,
     tenantId: string,
     dynamicResult: DynamicExtractionMap,
   ): Promise<void> {
-    // Collect all objective entries with values
     const objectiveEntries: Array<{
       dispositionId: string;
       dispositionSlug: string;
@@ -547,6 +525,7 @@ export class ProcessCallWebhookUseCase {
           entry.localDispositionSlug &&
           entry.objective !== null &&
           entry.objective.trim() !== "" &&
+          entry.objective !== "NO_DATA" &&
           entry.confidence &&
           entry.confidence > 0.5
         ) {
@@ -563,7 +542,6 @@ export class ProcessCallWebhookUseCase {
 
     if (objectiveEntries.length === 0) return;
 
-    // Fetch call metadata for denormalization
     const call = await prisma.call.findUnique({
       where: { id: callId },
       select: { campaignId: true, batchId: true },
@@ -571,7 +549,6 @@ export class ProcessCallWebhookUseCase {
 
     if (!call) return;
 
-    // Fetch disposition names for denormalization
     const dispositionIds = [
       ...new Set(objectiveEntries.map((e) => e.dispositionId)),
     ];
@@ -582,10 +559,8 @@ export class ProcessCallWebhookUseCase {
     });
     const nameMap = new Map(dispositions.map((d) => [d.id, d.displayName]));
 
-    // Idempotent: remove previous overview rows for this call (webhook retries)
     await prisma.callExtractionOverview.deleteMany({ where: { callId } });
 
-    // Bulk insert
     await prisma.callExtractionOverview.createMany({
       data: objectiveEntries.map((e) => ({
         callId,
@@ -627,13 +602,13 @@ export class ProcessCallWebhookUseCase {
 
     for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
       for (const [_dispName, entry] of Object.entries(dispositions)) {
-        // Only subjective dispositions with a subjective value
         if (
           entry.isSubjective &&
           entry.localDispositionId &&
           entry.localDispositionSlug &&
           entry.subjective !== null &&
           entry.subjective.trim() !== "" &&
+          entry.subjective !== "NO_DATA" &&
           entry.confidence &&
           entry.confidence > 0.5
         ) {
@@ -716,17 +691,33 @@ export class ProcessCallWebhookUseCase {
     const statuses = await this.webhookRepo.getAllBatchStatuses(
       call.campaignId,
     );
+
     if (statuses.length > 0) {
-      const allTerminal = statuses.every(
-        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
+      // FIX: Ensure unstarted/draft "CREATED" batches never block campaign completion.
+      // Reconciles status based on whether any active dialing/scheduling is in progress.
+      const hasActiveBatches = statuses.some(
+        (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
       );
-      if (allTerminal) {
-        const allFailed = statuses.every((s) => s === "FAILED");
-        await this.webhookRepo.updateCampaignStatus(
-          call.campaignId,
-          allFailed ? "FAILED" : "COMPLETED",
-          new Date(),
-        );
+
+      if (!hasActiveBatches) {
+        const executedBatches = statuses.filter((s) => s !== "CREATED");
+
+        if (executedBatches.length > 0) {
+          const allFailed = executedBatches.every((s) => s === "FAILED");
+          const finalCampaignStatus = allFailed ? "FAILED" : "COMPLETED";
+
+          await this.webhookRepo.updateCampaignStatus(
+            call.campaignId,
+            finalCampaignStatus,
+            new Date(),
+          );
+
+          this.logger?.info("Campaign marked as finished from call webhook", {
+            action: "webhook.call.campaign_completed",
+            campaignId: call.campaignId,
+            finalCampaignStatus,
+          });
+        }
       }
     } else {
       const legacyActive =

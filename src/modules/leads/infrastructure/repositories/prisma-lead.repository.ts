@@ -23,6 +23,7 @@ export class PrismaLeadRepository implements LeadRepository {
       sortOrder = "desc",
       page = 1,
       limit = 20,
+      isDeleted,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -56,6 +57,7 @@ export class PrismaLeadRepository implements LeadRepository {
         { phone: { contains: search } },
       ];
     }
+    where.isDeleted = isDeleted ?? false;
 
     // Explicit sorting fields whitelist checking
     const validSortFields = ["createdAt", "name", "updatedAt"];
@@ -92,6 +94,8 @@ export class PrismaLeadRepository implements LeadRepository {
         metadata: l.metadata as Record<string, unknown> | null,
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,
+        isDeleted: l.isDeleted,
+        deletedAt: l.deletedAt,
         campaign: l.campaign,
       })),
       pagination: {
@@ -103,12 +107,16 @@ export class PrismaLeadRepository implements LeadRepository {
     };
   }
 
+  // Update the findById method inside the class to support explicit isDeleted filtering
   async findById(
     tenantId: string,
     id: string,
   ): Promise<DetailedLeadResult | null> {
     const lead = await prisma.lead.findFirst({
-      where: { id, tenantId },
+      where: {
+        id,
+        tenantId,
+      },
       include: {
         campaign: {
           select: {
@@ -124,12 +132,6 @@ export class PrismaLeadRepository implements LeadRepository {
             callAnalysis: {
               select: {
                 id: true,
-                disposition: true,
-                leadTemperature: true,
-                preferredConfiguration: true,
-                budgetRange: true,
-                purchaseTimeline: true,
-                preferredNextAction: true,
               },
             },
           },
@@ -153,6 +155,8 @@ export class PrismaLeadRepository implements LeadRepository {
       metadata: lead.metadata as Record<string, unknown> | null,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
+      isDeleted: lead.isDeleted,
+      deletedAt: lead.deletedAt,
       campaign: lead.campaign,
       calls: lead.calls.map((c) => ({
         id: c.id,
@@ -179,6 +183,7 @@ export class PrismaLeadRepository implements LeadRepository {
   ): Promise<LeadStatsResult> {
     const where: Prisma.LeadWhereInput = {
       tenantId,
+      isDeleted: false,
       ...(campaignId && { campaignId }),
     };
 
@@ -201,5 +206,19 @@ export class PrismaLeadRepository implements LeadRepository {
       failed,
       noAnswer,
     };
+  }
+
+  async softDelete(leadId: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+  }
+
+  async restore(leadId: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { isDeleted: false, deletedAt: null },
+    });
   }
 }

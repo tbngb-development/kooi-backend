@@ -44,6 +44,7 @@ export const env = {
   bolna: {
     apiUrl: process.env.BOLNA_API_URL || "https://api.bolna.ai",
     encryptionSecret: requireEnv("BOLNA_KEY_ENCRYPTION_SECRET"),
+    bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
   },
 
   webhook: {

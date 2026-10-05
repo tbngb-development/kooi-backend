@@ -1,3 +1,5 @@
+// modules/calls/application/dto/call.dto.ts
+
 import type { DynamicFilterMap } from "../../../../shared/types/bolna.types";
 
 export interface ListCallsInput {
@@ -16,4 +18,5 @@ export interface ListCallsInput {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
+  isDeleted?: boolean;
 }

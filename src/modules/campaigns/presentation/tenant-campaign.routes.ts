@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/tenant-campaign.routes.ts
+
 import { Router } from "express";
 import type { TenantCampaignController } from "./tenant-campaign.controller";
 import type { TenantBatchController } from "../../batches/presentation/tenant-batch.controller";
@@ -14,6 +16,7 @@ import {
   leadsUploadMemory,
   documentUpload,
 } from "../../../shared/middleware/upload";
+import { parseManualLeadsSchema } from "./campaign.schema";
 
 export function buildTenantCampaignRoutes(
   controller: TenantCampaignController,
@@ -55,6 +58,18 @@ export function buildTenantCampaignRoutes(
     "/:id/parse-leads",
     leadsUploadMemory.single("file"),
     controller.parseLeads,
+  );
+  router.post(
+    "/:campaignId/parse-manual",
+    validate(parseManualLeadsSchema),
+    controller.parseManual,
+  );
+
+  // Archive (Soft Delete) Campaign
+  router.patch(
+    "/:id/archive",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    controller.archive,
   );
 
   // Single resource

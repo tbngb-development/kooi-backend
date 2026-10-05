@@ -1,3 +1,5 @@
+// modules/calls/presentation/admin-call.controller.ts
+
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import type { ListCallsQuery, GetCallStatsQuery } from "./call.schema";
@@ -10,6 +12,8 @@ import type { GetCallUseCase } from "../application/use-cases/get-call.use-case"
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
 import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
+import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.use-case";
+import type { RestoreCallUseCase } from "../application/use-cases/restore-call.use-case";
 
 export class AdminCallController {
   constructor(
@@ -18,6 +22,8 @@ export class AdminCallController {
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
     private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
+    private readonly archiveCallUseCase: ArchiveCallUseCase,
+    private readonly restoreCallUseCase: RestoreCallUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -54,6 +60,7 @@ export class AdminCallController {
         page: query.page,
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
+        isDeleted: query.isDeleted, 
       });
 
       sendSuccess(res, data);
@@ -128,6 +135,36 @@ export class AdminCallController {
         campaignId,
       );
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  archive = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const callId = param(req, "id");
+      await this.archiveCallUseCase.execute(tenantId, callId);
+      sendSuccess(res, { id: callId }, 200, "Call archived by Admin");
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  restore = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const callId = param(req, "id");
+      await this.restoreCallUseCase.execute(tenantId, callId);
+      sendSuccess(res, { id: callId }, 200, "Call restored by Admin");
     } catch (err) {
       next(err);
     }

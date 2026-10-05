@@ -66,3 +66,21 @@ export interface ResumeBatchOutput {
   remainingLeads: number;
   message: string;
 }
+
+// ── Manual Batch Entry ─────────────────────────────────────────────────────
+
+export interface ManualLeadInput {
+  contact_number: string;
+  customer_name?: string;
+}
+
+export interface CreateManualBatchInput {
+  tenantId: string;
+  campaignId: string;
+  leads: ManualLeadInput[];
+  retryConfig?: RetryConfig;
+  scheduledAt?: string;
+  runImmediately?: boolean;
+  termsAccepted: boolean;
+  termsVersion: string;
+}

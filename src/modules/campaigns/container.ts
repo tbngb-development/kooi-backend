@@ -1,3 +1,5 @@
+// modules/campaigns/container.ts
+
 import { PrismaCampaignRepository } from "./infrastructure/repositories/prisma-campaign.repository";
 import { PrismaBatchRepository } from "../batches/infrastructure/repositories/prisma-batch.repository";
 import { ListCampaignsUseCase } from "./application/use-cases/list-campaigns.use-case";
@@ -12,8 +14,10 @@ import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prism
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
 import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/get-campaign-extraction-overview.use-case";
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
+import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
+import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
+import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
-
 export interface CampaignModuleDeps {
   logger: Logger;
 }
@@ -22,6 +26,8 @@ export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
 }
+
+// modules/campaigns/container.ts
 
 export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const campaignRepo = new PrismaCampaignRepository();
@@ -33,6 +39,14 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const listCampaigns = new ListCampaignsUseCase(campaignRepo);
   const getCampaign = new GetCampaignUseCase(campaignRepo);
   const getCampaignStats = new GetCampaignStatsUseCase(campaignRepo);
+
+  const parseLeads = new ParseLeadsUseCase(
+    campaignRepo,
+    batchRepo,
+    planRepo,
+    walletRepo,
+    log,
+  );
 
   const extractVariables = new ExtractCampaignVariablesUseCase(
     campaignRepo,
@@ -46,6 +60,12 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     campaignRepo,
   );
 
+  const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
+
+  // Clean dependency injection: repository owns atomic database access
+  const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
+  const restoreCampaign = new RestoreCampaignUseCase(campaignRepo);
+
   return {
     tenantController: new TenantCampaignController(
       listCampaigns,
@@ -56,11 +76,15 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       extractVariables,
       getExtractionOverview,
       getExtractionInsights,
+      archiveCampaign,
+      parseManualLeads,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,
       getCampaign,
       getCampaignStats,
+      archiveCampaign,
+      restoreCampaign,
     ),
   };
 }

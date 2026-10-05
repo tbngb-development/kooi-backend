@@ -1,3 +1,5 @@
+// modules/calls/application/use-cases/list-calls.use-case.ts
+
 import {
   type CallRepository,
   type PaginatedCallsResult,
@@ -7,7 +9,7 @@ import { type ListCallsInput } from "../dto/call.dto";
 export class ListCallsUseCase {
   constructor(private readonly callRepo: CallRepository) {}
 
-  async execute(input: ListCallsInput): Promise<PaginatedCallsResult> { 
+  async execute(input: ListCallsInput): Promise<PaginatedCallsResult> {
     return this.callRepo.list(input.tenantId, {
       campaignId: input.campaignId,
       leadId: input.leadId,
@@ -20,6 +22,7 @@ export class ListCallsUseCase {
       page: input.page,
       limit: input.limit,
       dynamicFilters: input.dynamicFilters,
+      isDeleted: input.isDeleted,
     });
   }
 }

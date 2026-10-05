@@ -1,3 +1,5 @@
+// modules/campaigns/presentation/tenant-campaign.controller.ts
+
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import type { CreateCampaignInput } from "../application/dto/campaign.dto";
@@ -13,6 +15,9 @@ import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campa
 import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
+import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
+import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
+import type { ListCampaignsQuery } from "./campaign.schema";
 
 export class TenantCampaignController {
   constructor(
@@ -24,6 +29,8 @@ export class TenantCampaignController {
     private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
     private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
     private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
+    private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
+    private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -37,17 +44,14 @@ export class TenantCampaignController {
   ): Promise<void> => {
     try {
       const { tenantId } = this.getTenant(req);
-      const data = await this.listCampaignsUseCase.execute({
+      const query = req.query as unknown as ListCampaignsQuery;
+
+      const payload = {
         tenantId,
-        search: req.query.search as string | undefined,
-        status: req.query.status as string | undefined,
-        dateFrom: req.query.dateFrom as string | undefined,
-        dateTo: req.query.dateTo as string | undefined,
-        sortBy: req.query.sortBy as "createdAt" | "totalLeads" | undefined,
-        sortOrder: req.query.sortOrder as "asc" | "desc" | undefined,
-        page: req.query.page ? Number(req.query.page) : undefined,
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
-      });
+        ...query,
+      };
+
+      const data = await this.listCampaignsUseCase.execute(payload);
       sendSuccess(res, data);
     } catch (err) {
       next(err);
@@ -161,6 +165,27 @@ export class TenantCampaignController {
     }
   };
 
+  parseManual = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "campaignId");
+
+      const data = await this.parseManualLeadsUseCase.execute({
+        tenantId,
+        campaignId,
+        leads: req.body.leads,
+      });
+
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
   stats = async (
     req: Request,
     res: Response,
@@ -221,6 +246,26 @@ export class TenantCampaignController {
       });
 
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  archive = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      await this.archiveCampaignUseCase.execute(tenantId, campaignId);
+      sendSuccess(
+        res,
+        { id: campaignId },
+        HttpStatus.OK,
+        "Campaign archived successfully",
+      );
     } catch (err) {
       next(err);
     }

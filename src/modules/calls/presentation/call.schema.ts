@@ -1,3 +1,5 @@
+// modules/calls/presentation/call.schema.ts
+
 import { z } from "zod";
 
 export const dynamicFiltersSchema = z
@@ -20,7 +22,6 @@ export const dynamicFiltersSchema = z
     }
   });
 
-// Update listCallsQuerySchema to include dynamicFilters
 export const listCallsQuerySchema = z.object({
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
@@ -37,6 +38,10 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
   dynamicFilters: dynamicFiltersSchema,
+  isDeleted: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .default(false),
 });
 
 export const getCallStatsQuerySchema = z.object({
@@ -60,8 +65,6 @@ export type AdminListCallsQuery = z.infer<typeof adminListCallsQuerySchema>;
 export type AdminGetCallStatsQuery = z.infer<
   typeof adminGetCallStatsQuerySchema
 >;
-
 export type ListCallsQuery = z.infer<typeof listCallsQuerySchema>;
 export type GetCallStatsQuery = z.infer<typeof getCallStatsQuerySchema>;
-
 export type AvailableFiltersQuery = z.infer<typeof availableFiltersQuerySchema>;

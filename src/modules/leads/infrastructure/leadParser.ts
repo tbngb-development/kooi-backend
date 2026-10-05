@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 import { MissingRequiredHeaderError } from "../domain/errors/lead.errors";
+import { cleanCustomerName } from "../domain/rules/name.rules";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,32 @@ export interface HeaderValidationResult {
 
 export { MissingRequiredHeaderError };
 
+// ── Recognized Aliases ───────────────────────────────────────────────────────
+
+export const NAME_ALIASES = [
+  "customer_name",
+  "{{customer_name}}",
+  "customer name",
+  "name",
+  "full_name",
+  "fullname",
+  "client_name",
+  "lead_name",
+];
+
+export const PHONE_ALIASES = [
+  "contact_number",
+  "{{contact_number}}",
+  "contact number",
+  "phone",
+  "{{phone}}",
+  "phone_number",
+  "phone number",
+  "mobile",
+  "mobile_number",
+  "mobile number",
+];
+
 // ── Header Validator ─────────────────────────────────────────────────────────
 
 export function validateLeadHeaders(
@@ -31,8 +58,8 @@ export function validateLeadHeaders(
 ): HeaderValidationResult {
   const normalized = rawHeaders.map((h) => h.trim().toLowerCase());
   return {
-    hasContactNumber: normalized.includes("contact_number"),
-    hasCustomerName: normalized.includes("customer_name"),
+    hasContactNumber: normalized.some((h) => PHONE_ALIASES.includes(h)),
+    hasCustomerName: normalized.some((h) => NAME_ALIASES.includes(h)),
     rawHeaders,
   };
 }
@@ -60,6 +87,18 @@ export const isIndianPhone = (sanitizedPhone: string): boolean => {
 
 // ── Row Normalizer ───────────────────────────────────────────────────────────
 
+const findValueByAliases = (
+  row: Record<string, unknown>,
+  aliases: string[],
+): unknown => {
+  for (const alias of aliases) {
+    if (row[alias] !== undefined && row[alias] !== null && row[alias] !== "") {
+      return row[alias];
+    }
+  }
+  return undefined;
+};
+
 const normalizeRow = (row: Record<string, unknown>): LeadRow => {
   const str = (val: unknown): string | undefined => {
     if (val === null || val === undefined || val === "") return undefined;
@@ -67,11 +106,15 @@ const normalizeRow = (row: Record<string, unknown>): LeadRow => {
     return s === "" ? undefined : s;
   };
 
+  // Extract name & phone checking all alias variations (e.g. {{customer_name}})
+  const rawName = findValueByAliases(row, NAME_ALIASES);
+  const rawPhone = findValueByAliases(row, PHONE_ALIASES);
+
   return {
-    name: str(row["customer_name"]) ?? null,
-    phone: sanitizePhone(str(row["contact_number"]) ?? ""),
-    email: str(row["email"]),
-    company: str(row["company"]),
+    name: cleanCustomerName(str(rawName)),
+    phone: sanitizePhone(str(rawPhone) ?? ""),
+    email: str(row["email"] ?? row["email_address"] ?? row["email address"]),
+    company: str(row["company"] ?? row["company_name"] ?? row["company name"]),
     ...Object.fromEntries(
       Object.entries(row).map(([k, v]) => [k, str(v) ?? null]),
     ),
@@ -98,7 +141,7 @@ const assertContactNumberHeader = (
   }
 };
 
-// ── File-Based Parsing (backward compatibility) ─────────────────────────────
+// ── File-Based Parsing ───────────────────────────────────────────────────────
 
 const parseCSVFile = (
   filePath: string,
@@ -169,7 +212,7 @@ export const parseLeadFile = (
 
 export const parseCSV = parseLeadFile;
 
-// ── Buffer-Based Parsing (primary — for memory storage) ─────────────────────
+// ── Buffer-Based Parsing ────────────────────────────────────────────────────
 
 const parseCSVBuffer = (
   buffer: Buffer,
@@ -209,7 +252,6 @@ const parseExcelBuffer = (
   const worksheet = workbook.Sheets[sheetName];
   if (!worksheet) throw new Error(`Sheet "${sheetName}" could not be read`);
 
-  // 1. Extract raw headers directly from the first row of the sheet (header: 1)
   const sheetRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
     header: 1,
     defval: "",
@@ -227,7 +269,6 @@ const parseExcelBuffer = (
     };
   }
 
-  // Row 0 is the header array
   const rawHeaders = (sheetRows[0] || [])
     .map((h) => String(h ?? "").trim())
     .filter(Boolean);
@@ -235,7 +276,6 @@ const parseExcelBuffer = (
   const headerInfo = validateLeadHeaders(rawHeaders);
   assertContactNumberHeader(headerInfo);
 
-  // 2. Extract records as key-value objects
   const rawRecords = XLSX.utils.sheet_to_json<Record<string, unknown>>(
     worksheet,
     { defval: "", raw: false, blankrows: false },

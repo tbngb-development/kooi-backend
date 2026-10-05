@@ -27,7 +27,7 @@ export class GetAssistantUseCase {
   private resolveVariables(platformAgent: {
     systemPrompt: string | null;
     welcomeMessage: string | null;
-    requiredVariables: RequiredVariable[] | null; // Typed cleanly matching the repository interface
+    requiredVariables: RequiredVariable[] | null;
   }): GetAssistantOutput["variables"] {
     const stored = platformAgent.requiredVariables;
 
@@ -37,6 +37,8 @@ export class GetAssistantUseCase {
         label: v.label,
         required: v.required,
         isEditable: v.isEditable,
+        inputType: v.inputType ?? "text",
+        defaultValue: v.defaultValue ?? null,
       }));
     }
 
@@ -50,6 +52,8 @@ export class GetAssistantUseCase {
       label: v.label,
       required: true,
       isEditable: true,
+      inputType: "text" as const,
+      defaultValue: null,
     }));
   }
 }

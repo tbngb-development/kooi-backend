@@ -188,7 +188,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     status: BatchStatus,
     completedAt?: Date,
   ): Promise<void> {
-    await prisma.leadBatch.update({
+    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+    await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: {
         status,
@@ -202,7 +203,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     status: CampaignStatus,
     timestamp?: Date,
   ): Promise<void> {
-    await prisma.campaign.update({
+    // Resilient fallback: uses updateMany to prevent throwing P2025 errors in production
+    await prisma.campaign.updateMany({
       where: { id: campaignId },
       data: {
         status,
@@ -218,24 +220,21 @@ export class PrismaWebhookRepository implements WebhookRepository {
     batchId: string | null,
     status: "COMPLETED" | "NO_ANSWER" | "BUSY" | "FAILED",
   ): Promise<void> {
-    const isSuccess = status === "COMPLETED";
-    const field = isSuccess ? "completedLeads" : "failedLeads";
+    const updateData = {
+      calledLeads: { increment: 1 },
+      ...(status === "COMPLETED" && { completedLeads: { increment: 1 } }),
+      ...(status === "FAILED" && { failedLeads: { increment: 1 } }),
+    };
 
-    await prisma.campaign.update({
+    await prisma.campaign.updateMany({
       where: { id: campaignId },
-      data: {
-        calledLeads: { increment: 1 },
-        [field]: { increment: 1 },
-      },
+      data: updateData,
     });
 
     if (batchId) {
-      await prisma.leadBatch.update({
+      await prisma.leadBatch.updateMany({
         where: { id: batchId },
-        data: {
-          calledLeads: { increment: 1 },
-          [field]: { increment: 1 },
-        },
+        data: updateData,
       });
     }
   }
@@ -363,8 +362,6 @@ export class PrismaWebhookRepository implements WebhookRepository {
       dispositions: Array.from(dispositionMap.values()),
     };
   }
-
-  // ── [NEW] Dynamic Extraction Response ───────────────────────────────────
 
   async getExtractionConfigForCall(callId: string): Promise<{
     platformAgentId: string;

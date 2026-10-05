@@ -66,3 +66,19 @@ export const registerLimiter = rateLimit({
     message: "Registration limit reached for this network. Try again later.",
   },
 });
+
+/**
+ * Rate limit for manual batch submissions.
+ * 10 requests per minute per tenant IP.
+ */
+export const manualBatchRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    error:
+      "Too many manual batch submissions. Please wait a minute before trying again.",
+  },
+});

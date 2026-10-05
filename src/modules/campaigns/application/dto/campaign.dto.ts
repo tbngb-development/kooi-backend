@@ -1,4 +1,6 @@
-import {type  CampaignListItem } from "../interfaces/campaign-repository.interface";
+// modules/campaigns/application/dto/campaign.dto.ts
+
+import { type CampaignListItem } from "../interfaces/campaign-repository.interface";
 
 export interface CreateCampaignInput {
   name: string;
@@ -48,17 +50,16 @@ export interface ParseLeadsOutput {
     contact_number: boolean;
     customer_name: boolean;
   };
-  // ── Financial Estimations (Paisa) ──────────────────────────────────
   estimation: {
     estimatedCostMinPaisa: number;
     estimatedCostMaxPaisa: number;
     currentBalancePaisa: number;
     perMinuteRatePaisa: number;
     assumptions: {
-      historicalAnswerRate: number; // e.g. 0.40
-      retryCount: number; // e.g. 1
-      durationMinSec: number; // e.g. 45
-      durationMaxSec: number; // e.g. 90
+      historicalAnswerRate: number;
+      retryCount: number;
+      durationMinSec: number;
+      durationMaxSec: number;
     };
   };
 }
@@ -74,6 +75,7 @@ export interface ListCampaignsFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  isDeleted?: boolean;
 }
 
 export interface CampaignListOverview {
@@ -94,8 +96,6 @@ export interface PaginatedCampaignsResult {
   };
 }
 
-// ── Campaign Detail Overview ───────────────────────────────────────────────
-
 export interface CampaignDetailOverview {
   totalLeads: number;
   totalCalls: number;
@@ -108,8 +108,6 @@ export interface CampaignDetailOverview {
   avgDurationSec: number;
 }
 
-// ── Call List Overview ─────────────────────────────────────────────────────
-
 export interface CallListOverview {
   totalCalls: number;
   completedCalls: number;
@@ -117,8 +115,6 @@ export interface CallListOverview {
   avgDurationSec: number;
   totalCostPaisa: number;
 }
-
-// ── Extraction Overview ──
 
 export interface ExtractionOverviewInput {
   tenantId: string;
@@ -144,8 +140,6 @@ export interface ExtractionOverviewResult {
   totalCalls: number;
   dispositions: ExtractionOverviewDisposition[];
 }
-
-// ── Extraction Insights (Subjective) ──
 
 export interface ExtractionInsightInput {
   tenantId: string;

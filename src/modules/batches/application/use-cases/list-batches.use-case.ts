@@ -8,10 +8,14 @@ export class ListBatchesUseCase {
     private readonly campaignRepo: CampaignRepository,
   ) {}
 
-  async execute(tenantId: string, campaignId: string) {
+  async execute(
+    tenantId: string,
+    campaignId: string,
+    isDeleted: boolean = false,
+  ) {
     const campaign = await this.campaignRepo.findById(tenantId, campaignId);
     if (!campaign) throw new CampaignNotFoundError();
 
-    return this.batchRepo.list(tenantId, campaignId);
+    return this.batchRepo.list(tenantId, campaignId, isDeleted);
   }
 }

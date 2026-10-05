@@ -1,3 +1,5 @@
+// modules/calls/infrastructure/repositories/prisma-call.repository.ts
+
 import prisma from "../../../../shared/config/database/prisma";
 import { type Prisma, type CallStatus } from "@prisma/client";
 import type {
@@ -28,6 +30,7 @@ export class PrismaCallRepository implements CallRepository {
       sortOrder = "desc",
       page = 1,
       limit = 15,
+      isDeleted = false,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -35,6 +38,8 @@ export class PrismaCallRepository implements CallRepository {
     const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.CallWhereInput = { tenantId };
+
+    where.isDeleted = isDeleted ?? false;
 
     if (campaignId) where.campaignId = campaignId;
     if (leadId) where.leadId = leadId;
@@ -94,7 +99,6 @@ export class PrismaCallRepository implements CallRepository {
     const orderField = validSortFields.includes(sortBy) ? sortBy : "startedAt";
     const orderDir = sortOrder === "asc" ? "asc" : "desc";
 
-    // ← Parallel: calls + count + tenant-global overview
     const [calls, total, overview] = await Promise.all([
       prisma.call.findMany({
         where,
@@ -153,6 +157,8 @@ export class PrismaCallRepository implements CallRepository {
         endedAt: c.endedAt,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
+        isDeleted: c.isDeleted,
+        deletedAt: c.deletedAt,
         lead: c.lead,
         campaign: c.campaign,
         extractionOverview: c.extractionOverview,
@@ -167,9 +173,8 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
-  // ── NEW: Tenant-global call overview (unfiltered) ──
   async getTenantCallOverview(tenantId: string): Promise<CallListOverview> {
-    const where = { tenantId };
+    const where = { tenantId, isDeleted: false };
 
     const [totalCalls, completedCalls, failedCalls, durationAgg, costAgg] =
       await Promise.all([
@@ -195,12 +200,16 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
+  // Update the findById method inside the class to support explicit isDeleted filtering
   async findById(
     tenantId: string,
     id: string,
   ): Promise<DetailedCallResult | null> {
     const call = await prisma.call.findFirst({
-      where: { id, tenantId },
+      where: {
+        id,
+        tenantId,
+      },
       include: {
         lead: {
           select: {
@@ -252,6 +261,8 @@ export class PrismaCallRepository implements CallRepository {
       endedAt: call.endedAt,
       createdAt: call.createdAt,
       updatedAt: call.updatedAt,
+      isDeleted: call.isDeleted,
+      deletedAt: call.deletedAt,
       lead: call.lead,
       campaign: call.campaign,
       callAnalysis: call.callAnalysis
@@ -271,7 +282,7 @@ export class PrismaCallRepository implements CallRepository {
     id: string,
   ): Promise<CallTranscriptResult | null> {
     const call = await prisma.call.findFirst({
-      where: { id, tenantId },
+      where: { id, tenantId, isDeleted: false },
       select: {
         transcript: true,
         transcriptMessages: true,
@@ -310,6 +321,7 @@ export class PrismaCallRepository implements CallRepository {
 
     const where: Prisma.CallWhereInput = {
       tenantId,
+      isDeleted: false,
       ...(campaignId && { campaignId }),
       ...(leadId && { leadId }),
     };
@@ -321,7 +333,6 @@ export class PrismaCallRepository implements CallRepository {
         prisma.call.count({ where: { ...where, status: "FAILED" } }),
         prisma.call.count({ where: { ...where, status: "NO_ANSWER" } }),
         prisma.call.count({ where: { ...where, status: "BUSY" } }),
-
         prisma.call.aggregate({
           where: { ...where, status: "COMPLETED", duration: { not: null } },
           _avg: { duration: true },
@@ -342,9 +353,8 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string,
     campaignId: string,
   ): Promise<AvailableFiltersResponse> {
-    // ── Single query: resolve agent + all assigned dispositions ────────
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: { id: campaignId, tenantId, isDeleted: false },
       select: {
         assistant: {
           select: {
@@ -385,7 +395,6 @@ export class PrismaCallRepository implements CallRepository {
       return { dynamic: [] };
     }
 
-    // ── In-memory: flatten categories → dispositions, deduplicate ──────
     const seen = new Set<string>();
     const dynamic: AvailableFiltersResponse["dynamic"] = [];
 
@@ -395,10 +404,7 @@ export class PrismaCallRepository implements CallRepository {
       for (const dispRel of catRel.category.dispositions) {
         const disp = dispRel.disposition;
 
-        // Skip non-objective dispositions (no predefined values to filter by)
         if (!disp.isObjective) continue;
-
-        // Deduplicate across categories
         if (seen.has(disp.slug)) continue;
         seen.add(disp.slug);
 
@@ -424,6 +430,26 @@ export class PrismaCallRepository implements CallRepository {
     return { dynamic };
   }
 
+  async softDelete(callId: string): Promise<void> {
+    await prisma.call.update({
+      where: { id: callId },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+  }
+
+  async restore(callId: string): Promise<void> {
+    await prisma.call.update({
+      where: { id: callId },
+      data: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+    });
+  }
+
   private flattenObjectiveValues(
     options: Array<{ value: string; sub_options?: unknown[] }> | null,
   ): string[] {
@@ -444,5 +470,66 @@ export class PrismaCallRepository implements CallRepository {
       }
     }
     return values;
+  }
+
+  async findInboundLeadContext(agentId: string, phone: string) {
+    // Generate phone variations to match against whatever format is stored
+    const digits = phone.replace(/\D/g, "");
+    const last10 = digits.slice(-10);
+    const candidatePhones = Array.from(
+      new Set([phone, `+91${last10}`, `91${last10}`, last10]),
+    ).filter(Boolean);
+
+    const lead = await prisma.lead.findFirst({
+      where: {
+        phone: { in: candidatePhones },
+        isDeleted: false,
+        campaign: {
+          isDeleted: false,
+          assistant: {
+            isDeleted: false,
+            platformAgent: {
+              bolnaId: agentId,
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        metadata: true,
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            variables: true,
+            tenantId: true,
+          },
+        },
+      },
+    });
+
+    if (!lead || !lead.campaign) return null;
+
+    return {
+      lead: {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        email: lead.email,
+        company: lead.company,
+        metadata: lead.metadata as Record<string, unknown> | null,
+      },
+      campaign: {
+        id: lead.campaign.id,
+        name: lead.campaign.name,
+        variables: lead.campaign.variables as Record<string, string> | null,
+        tenantId: lead.campaign.tenantId,
+      },
+    };
   }
 }

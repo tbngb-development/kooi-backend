@@ -1,3 +1,5 @@
+// modules/batches/infrastructure/jobs/batch-processing.worker.ts
+
 import type { Job } from "bull";
 import type { BatchRepository } from "../../application/interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
@@ -74,7 +76,7 @@ export class BatchProcessingWorker {
           tenantId,
         },
       );
-      return; // Clean exit without retries
+      return;
     }
 
     this.log?.info("Batch processing started", {
@@ -170,13 +172,13 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 30);
 
-      // ── STAGE 2: STORE LEADS (30-60%) ──────────────────────────
+      // ── STAGE 2: STORE & REASSIGN LEADS (30-60%) ───────────────
       await this.batchRepo.updateProgress(batchId, "STORING", 35);
 
-      let totalInserted = 0;
+      // 1. Insert new unique phone numbers
       for (let i = 0; i < newLeads.length; i += CHUNK_SIZE) {
         const chunk = newLeads.slice(i, i + CHUNK_SIZE);
-        const inserted = await this.batchRepo.createLeads(
+        await this.batchRepo.createLeads(
           chunk.map((row) => ({
             name: row.name,
             phone: row.phone,
@@ -188,33 +190,37 @@ export class BatchProcessingWorker {
             metadata: row as Record<string, unknown>,
           })),
         );
-        totalInserted += inserted;
 
-        const progress = 35 + Math.round((i / newLeads.length) * 25);
+        const progress = 35 + Math.round((i / newLeads.length) * 15);
         await this.batchRepo.updateProgress(batchId, "STORING", progress);
       }
 
-      if (totalInserted === 0) {
+      // 2. If skipCrossBatchDedup is true, reassign existing campaign leads to this batch
+      if (env.skipCrossBatchDedup) {
+        const allPhones = newLeads.map((r) => r.phone);
+        for (let i = 0; i < allPhones.length; i += 1000) {
+          const chunk = allPhones.slice(i, i + 1000);
+          await this.batchRepo.reassignCampaignLeadsToBatch(
+            campaignId,
+            batchId,
+            chunk,
+          );
+        }
+      }
+
+      // 3. Verify total leads available for this batch
+      const pendingLeads = await this.batchRepo.findPendingLeads(batchId);
+      const totalAvailable = pendingLeads.length;
+
+      if (totalAvailable === 0) {
         await this.failBatch(
           batchId,
-          `All ${newLeads.length} leads already exist in this campaign. No new leads to process.`,
+          "No valid leads available to process in this batch.",
         );
         return;
       }
 
-      const duplicatesSkipped = newLeads.length - totalInserted;
-      if (duplicatesSkipped > 0) {
-        this.log?.warn("Some leads skipped as DB duplicates", {
-          action: "batch.worker.duplicates_skipped",
-          batchId,
-          tenantId,
-          expected: newLeads.length,
-          inserted: totalInserted,
-          skipped: duplicatesSkipped,
-        });
-      }
-
-      await this.batchRepo.updateTotalLeads(batchId, totalInserted);
+      await this.batchRepo.updateTotalLeads(batchId, totalAvailable);
       await this.batchRepo.updateProgress(batchId, "STORING", 60);
 
       // ── STAGE 3: BOLNA SYNC (60-90%) ───────────────────────────
@@ -232,12 +238,22 @@ export class BatchProcessingWorker {
         return;
       }
 
-      let leadsForBolna = newLeads;
-      if (duplicatesSkipped > 0) {
-        const dbLeads = await this.batchRepo.findPendingLeads(batchId);
-        const dbPhones = new Set(dbLeads.map((l) => l.phone));
-        leadsForBolna = newLeads.filter((r) => dbPhones.has(r.phone));
+      if (!campaign.assistant) {
+        await this.failBatch(
+          batchId,
+          "Campaign assistant is not configured or missing.",
+        );
+        return;
       }
+
+      // Convert DB pending leads to LeadRow type-safely (null -> undefined)
+      const leadsForBolna: LeadRow[] = pendingLeads.map((l) => ({
+        ...(l.metadata as Record<string, unknown>),
+        phone: l.phone,
+        name: l.name,
+        email: l.email ?? undefined,
+        company: l.company ?? undefined,
+      }));
 
       const campaignVariables =
         (campaign.variables as Record<string, string>) ?? {};
@@ -253,10 +269,11 @@ export class BatchProcessingWorker {
         : undefined;
 
       const bolnaResult = await this.bolnaProvider.createBatch(tenantId, {
-        agentId: campaign.assistant!.platformAgent.bolnaId,
+        agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batchId}.csv`,
         retryConfig: retryConfig ?? undefined,
+        fromPhoneNumbers: ["+918064261668"],
         webhookUrl,
       });
 
@@ -286,7 +303,6 @@ export class BatchProcessingWorker {
         finalStatus = runImmediately ? "RUNNING" : "SCHEDULED";
       }
 
-      // Check existence before final update to avoid P2025 if deleted during Bolna call
       const finalCheck = await this.batchRepo.findById(
         tenantId,
         campaignId,
@@ -306,7 +322,8 @@ export class BatchProcessingWorker {
         bolnaScheduledAt,
       });
 
-      await this.campaignRepo.incrementTotalLeads(campaignId, totalInserted);
+      // Recalculate campaign totals accurately across all active batches
+      await this.batchRepo.recalculateCampaignStats(campaignId);
 
       if (runImmediately && campaign.status === "DRAFT") {
         await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
@@ -321,7 +338,7 @@ export class BatchProcessingWorker {
         batchId,
         tenantId,
         campaignId,
-        totalInserted,
+        totalLeads: totalAvailable,
         bolnaBatchId,
         finalStatus,
       });

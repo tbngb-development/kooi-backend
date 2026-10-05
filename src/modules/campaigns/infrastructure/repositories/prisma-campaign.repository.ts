@@ -1,3 +1,5 @@
+// modules/campaigns/infrastructure/repositories/prisma-campaign.repository.ts
+
 import prisma from "../../../../shared/config/database/prisma";
 import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
@@ -34,6 +36,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       sortOrder = "desc",
       page = 1,
       limit = 20,
+      isDeleted = false,
     } = filters;
 
     const pageNum = Math.max(1, page);
@@ -42,6 +45,9 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     // ── Build WHERE clause ──
     const where: Prisma.CampaignWhereInput = { tenantId };
+
+    // Apply exclusion filters for soft deleted data unless explicitly requested
+    where.isDeleted = isDeleted;
 
     if (search && search.trim() !== "") {
       const term = search.trim();
@@ -71,13 +77,14 @@ export class PrismaCampaignRepository implements CampaignRepository {
     const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
     const orderDir = sortOrder === "asc" ? "asc" : "desc";
 
-    // ── Parallel: filtered items + filtered count + global overview ──
+    // ── Parallel Query Operations ──
     const [campaigns, total, overview] = await Promise.all([
       prisma.campaign.findMany({
         where,
         include: {
           assistant: { select: { id: true, name: true } },
           batches: {
+            where: { isDeleted },
             select: {
               id: true,
               status: true,
@@ -91,7 +98,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         take: limitNum,
       }),
       prisma.campaign.count({ where }),
-      this.getTenantCampaignOverview(tenantId),
+      this.getTenantCampaignOverview(tenantId, isDeleted),
     ]);
 
     return {
@@ -106,27 +113,31 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
-  // ── NEW: Tenant-global overview (unfiltered) ──
+  // Helper isolation for tenant aggregated overview metrics
   private async getTenantCampaignOverview(
     tenantId: string,
+    isDeleted: boolean,
   ): Promise<CampaignListOverview> {
+    const baseWhere = {
+      tenantId,
+      isDeleted,
+    };
+
     const [totalCampaigns, totalLeads, totalCalls, runningCampaigns] =
       await Promise.all([
-        prisma.campaign.count({ where: { tenantId } }),
-        prisma.lead.count({ where: { tenantId } }),
+        prisma.campaign.count({ where: baseWhere }),
+        prisma.lead.count({ where: { tenantId } }), // Tenant-scoped counts remain consistent
         prisma.call.count({ where: { tenantId } }),
-        prisma.campaign.count({ where: { tenantId, status: "RUNNING" } }),
+        prisma.campaign.count({ where: { ...baseWhere, status: "RUNNING" } }),
       ]);
 
     return { totalCampaigns, totalLeads, totalCalls, runningCampaigns };
   }
 
-  // ── NEW: Campaign-scoped overview for detail page ──
   async getCampaignOverviewStats(
     tenantId: string,
     campaignId: string,
   ): Promise<CampaignDetailOverview> {
-    // Verify campaign belongs to tenant
     const campaign = await prisma.campaign.findFirst({
       where: { id: campaignId, tenantId },
       select: { id: true, totalLeads: true },
@@ -182,7 +193,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
   ): Promise<CampaignEntityData | null> {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: {
+        id: campaignId,
+        tenantId,
+      },
     });
 
     if (!campaign) return null;
@@ -205,7 +219,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
     | null
   > {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: {
+        id: campaignId,
+        tenantId,
+      },
       include: {
         assistant: {
           include: {
@@ -248,6 +265,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         assistantId: data.assistantId,
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
+        isDeleted: false,
       },
       include: { assistant: true },
     });
@@ -282,7 +300,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
   ): Promise<CampaignStatsResult> {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: { id: campaignId, tenantId, isDeleted: false },
       include: {
         assistant: {
           include: {
@@ -350,9 +368,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
     batchId?: string,
   ): Promise<ExtractionOverviewResult> {
-    // Verify campaign belongs to tenant
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: { id: campaignId, tenantId, isDeleted: false },
       select: { id: true },
     });
 
@@ -360,7 +377,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       throw new Error("Campaign not found");
     }
 
-    // Single GROUP BY query — returns one row per (disposition, value)
     const rows = await prisma.callExtractionOverview.groupBy({
       by: [
         "dispositionId",
@@ -385,17 +401,15 @@ export class PrismaCampaignRepository implements CampaignRepository {
       return { campaignId, totalCalls: 0, dispositions: [] };
     }
 
-    // Filter out dispositions where showInOverview is false
     const dispositionIds = [...new Set(rows.map((r) => r.dispositionId))];
     const visibleDispositions = await prisma.extractionDisposition.findMany({
-      where: { id: { in: dispositionIds }, showInOverview: true }, // ← Filter at READ time
+      where: { id: { in: dispositionIds }, showInOverview: true },
       select: { id: true },
     });
     const visibleIds = new Set(visibleDispositions.map((d) => d.id));
 
     const filteredRows = rows.filter((r) => visibleIds.has(r.dispositionId));
 
-    // Get total unique calls for percentage calculation
     const totalCallsResult = await prisma.callExtractionOverview.findMany({
       where: {
         tenantId,
@@ -408,7 +422,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
     });
     const totalCalls = totalCallsResult.length;
 
-    // Group rows by disposition
     const dispositionMap = new Map<
       string,
       {
@@ -440,11 +453,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
       acc.values.push({
         value: row.objectiveValue,
         count,
-        percentage: 0, // calculated below
+        percentage: 0,
       });
     }
 
-    // Calculate percentages
     const dispositions: ExtractionOverviewDisposition[] = [];
     for (const acc of dispositionMap.values()) {
       for (const v of acc.values) {
@@ -466,7 +478,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     topN: number = 10,
   ): Promise<ExtractionInsightResult> {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId },
+      where: { id: campaignId, tenantId, isDeleted: false },
       select: { id: true },
     });
 
@@ -474,7 +486,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       throw new Error("Campaign not found");
     }
 
-    // Single GROUP BY — one row per (disposition, normalizedValue)
     const rows = await prisma.callExtractionInsight.groupBy({
       by: [
         "dispositionId",
@@ -510,7 +521,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       return { campaignId, totalCalls: 0, insights: [] };
     }
 
-    // Total unique calls with any insight data
     const totalCallsResult = await prisma.callExtractionInsight.findMany({
       where: {
         tenantId,
@@ -523,7 +533,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
     });
     const totalCalls = totalCallsResult.length;
 
-    // Group by disposition
     const dispositionMap = new Map<
       string,
       ExtractionInsightDisposition & {
@@ -560,7 +569,6 @@ export class PrismaCampaignRepository implements CampaignRepository {
       });
     }
 
-    // Sort, slice top N, calculate percentages
     const insights: ExtractionInsightDisposition[] = [];
     for (const acc of dispositionMap.values()) {
       acc.allValues.sort((a, b) => b.count - a.count);
@@ -589,7 +597,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     assistantId: string,
   ): Promise<AssistantWithAgentData | null> {
     const assistant = await prisma.assistant.findFirst({
-      where: { id: assistantId, tenantId },
+      where: { id: assistantId, tenantId, isDeleted: false },
       select: {
         id: true,
         name: true,
@@ -617,6 +625,84 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
+  async softDelete(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    archivedCalls: number;
+    archivedLeads: number;
+    archivedBatches: number;
+  }> {
+    const now = new Date();
+
+    const [, batchResult, leadResult, callResult] = await prisma.$transaction([
+      // 1. Archive campaign
+      prisma.campaign.update({
+        where: { id: campaignId, tenantId },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+      // 2. Cascade to batches
+      prisma.leadBatch.updateMany({
+        where: { campaignId, tenantId, isDeleted: false },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+      // 3. Cascade to leads
+      prisma.lead.updateMany({
+        where: { campaignId, tenantId, isDeleted: false },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+      // 4. Cascade to calls
+      prisma.call.updateMany({
+        where: { campaignId, tenantId, isDeleted: false },
+        data: { isDeleted: true, deletedAt: now },
+      }),
+    ]);
+
+    return {
+      archivedBatches: batchResult.count,
+      archivedLeads: leadResult.count,
+      archivedCalls: callResult.count,
+    };
+  }
+
+  async restore(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    restoredCalls: number;
+    restoredLeads: number;
+    restoredBatches: number;
+  }> {
+    const [, batchResult, leadResult, callResult] = await prisma.$transaction([
+      // 1. Restore campaign
+      prisma.campaign.update({
+        where: { id: campaignId, tenantId },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+      // 2. Cascade restore batches
+      prisma.leadBatch.updateMany({
+        where: { campaignId, tenantId, isDeleted: true },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+      // 3. Cascade restore leads
+      prisma.lead.updateMany({
+        where: { campaignId, tenantId, isDeleted: true },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+      // 4. Cascade restore calls
+      prisma.call.updateMany({
+        where: { campaignId, tenantId, isDeleted: true },
+        data: { isDeleted: false, deletedAt: null },
+      }),
+    ]);
+
+    return {
+      restoredBatches: batchResult.count,
+      restoredLeads: leadResult.count,
+      restoredCalls: callResult.count,
+    };
+  }
+
   private toEntityData(campaign: {
     id: string;
     name: string;
@@ -634,6 +720,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
     completedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
+    isDeleted: boolean;
+    deletedAt: Date | null;
   }): CampaignEntityData {
     return {
       id: campaign.id,
@@ -655,6 +743,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
       completedAt: campaign.completedAt,
       createdAt: campaign.createdAt,
       updatedAt: campaign.updatedAt,
+      isDeleted: campaign.isDeleted,
+      deletedAt: campaign.deletedAt,
     };
   }
 }

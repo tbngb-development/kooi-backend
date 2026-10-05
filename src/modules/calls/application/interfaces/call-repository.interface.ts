@@ -17,6 +17,7 @@ export interface ListCallsFilters {
   page?: number;
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
+  isDeleted?: boolean;
 }
 
 export interface PaginatedCallsResult {
@@ -107,7 +108,11 @@ export interface CallRepository {
     tenantId: string,
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult>;
-  findById(tenantId: string, id: string): Promise<DetailedCallResult | null>;
+
+  findById(
+    tenantId: string,
+    id: string,
+  ): Promise<DetailedCallResult | null>;
 
   findTranscriptById(
     tenantId: string,
@@ -125,4 +130,28 @@ export interface CallRepository {
     tenantId: string,
     campaignId: string,
   ): Promise<AvailableFiltersResponse>;
+
+  softDelete(callId: string): Promise<void>;
+
+  restore(callId: string): Promise<void>;
+
+  findInboundLeadContext(
+    agentId: string,
+    phone: string,
+  ): Promise<{
+    lead: {
+      id: string;
+      name: string | null;
+      phone: string;
+      email: string | null;
+      company: string | null;
+      metadata: Record<string, unknown> | null;
+    };
+    campaign: {
+      id: string;
+      name: string;
+      variables: Record<string, string> | null;
+      tenantId: string;
+    };
+  } | null>;
 }

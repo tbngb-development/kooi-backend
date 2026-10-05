@@ -1,3 +1,5 @@
+// modules/campaigns/domain/entities/campaign.entity.ts
+
 import type { CampaignStatus } from "@prisma/client";
 import { InvalidCampaignStatusTransitionError } from "../errors/campaign.errors";
 import { canTransitionCampaignStatus } from "./campaign-status.rules";
@@ -19,6 +21,8 @@ export interface CampaignEntityData {
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  isDeleted: boolean;
+  deletedAt: Date | null;
 }
 
 export class CampaignEntity {
@@ -39,8 +43,26 @@ export class CampaignEntity {
   get totalLeads(): number {
     return this.data.totalLeads;
   }
+  get isDeleted(): boolean {
+    return this.data.isDeleted;
+  }
+  get deletedAt(): Date | null {
+    return this.data.deletedAt;
+  }
   get isTerminal(): boolean {
     return this.data.status === "COMPLETED" || this.data.status === "FAILED";
+  }
+
+  /**
+   * Only campaigns in DRAFT, COMPLETED, or FAILED statuses are allowed to be archived.
+   * RUNNING campaigns cannot be archived.
+   */
+  get isArchivable(): boolean {
+    return (
+      this.data.status === "DRAFT" ||
+      this.data.status === "COMPLETED" ||
+      this.data.status === "FAILED"
+    );
   }
 
   canTransitionTo(newStatus: CampaignStatus): boolean {

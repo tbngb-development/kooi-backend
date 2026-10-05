@@ -1,3 +1,5 @@
+// modules/batches/domain/errors/batch.errors.ts
+
 import { NotFoundError } from "../../../../shared/errors/not-found.error";
 import { AppError } from "../../../../shared/errors/app.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
@@ -101,6 +103,36 @@ export class MaxLeadsPerBatchExceededError extends AppError {
       HttpStatus.UNPROCESSABLE_ENTITY,
       `The file contains ${actual} ready-to-import leads, which exceeds your plan limit of ${maxAllowed} leads per batch.`,
       "MAX_LEADS_PER_BATCH_EXCEEDED",
+    );
+  }
+}
+
+export class BatchAlreadyDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Batch is already archived",
+      "BATCH_ALREADY_ARCHIVED",
+    );
+  }
+}
+
+export class BatchNotDeletedError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      "Batch is not currently archived",
+      "BATCH_NOT_ARCHIVED",
+    );
+  }
+}
+
+export class BatchNotArchivableError extends AppError {
+  constructor(status: BatchStatus) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Cannot archive batch in active status: '${status}'. Stop the batch first.`,
+      "BATCH_NOT_ARCHIVABLE",
     );
   }
 }
