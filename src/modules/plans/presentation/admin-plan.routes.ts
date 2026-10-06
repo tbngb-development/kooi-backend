@@ -9,7 +9,6 @@ import {
   createPlanVersionSchema,
   updateTenantPlanOverridesSchema,
   changePlanSchema,
-  listPlanSubscribersSchema,
 } from "./plan.schema";
 
 export function buildAdminPlanRoutes(
@@ -52,7 +51,6 @@ export function buildAdminPlanRoutes(
 
   router.get(
     "/:planId/subscribers",
-    validate(listPlanSubscribersSchema),
     controller.listSubscribers,
   );
 

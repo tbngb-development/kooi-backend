@@ -20,6 +20,8 @@ import type {
 } from "../application/dto/plan.dto";
 import type { AuthRequest } from "../../../shared/types";
 import type { ListPlanSubscribersUseCase } from "../application/use-cases/list-plan-subscribers.use-case";
+import { listPlanSubscribersSchema } from "./plan.schema";
+import { ValidationError } from "../../../shared/errors";
 
 export class AdminPlanController {
   constructor(
@@ -164,16 +166,21 @@ export class AdminPlanController {
   ): Promise<void> => {
     try {
       const planId = param(req, "planId");
+      const parsed = listPlanSubscribersSchema.safeParse(req.query);
+      if (!parsed.success) {
+        const details = parsed.error.issues.map((issue) => ({
+          field: issue.path.join(".") || "query",
+          message: issue.message,
+        }));
+        throw new ValidationError(details);
+      }
+
       const query: ListPlanSubscribersQuery = {
         planId,
-        versionId: req.query.versionId as string | undefined,
-        status: req.query.status as ListPlanSubscribersQuery["status"],
-        search: req.query.search as string | undefined,
-        sortBy: req.query.sortBy as ListPlanSubscribersQuery["sortBy"],
-        sortOrder: req.query.sortOrder as ListPlanSubscribersQuery["sortOrder"],
-        page: req.query.page ? Number(req.query.page) : undefined,
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        ...parsed.data,
       };
+
+      
 
       const result = await this.listSubscribersUseCase.execute(query);
       sendSuccess(res, result);
