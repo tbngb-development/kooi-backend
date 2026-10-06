@@ -83,3 +83,17 @@ export const updateTenantPlanOverridesSchema = z.object({
 export const changePlanSchema = z.object({
   newPlanId: z.uuid("Invalid plan ID"),
 });
+
+export const listPlanSubscribersSchema = z.object({
+  versionId: z.uuid("Invalid version ID").optional(),
+  status: z
+    .enum(["PENDING_PAYMENT", "ACTIVE", "EXPIRED", "CANCELLED"])
+    .optional(),
+  search: z.string().min(1).max(100).optional(),
+  sortBy: z
+    .enum(["activatedAt", "tenantName", "planVersion", "status", "createdAt"])
+    .optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});

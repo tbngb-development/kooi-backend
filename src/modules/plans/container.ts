@@ -14,6 +14,7 @@ import { UpdateTenantPlanOverridesUseCase } from "./application/use-cases/update
 import { AdminPlanController } from "./presentation/admin-plan.controller";
 import { TenantPlanController } from "./presentation/tenant-plan.controller";
 import { ChangeTenantPlanUseCase } from "./application/use-cases/change-tenant-plan.use-case";
+import { ListPlanSubscribersUseCase } from "./application/use-cases/list-plan-subscribers.use-case";
 
 export interface PlanModule {
   repository: PlanRepository;
@@ -44,6 +45,7 @@ export function buildPlanModule(): PlanModule {
     repository,
   );
   const changeTenantPlan = new ChangeTenantPlanUseCase(repository);
+  const listSubscribers = new ListPlanSubscribersUseCase(repository);
 
   return {
     repository,
@@ -63,6 +65,7 @@ export function buildPlanModule(): PlanModule {
       archivePlanVersion,
       updateTenantPlanOverrides,
       changeTenantPlan,
+      listSubscribers,
     ),
     tenantController: new TenantPlanController(
       listPlans,

@@ -14,6 +14,10 @@ import type {
   UpdatePlanInput,
   CreatePlanVersionInput,
   UpdatePlanOverridesInput,
+  ListPlanSubscribersQuery,
+  ListPlanSubscribersResponse,
+  PlanSubscriberItem,
+  TenantUsageSnapshot,
 } from "../../application/dto/plan.dto";
 import { resolveEffectiveTerms } from "../../domain/entities/plan.entity";
 import {
@@ -549,6 +553,148 @@ export class PrismaPlanRepository implements PlanRepository {
         },
       });
     });
+  }
+
+  async listSubscribers(
+    query: ListPlanSubscribersQuery,
+  ): Promise<ListPlanSubscribersResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const sortBy = query.sortBy ?? "activatedAt";
+    const sortOrder = query.sortOrder ?? "desc";
+
+    // ── Build WHERE clause ──────────────────────────────────────
+    const where: Record<string, unknown> = {
+      planId: query.planId,
+    };
+
+    if (query.versionId) {
+      where.planVersionId = query.versionId;
+    }
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    if (query.search) {
+      where.tenant = {
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" } },
+          { email: { contains: query.search, mode: "insensitive" } },
+        ],
+      };
+    }
+
+    // ── Build ORDER BY clause ───────────────────────────────────
+    let orderBy: Record<string, string>;
+
+    switch (sortBy) {
+      case "tenantName":
+        orderBy = { tenant: { name: sortOrder } } as unknown as Record<
+          string,
+          string
+        >;
+        break;
+      case "planVersion":
+        orderBy = { planVersion: { version: sortOrder } } as unknown as Record<
+          string,
+          string
+        >;
+        break;
+      case "status":
+        orderBy = { status: sortOrder };
+        break;
+      case "createdAt":
+        orderBy = { createdAt: sortOrder };
+        break;
+      case "activatedAt":
+      default:
+        orderBy = { activatedAt: sortOrder };
+        break;
+    }
+
+    // ── Execute queries ─────────────────────────────────────────
+    const [total, tenantPlans] = await Promise.all([
+      prisma.tenantPlan.count({ where }),
+      prisma.tenantPlan.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          tenant: {
+            select: { id: true, name: true, email: true },
+          },
+          plan: {
+            select: { id: true, name: true, slug: true, displayOrder: true },
+          },
+          planVersion: true,
+        },
+      }),
+    ]);
+
+    // ── Enrich with usage snapshots ─────────────────────────────
+    const data: PlanSubscriberItem[] = await Promise.all(
+      tenantPlans.map(async (tp) => {
+        const effectiveTerms = resolveEffectiveTerms(tp.plan, tp.planVersion, {
+          onboardingFeeOverride: tp.onboardingFeeOverride,
+          perMinuteRateOverride: tp.perMinuteRateOverride,
+        });
+
+        // Fetch usage counts in parallel
+        const [activeCampaigns, agents, teamMembers] = await Promise.all([
+          this.countActiveCampaigns(tp.tenantId),
+          this.countAgents(tp.tenantId),
+          this.countTeamMembers(tp.tenantId),
+        ]);
+
+        const usage: TenantUsageSnapshot = {
+          activeCampaigns,
+          maxActiveCampaigns: effectiveTerms.maxActiveCampaigns,
+          agents,
+          maxAgents: effectiveTerms.maxAgents,
+          teamMembers,
+          maxTeamMembers: effectiveTerms.maxTeamMembers,
+        };
+
+        return {
+          tenantId: tp.tenant.id,
+          tenantName: tp.tenant.name,
+          tenantEmail: tp.tenant.email,
+          tenantPlanId: tp.id,
+          status: tp.status,
+
+          planId: tp.plan.id,
+          planName: tp.plan.name,
+          planVersionId: tp.planVersion.id,
+          planVersion: tp.planVersion.version,
+          planVersionStatus: tp.planVersion.status,
+
+          effectiveTerms,
+          overrides: {
+            onboardingFeeOverride: tp.onboardingFeeOverride,
+            perMinuteRateOverride: tp.perMinuteRateOverride,
+          },
+
+          activatedAt: tp.activatedAt?.toISOString() ?? null,
+          bonusExpiresAt: tp.bonusExpiresAt?.toISOString() ?? null,
+          createdAt: tp.createdAt.toISOString(),
+
+          usage,
+        };
+      }),
+    );
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   // ── Enforcement Counts ────────────────────────────────────────

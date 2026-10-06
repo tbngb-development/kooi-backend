@@ -88,3 +88,64 @@ export interface ChangePlanResponse {
   requiresPayment: boolean;
   effectiveImmediately: boolean;
 }
+
+// ── Plan Subscribers ─────────────────────────────────────────────────────────
+
+export interface ListPlanSubscribersQuery {
+  planId: string;
+  versionId?: string;
+  status?: TenantPlanStatus;
+  search?: string;
+  sortBy?:
+    "activatedAt" | "tenantName" | "planVersion" | "status" | "createdAt";
+  sortOrder?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export interface TenantUsageSnapshot {
+  activeCampaigns: number;
+  maxActiveCampaigns: number | null;
+  agents: number;
+  maxAgents: number | null;
+  teamMembers: number;
+  maxTeamMembers: number | null;
+}
+
+export interface PlanSubscriberItem {
+  tenantId: string;
+  tenantName: string;
+  tenantEmail: string;
+  tenantPlanId: string;
+  status: TenantPlanStatus;
+
+  planId: string;
+  planName: string;
+  planVersionId: string;
+  planVersion: number;
+  planVersionStatus: PlanVersionStatus;
+
+  effectiveTerms: EffectivePlanTerms;
+  overrides: {
+    onboardingFeeOverride: number | null;
+    perMinuteRateOverride: number | null;
+  };
+
+  activatedAt: string | null;
+  bonusExpiresAt: string | null;
+  createdAt: string;
+
+  usage: TenantUsageSnapshot;
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ListPlanSubscribersResponse {
+  data: PlanSubscriberItem[];
+  pagination: PaginationMeta;
+}
