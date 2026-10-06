@@ -41,6 +41,7 @@ import type {
   ChangePasswordBody,
 } from "./auth.schema";
 import type { SendRegisterOtpUseCase } from "../application/use-cases/send-register-otp.use-case";
+import type { RevokeAllSessionsUseCase } from "../application/use-cases/revoke-all-sessions.use-case";
 
 const DEFAULT_ACCESS_EXPIRY = 900;
 const DEFAULT_REFRESH_EXPIRY = 604800;
@@ -60,6 +61,7 @@ export class TenantAuthController {
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly changePasswordUseCase: ChangePasswordUseCase,
     private readonly sendRegisterOtpUseCase: SendRegisterOtpUseCase,
+    private readonly revokeAllSessionsUseCase: RevokeAllSessionsUseCase,
   ) {}
 
   sendRegisterOtp = async (
@@ -312,6 +314,24 @@ export class TenantAuthController {
       // Force re-login on all devices
       this.clearTokenCookies(res);
       sendSuccess(res, output, HttpStatus.OK);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  revokeAllSessions = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const authReq = req as AuthRequest;
+      const userId = authReq.user.userId;
+
+      const result = await this.revokeAllSessionsUseCase.execute({ userId });
+
+      this.clearTokenCookies(res);
+      sendSuccess(res, result);
     } catch (err) {
       next(err);
     }
