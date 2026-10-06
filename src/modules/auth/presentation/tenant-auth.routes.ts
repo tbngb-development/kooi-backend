@@ -84,6 +84,12 @@ export function buildTenantAuthRoutes(
     controller.changePassword,
   );
 
+  router.post(
+    "/revoke-all-sessions",
+    authenticate.any(),
+    controller.revokeAllSessions,
+  );
+
   // Authenticated routes
   router.post("/refresh", validate(refreshTokensSchema), controller.refresh);
   router.post("/logout", validate(logoutSchema), controller.logout);

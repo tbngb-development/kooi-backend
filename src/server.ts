@@ -19,7 +19,8 @@ const server = app.listen(env.port, () => {
   try {
     container.wallet.schedulers.bonusExpiry.start();
     container.batches.schedulers.batchProcessing.start();
-    container.bolnaApiKeys.schedulers.agentClone.start(); // ← NEW
+    container.bolnaApiKeys.schedulers.agentClone.start();
+    container.auth.schedulers.refreshTokenCleanup.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -32,6 +33,7 @@ function gracefulShutdown(signal: string): void {
   container.wallet.schedulers.bonusExpiry.stop();
   container.batches.schedulers.batchProcessing.stop();
   container.bolnaApiKeys.schedulers.agentClone.stop();
+  container.auth.schedulers.refreshTokenCleanup.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);

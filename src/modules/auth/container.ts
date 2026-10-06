@@ -22,10 +22,16 @@ import { TenantAuthController } from "./presentation/tenant-auth.controller";
 import { AdminAuthController } from "./presentation/admin-auth.controller";
 import { SendRegisterOtpUseCase } from "./application/use-cases/send-register-otp.use-case";
 import { AdminLoginUseCase } from "./application/use-cases/admin-login.use-case";
+import { RevokeAllSessionsUseCase } from "./application/use-cases/revoke-all-sessions.use-case";
+import { RefreshTokenCleanupService } from "./infrastructure/services/refresh-token-cleanup.service";
+import { RefreshTokenCleanupScheduler } from "./infrastructure/jobs/refresh-token-cleanup.scheduler";
 
 export interface AuthModule {
   tenantController: TenantAuthController;
   adminController: AdminAuthController;
+  schedulers: {
+    refreshTokenCleanup: RefreshTokenCleanupScheduler;
+  };
 }
 
 export interface AuthModuleDeps {
@@ -92,6 +98,13 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
 
   const logoutUsecase = new LogoutUseCase(authRepository, tokenService, log);
 
+  const revokeAllSessions = new RevokeAllSessionsUseCase(authRepository, log);
+  const cleanupService = new RefreshTokenCleanupService(authRepository, log);
+  const refreshTokenCleanupScheduler = new RefreshTokenCleanupScheduler(
+    cleanupService,
+    log,
+  );
+
   return {
     tenantController: new TenantAuthController(
       new RegisterTenantOwnerUseCase(
@@ -118,6 +131,7 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       resetPasswordUseCase,
       changePasswordUseCase,
       new SendRegisterOtpUseCase(authRepository, otpService, emailService, log),
+      revokeAllSessions,
     ),
 
     adminController: new AdminAuthController(
@@ -128,5 +142,9 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       resetPasswordUseCase,
       changePasswordUseCase,
     ),
+
+    schedulers: {
+      refreshTokenCleanup: refreshTokenCleanupScheduler,
+    },
   };
 }

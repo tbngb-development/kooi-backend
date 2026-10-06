@@ -74,9 +74,13 @@ export interface AuthRepository {
 
   revokeRefreshTokenFamily(familyId: string): Promise<void>;
 
-  revokeAllUserRefreshTokens(userId: string): Promise<void>;
+  revokeAllUserRefreshTokens(userId: string): Promise<number>;
 
   cleanupExpiredRefreshTokens(olderThanDays: number): Promise<number>;
+
+  cleanupOrphanedAndExpiredTokenFamilies(
+    olderThanDays?: number,
+  ): Promise<number>;
 
   updateUserPassword(userId: string, passwordHash: string): Promise<void>;
 }
