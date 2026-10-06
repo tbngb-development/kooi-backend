@@ -15,6 +15,7 @@ import {
 import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 export class ScheduleBatchUseCase {
   constructor(
@@ -32,6 +33,8 @@ export class ScheduleBatchUseCase {
     batchId: string,
     scheduledAt: string,
   ) {
+     // ── 0. Workspace Migration Freeze Guard ─────────────────────
+    await assertTenantNotFrozen(tenantId);
     // 1. Validate batch
     const batchData = await this.batchRepo.findById(
       tenantId,

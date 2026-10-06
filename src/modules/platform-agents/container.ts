@@ -27,6 +27,7 @@ import { SyncExtractionsToBolnaUseCase } from "./application/use-cases/sync-extr
 import { AdminPlatformAgentController } from "./presentation/admin-platform-agent.controller";
 import { UpdatePlatformAgentVariablesUseCase } from "./application/use-cases/update_platform-agent-variables";
 import type { Logger } from "../../shared/logging/logger.interface";
+import { CloneAgentToWorkspaceUseCase } from "./application/use-cases/clone-agent-to-workspace.use-case";
 
 export interface PlatformAgentModuleDeps {
   logger?: Logger;
@@ -34,6 +35,7 @@ export interface PlatformAgentModuleDeps {
 
 export interface PlatformAgentModule {
   adminController: AdminPlatformAgentController;
+  cloneAgentToWorkspaceUseCase: CloneAgentToWorkspaceUseCase;
 }
 
 export function buildPlatformAgentModule(
@@ -51,6 +53,20 @@ export function buildPlatformAgentModule(
   );
   const bolnaExtractionSyncService = new BolnaExtractionSyncServiceImpl(
     bolnaExtractionProvider,
+  );
+
+  const syncExtractionsToBolnaUseCase = new SyncExtractionsToBolnaUseCase(
+    repository,
+    extractionRepository,
+    bolnaExtractionSyncService,
+    log,
+  );
+
+  const cloneAgentToWorkspaceUseCase = new CloneAgentToWorkspaceUseCase(
+    repository,
+    templateProvider,
+    syncExtractionsToBolnaUseCase,
+    log,
   );
 
   return {
@@ -91,5 +107,6 @@ export function buildPlatformAgentModule(
       ),
       new UpdatePlatformAgentVariablesUseCase(repository),
     ),
+    cloneAgentToWorkspaceUseCase,
   };
 }

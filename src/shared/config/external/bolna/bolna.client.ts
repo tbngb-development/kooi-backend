@@ -17,6 +17,9 @@ import type {
   BolnaDispositionCreatePayload,
   BolnaDispositionResponse,
   BolnaDispositionCreateResponse,
+  BolnaCreateAgentPayload,
+  BolnaCreateAgentResponse,
+  BolnaDeleteAgentResponse,
 } from "../../../types/bolna.types";
 
 export interface CreateBatchParams {
@@ -27,7 +30,6 @@ export interface CreateBatchParams {
   webhookUrl?: string;
   fromPhoneNumbers?: string[];
 }
-
 export interface IBolnaClient {
   calls: {
     create(payload: BolnaCallPayload): Promise<BolnaCallResponse>;
@@ -35,6 +37,8 @@ export interface IBolnaClient {
   agents: {
     verify(agentId: string): Promise<BolnaAgentResponse>;
     list(): Promise<BolnaAgentResponse[]>;
+    create(payload: BolnaCreateAgentPayload): Promise<BolnaCreateAgentResponse>;
+    delete(agentId: string): Promise<BolnaDeleteAgentResponse>;
   };
   batches: {
     create(params: CreateBatchParams): Promise<BolnaBatchResponse>;
@@ -132,6 +136,32 @@ export class BolnaClient implements IBolnaClient {
       });
       const response =
         await this.http.get<BolnaAgentResponse[]>("/v2/agent/all");
+      return response.data;
+    },
+
+    create: async (
+      payload: BolnaCreateAgentPayload,
+    ): Promise<BolnaCreateAgentResponse> => {
+      this.logger?.debug("Creating Bolna agent", {
+        action: "bolna.agents.create",
+        agentName: (payload.agent_config as Record<string, unknown>)
+          ?.agent_name,
+      });
+      const response = await this.http.post<BolnaCreateAgentResponse>(
+        "/v2/agent",
+        payload,
+      );
+      return response.data;
+    },
+
+    delete: async (agentId: string): Promise<BolnaDeleteAgentResponse> => {
+      this.logger?.debug("Deleting Bolna agent", {
+        action: "bolna.agents.delete",
+        agentId,
+      });
+      const response = await this.http.delete<BolnaDeleteAgentResponse>(
+        `/v2/agent/${agentId}`,
+      );
       return response.data;
     },
   };

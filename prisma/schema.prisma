@@ -21,6 +21,10 @@ model Tenant {
   termsAcceptedAt DateTime?
   termsVersion    String?
 
+  workspaceSwitchStatus  WorkspaceSwitchStatus @default(IDLE)
+  workspaceSwitchError   String?
+  workspaceSwitchJobId   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -37,6 +41,12 @@ model Tenant {
   callAnalyses  CallAnalysis[]
 
   @@index([email])
+}
+
+enum WorkspaceSwitchStatus {
+  IDLE
+  CLONING
+  FAILED
 }
 
 model User {

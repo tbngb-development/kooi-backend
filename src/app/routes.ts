@@ -89,7 +89,7 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/public/inbound",
     buildInboundCallerMatchRoutes(c.calls.inboundCallerController),
   );
-  
+
   router.use(
     "/v1/dashboard",
     buildTenantDashboardRoutes(c.dashboard.tenantController, c.authenticate),

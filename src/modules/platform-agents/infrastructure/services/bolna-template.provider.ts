@@ -13,11 +13,11 @@ import {
 import type {
   BolnaAgentResponse,
   BolnaExtractionCategoryListResponse,
+  BolnaCreateAgentPayload,
+  BolnaCreateAgentResponse,
 } from "../../../../shared/types/bolna.types";
 import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
-import {
-  getAgentFirstMessage,
-} from "../../../assistants/infrastructure/promptVariableExtractor";
+import { getAgentFirstMessage } from "../../../assistants/infrastructure/promptVariableExtractor";
 
 export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
   constructor(private readonly apiKeyRepository: BolnaApiKeyRepository) {}
@@ -97,6 +97,45 @@ export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
       const reason =
         err?.response?.data?.message ?? err?.message ?? "Unknown error";
       throw new BolnaTemplateFetchError(reason);
+    }
+  }
+
+  async createAgent(
+    payload: BolnaCreateAgentPayload,
+    bolnaApiKeyId: string,
+  ): Promise<BolnaCreateAgentResponse> {
+    const keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
+
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const client = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
+
+    try {
+      return await client.agents.create(payload);
+    } catch (err: any) {
+      const reason =
+        err?.response?.data?.message ??
+        err?.message ??
+        "Agent creation failed on Bolna API";
+      throw new BolnaTemplateFetchError(reason);
+    }
+  }
+
+  async deleteAgent(bolnaId: string, bolnaApiKeyId: string): Promise<void> {
+    const keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    if (!keyRecord || !keyRecord.isActive) {
+      return;
+    }
+
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const client = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
+
+    try {
+      await client.agents.delete(bolnaId);
+    } catch {
+      // Best-effort cleanup: do not throw if delete fails during rollback
     }
   }
 }
