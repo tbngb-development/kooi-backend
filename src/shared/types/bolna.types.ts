@@ -1,3 +1,18 @@
+// ── Bolna User Profile (GET /user/me) ────────────────────────────
+
+export interface BolnaUserConcurrency {
+  max: number;
+  current: number;
+}
+
+export interface BolnaUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  wallet: number;
+  concurrency: BolnaUserConcurrency;
+}
+
 export interface BolnaCallPayload {
   agent_id: string;
   recipient_phone_number: string;
@@ -116,7 +131,6 @@ export interface CallHistoryItem {
   timestamp: string;
   errorMessage?: string | null;
 }
-
 
 export interface BolnaLLMConfig {
   agent_flow_type: string;

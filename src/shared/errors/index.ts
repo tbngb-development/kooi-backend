@@ -6,3 +6,4 @@ export { ConflictError } from "./conflict.error";
 export { ValidationError } from "./validation.error";
 export type { ValidationErrorDetail } from "./validation.error";
 export { TenantWorkspaceFrozenError } from "./frozen.error";
+export { TenantKeyDeactivatedError } from "./key-deactivated.error";

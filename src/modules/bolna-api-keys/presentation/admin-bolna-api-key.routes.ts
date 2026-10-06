@@ -6,6 +6,8 @@ import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   createBolnaApiKeySchema,
   assignKeySchema,
+  updateBolnaApiKeySchema,
+  listKeyTenantsQuerySchema,
   switchReadinessQuerySchema,
 } from "./bolna-api-key.schema";
 
@@ -19,20 +21,32 @@ export function buildAdminBolnaApiKeyRoutes(
   router.use(authenticate.admin());
   router.use(authorize.platformAdmin());
 
-  // Readiness check & migration status
+  // ── Workspace Switching & Readiness Check ─────────────────────────
   router.get(
     "/switch-readiness",
     validateQuery(switchReadinessQuerySchema),
     controller.getReadiness,
   );
+
   router.get("/tenants/:tenantId/switch-status", controller.getStatus);
 
-  // CRUD & Assign
+  // ── Bolna API Keys CRUD ──────────────────────────────────────────
   router.get("/", controller.list);
   router.post("/", validate(createBolnaApiKeySchema), controller.create);
+  router.patch("/:id", validate(updateBolnaApiKeySchema), controller.update);
+
+  // ── Assignment & Activation Lifecycle ────────────────────────────
   router.post("/:id/assign", validate(assignKeySchema), controller.assign);
   router.post("/:id/deactivate", controller.deactivate);
+  router.post("/:id/activate", controller.activate);
+
+  // ── Profile Sync & Tenant Affiliation ────────────────────────────
+  router.post("/:id/refresh-profile", controller.refreshProfile);
+  router.get(
+    "/:id/tenants",
+    validateQuery(listKeyTenantsQuerySchema),
+    controller.listTenants,
+  );
 
   return router;
 }
-  

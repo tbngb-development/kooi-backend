@@ -20,6 +20,7 @@ import type {
   BolnaCreateAgentPayload,
   BolnaCreateAgentResponse,
   BolnaDeleteAgentResponse,
+  BolnaUserProfile,
 } from "../../../types/bolna.types";
 
 export interface CreateBatchParams {
@@ -75,6 +76,9 @@ export interface IBolnaClient {
       payload: Partial<BolnaDispositionCreatePayload>,
     ): Promise<BolnaDispositionCreateResponse>;
     deleteDisposition(dispositionId: string): Promise<void>;
+  };
+  user: {
+    getProfile(): Promise<BolnaUserProfile>;
   };
 }
 
@@ -400,6 +404,15 @@ export class BolnaClient implements IBolnaClient {
         dispositionId,
       });
       await this.http.delete(`/dispositions/${dispositionId}`);
+    },
+  };
+  user = {
+    getProfile: async (): Promise<BolnaUserProfile> => {
+      this.logger?.debug("Fetching Bolna user profile", {
+        action: "bolna.user.get_profile",
+      });
+      const response = await this.http.get<BolnaUserProfile>("/user/me");
+      return response.data;
     },
   };
 }

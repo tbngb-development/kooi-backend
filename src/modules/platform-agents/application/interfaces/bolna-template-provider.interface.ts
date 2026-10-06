@@ -3,6 +3,7 @@ import type {
   BolnaExtractionCategoryListResponse,
   BolnaCreateAgentPayload,
   BolnaCreateAgentResponse,
+  BolnaUserProfile,
 } from "../../../../shared/types/bolna.types";
 
 export interface BolnaTemplateData {
@@ -28,4 +29,5 @@ export interface BolnaTemplateProvider {
     bolnaApiKeyId: string,
   ): Promise<BolnaCreateAgentResponse>;
   deleteAgent(bolnaId: string, bolnaApiKeyId: string): Promise<void>;
+  fetchUserProfile(bolnaApiKeyId: string): Promise<BolnaUserProfile>;
 }

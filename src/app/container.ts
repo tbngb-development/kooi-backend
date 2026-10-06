@@ -104,7 +104,7 @@ export interface AppContainer {
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
-  
+
   // Backwards compatibility references
   assistantModule: AssistantModule;
   platformAgentModule: PlatformAgentModule;
@@ -142,7 +142,7 @@ export function buildContainer(): AppContainer {
   const templateProvider = new BolnaTemplateProviderImpl(apiKeyRepository);
 
   // ── Module Construction ─────────────────────────────────────────────
-  
+
   // 1. Auth Module
   const auth = buildAuthModule({
     authRepository,
@@ -158,7 +158,11 @@ export function buildContainer(): AppContainer {
   const plans = buildPlanModule();
 
   // 3. Platform Agents Module (depends only on core repositories and logger)
-  const platformAgents = buildPlatformAgentModule({ logger });
+  const platformAgents = buildPlatformAgentModule({
+    platformAgentRepo,
+    templateProvider,
+    logger,
+  });
 
   // 4. Bolna API Keys Module (requires cross-module cloning parameters)
   const bolnaApiKeys = buildBolnaApiKeyModule({
@@ -222,7 +226,7 @@ export function buildContainer(): AppContainer {
       debitWalletForCall: wallet.useCases.debitWalletForCall,
       logger,
     }),
-    
+
     platformAgents,
     extractions: buildExtractionModule(),
     industryPacks: buildIndustryPackModule(),

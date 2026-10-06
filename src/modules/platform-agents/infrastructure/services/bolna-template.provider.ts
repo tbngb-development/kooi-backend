@@ -15,6 +15,7 @@ import type {
   BolnaExtractionCategoryListResponse,
   BolnaCreateAgentPayload,
   BolnaCreateAgentResponse,
+  BolnaUserProfile,
 } from "../../../../shared/types/bolna.types";
 import { type BolnaApiKeyRepository } from "../../../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
 import { getAgentFirstMessage } from "../../../assistants/infrastructure/promptVariableExtractor";
@@ -136,6 +137,26 @@ export class BolnaTemplateProviderImpl implements BolnaTemplateProvider {
       await client.agents.delete(bolnaId);
     } catch {
       // Best-effort cleanup: do not throw if delete fails during rollback
+    }
+  }
+
+  async fetchUserProfile(bolnaApiKeyId: string): Promise<BolnaUserProfile> {
+    const keyRecord = await this.apiKeyRepository.findById(bolnaApiKeyId);
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new PlatformApiKeyMissingError();
+    }
+
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+    const client = new BolnaClient(decryptedApiKey, env.bolna.apiUrl);
+
+    try {
+      return await client.user.getProfile();
+    } catch (err: any) {
+      const reason =
+        err?.response?.data?.message ??
+        err?.message ??
+        "Failed to fetch Bolna user profile";
+      throw new BolnaTemplateFetchError(reason);
     }
   }
 }

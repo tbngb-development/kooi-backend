@@ -91,3 +91,30 @@ export const assignCategoriesSchema = z.object({
 export const assignDispositionsSchema = z.object({
   dispositionIds: z.array(z.string().uuid()).min(1),
 });
+
+// ── NEW: Create Agent from Scratch Schema ───────────────────────────
+export const createAgentFromScratchSchema = z.object({
+  bolnaApiKeyId: z.string().uuid("Invalid Bolna API key ID format"),
+  agentName: z.string().min(1, "Agent name is required").max(200),
+  systemPrompt: z
+    .string()
+    .min(10, "System prompt must be at least 10 characters"),
+  welcomeMessage: z.string().optional(),
+  industryPackId: z.string().uuid("Invalid industry pack ID format").optional(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+});
+
+// ── NEW: Clone Platform Agent Schema ────────────────────────────────
+export const clonePlatformAgentSchema = z.object({
+  sourcePlatformAgentId: z
+    .string()
+    .uuid("Invalid source platform agent ID format"),
+  targetApiKeyId: z.string().uuid("Invalid target Bolna API key ID format"),
+  newName: z.string().min(1).max(200).optional(),
+});
+
+export type CreateAgentFromScratchInput = z.infer<
+  typeof createAgentFromScratchSchema
+>;
+export type ClonePlatformAgentInput = z.infer<typeof clonePlatformAgentSchema>;
