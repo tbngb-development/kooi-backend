@@ -10,6 +10,7 @@ import type {
   PlatformAgentWithCount,
   DispositionObjectiveOption,
   UpdateAgentVariablesData,
+  ClonePlatformAgentInput,
 } from "../../application/interfaces/platform-agent-repository.interface";
 import type {
   RegisterPlatformAgentDTO,
@@ -112,6 +113,54 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
           select: { assistants: true, categories: true },
         },
       },
+    });
+  }
+
+  async cloneFrom(input: ClonePlatformAgentInput): Promise<PlatformAgent> {
+    const source = await prisma.platformAgent.findUnique({
+      where: { id: input.sourcePlatformAgentId },
+      include: {
+        categories: true,
+      },
+    });
+
+    if (!source) {
+      throw new Error(
+        `Source PlatformAgent ${input.sourcePlatformAgentId} not found`,
+      );
+    }
+
+    return prisma.platformAgent.create({
+      data: {
+        bolnaId: input.bolnaId,
+        bolnaApiKeyId: input.bolnaApiKeyId,
+        slug: input.slug,
+        name: input.name ?? `${source.name} (Copy)`,
+        category: source.category,
+        description: source.description,
+        defaultConfig: source.defaultConfig as Prisma.InputJsonValue,
+        systemPrompt: source.systemPrompt,
+        welcomeMessage: source.welcomeMessage,
+        requiredVariables: source.requiredVariables as Prisma.InputJsonValue,
+        gender: source.gender,
+        isActive: source.isActive,
+        isFeatured: source.isFeatured,
+        sortOrder: source.sortOrder,
+        industryPackId: source.industryPackId,
+        // Clone category links so extraction sync knows which categories belong to this agent
+        categories: {
+          create: source.categories.map((c) => ({
+            categoryId: c.categoryId,
+            sortOrder: c.sortOrder,
+          })),
+        },
+      },
+    });
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await prisma.platformAgent.delete({
+      where: { id },
     });
   }
 
@@ -268,8 +317,8 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
           sortOrder: d.sortOrder,
           isObjective: d.disposition.isObjective,
           isSubjective: d.disposition.isSubjective,
-            showInOverview:d.disposition.showInOverview ,
-        showInInsights: d.disposition.showInInsights,
+          showInOverview: d.disposition.showInOverview,
+          showInInsights: d.disposition.showInInsights,
           objectiveOptions: d.disposition.objectiveOptions as
             DispositionObjectiveOption[] | null,
         })),

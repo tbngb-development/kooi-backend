@@ -1,8 +1,10 @@
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
-import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
-import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
-import { RechargeNotFoundError } from "../../domain/errors/payment.errors";
+import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
+import {
+  InvalidPaymentStateError,
+  RechargeNotFoundError,
+} from "../../domain/errors/payment.errors";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface CompletePlanUpgradeInput {
@@ -18,20 +20,10 @@ export interface CompletePlanUpgradeResult {
   amountPaid: number;
 }
 
-/**
- * Completes a plan upgrade after the tenant pays the onboarding fee difference.
- *
- * Flow:
- *  1. Verify recharge exists and is not already processed
- *  2. Mark recharge SUCCESS
- *  3. Activate the new plan version (TenantPlanEvent recorded by repo)
- *  4. Wallet balance carries over unchanged
- */
 export class CompletePlanUpgradePaymentUseCase {
   constructor(
     private readonly rechargeRepo: RechargeRepository,
     private readonly planRepo: PlanRepository,
-    private readonly walletRepo: WalletRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -44,40 +36,54 @@ export class CompletePlanUpgradePaymentUseCase {
     );
     if (!recharge) throw new RechargeNotFoundError(input.razorpayOrderId);
 
-    if (recharge.status === "SUCCESS") {
-      this.logger.info(
-        "Plan upgrade payment already processed (idempotent hit)",
-        {
-          action: "payment.complete_plan_upgrade",
-          orderId: input.razorpayOrderId,
-          tenantId: recharge.tenantId,
-          newPlanVersionId: input.newPlanVersionId,
-        },
+    // 2. Validate target plan version alignment
+    const targetVersionId =
+      recharge.targetPlanVersionId ?? input.newPlanVersionId;
+    if (
+      recharge.targetPlanVersionId &&
+      recharge.targetPlanVersionId !== input.newPlanVersionId
+    ) {
+      this.logger.error("Plan upgrade version mismatch", undefined, {
+        action: "payment.complete_plan_upgrade.mismatch",
+        rechargeTarget: recharge.targetPlanVersionId,
+        inputTarget: input.newPlanVersionId,
+      });
+      throw new InvalidPaymentStateError(
+        "Payment order was initialized for a different plan version.",
       );
+    }
+
+    if (recharge.status === "SUCCESS") {
+      this.logger.info("Plan upgrade payment already processed (idempotent)", {
+        action: "payment.complete_plan_upgrade",
+        orderId: input.razorpayOrderId,
+        tenantId: recharge.tenantId,
+        newPlanVersionId: targetVersionId,
+      });
       return {
         tenantId: recharge.tenantId,
-        newPlanVersionId: input.newPlanVersionId,
+        newPlanVersionId: targetVersionId,
         amountPaid: recharge.amount,
       };
     }
 
-    // 2. Mark recharge SUCCESS
+    // 3. Mark recharge SUCCESS
     await this.rechargeRepo.markSuccess(
       recharge.id,
       input.razorpayPaymentId,
       input.razorpaySignature,
     );
 
-    // 3. Get current plan to preserve bonus expiry
+    // 4. Fetch current terms to preserve bonus expiry
     const currentPlan = await this.planRepo.getActivePlanForTenant(
       recharge.tenantId,
     );
     if (!currentPlan) throw new TenantPlanNotFoundError(recharge.tenantId);
 
-    // 4. Activate new plan version
+    // 5. Activate target PlanVersion
     await this.planRepo.activatePlan(
       recharge.tenantId,
-      input.newPlanVersionId,
+      targetVersionId,
       currentPlan.bonusExpiresAt,
       "plan-upgrade-payment",
     );
@@ -88,13 +94,13 @@ export class CompletePlanUpgradePaymentUseCase {
       paymentId: input.razorpayPaymentId,
       rechargeId: recharge.id,
       tenantId: recharge.tenantId,
-      newPlanVersionId: input.newPlanVersionId,
+      newPlanVersionId: targetVersionId,
       amountPaidPaisa: recharge.amount,
     });
 
     return {
       tenantId: recharge.tenantId,
-      newPlanVersionId: input.newPlanVersionId,
+      newPlanVersionId: targetVersionId,
       amountPaid: recharge.amount,
     };
   }

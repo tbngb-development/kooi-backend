@@ -16,8 +16,12 @@ import type {
   UpdatePlanInput,
   CreatePlanVersionInput,
   UpdatePlanOverridesInput,
+  ListPlanSubscribersQuery,
 } from "../application/dto/plan.dto";
 import type { AuthRequest } from "../../../shared/types";
+import type { ListPlanSubscribersUseCase } from "../application/use-cases/list-plan-subscribers.use-case";
+import { listPlanSubscribersSchema } from "./plan.schema";
+import { ValidationError } from "../../../shared/errors";
 
 export class AdminPlanController {
   constructor(
@@ -30,6 +34,7 @@ export class AdminPlanController {
     private readonly archivePlanVersionUseCase: ArchivePlanVersionUseCase,
     private readonly updateOverridesUseCase: UpdateTenantPlanOverridesUseCase,
     private readonly changePlanUseCase: ChangeTenantPlanUseCase,
+    private readonly listSubscribersUseCase: ListPlanSubscribersUseCase,
   ) {}
 
   list = async (
@@ -149,6 +154,36 @@ export class AdminPlanController {
         authReq.user?.userId,
       );
       sendSuccess(res, tenantPlan);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listSubscribers = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const planId = param(req, "planId");
+      const parsed = listPlanSubscribersSchema.safeParse(req.query);
+      if (!parsed.success) {
+        const details = parsed.error.issues.map((issue) => ({
+          field: issue.path.join(".") || "query",
+          message: issue.message,
+        }));
+        throw new ValidationError(details);
+      }
+
+      const query: ListPlanSubscribersQuery = {
+        planId,
+        ...parsed.data,
+      };
+
+      
+
+      const result = await this.listSubscribersUseCase.execute(query);
+      sendSuccess(res, result);
     } catch (err) {
       next(err);
     }

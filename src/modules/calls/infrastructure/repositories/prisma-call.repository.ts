@@ -473,7 +473,6 @@ export class PrismaCallRepository implements CallRepository {
   }
 
   async findInboundLeadContext(agentId: string, phone: string) {
-    // Generate phone variations to match against whatever format is stored
     const digits = phone.replace(/\D/g, "");
     const last10 = digits.slice(-10);
     const candidatePhones = Array.from(
@@ -501,6 +500,7 @@ export class PrismaCallRepository implements CallRepository {
         phone: true,
         email: true,
         company: true,
+        batchId: true,
         metadata: true,
         campaign: {
           select: {
@@ -522,6 +522,7 @@ export class PrismaCallRepository implements CallRepository {
         phone: lead.phone,
         email: lead.email,
         company: lead.company,
+        batchId: lead.batchId,
         metadata: lead.metadata as Record<string, unknown> | null,
       },
       campaign: {
@@ -531,5 +532,25 @@ export class PrismaCallRepository implements CallRepository {
         tenantId: lead.campaign.tenantId,
       },
     };
+  }
+
+  async createInboundCall(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    campaignId: string;
+    leadId: string;
+    batchId?: string | null;
+  }) {
+    return prisma.call.create({
+      data: {
+        bolnaCallId: data.bolnaCallId,
+        tenantId: data.tenantId,
+        campaignId: data.campaignId,
+        leadId: data.leadId,
+        batchId: data.batchId ?? null,
+        status: "CALLING",
+        startedAt: new Date(),
+      },
+    });
   }
 }

@@ -3,6 +3,7 @@ import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
 import { param } from "../../../shared/utils/paramHelper";
 
+// Existing Use Cases
 import type { RegisterPlatformAgentUseCase } from "../application/use-cases/register-platform-agent.use-case";
 import type { SyncPlatformAgentUseCase } from "../application/use-cases/sync-platform-agent.use-case";
 import type { UpdatePlatformAgentUseCase } from "../application/use-cases/update-platform-agent.use-case";
@@ -22,6 +23,12 @@ import type { RemoveDispositionFromAgentUseCase } from "../application/use-cases
 import type { GetAgentExtractionsUseCase } from "../application/use-cases/get-agent-extractions.use-case";
 import type { SyncExtractionsToBolnaUseCase } from "../application/use-cases/sync-extractions-to-bolna.use-case";
 import type { UpdatePlatformAgentVariablesUseCase } from "../application/use-cases/update_platform-agent-variables";
+
+// NEW Workspace & Cloning Use Cases
+import type { CreateAgentFromScratchUseCase } from "../application/use-cases/create-agent-from-scratch.use-case";
+import type { ClonePlatformAgentUseCase } from "../application/use-cases/clone-platform-agent.use-case";
+import type { ListPlatformAgentAssignmentsUseCase } from "../application/use-cases/list-platform-agent-assignments.use-case";
+
 import { listPlatformAgentsQuerySchema } from "./platform-agent.schema";
 
 export class AdminPlatformAgentController {
@@ -43,6 +50,10 @@ export class AdminPlatformAgentController {
     private readonly getAgentExtractions: GetAgentExtractionsUseCase,
     private readonly syncExtractionsToBolna: SyncExtractionsToBolnaUseCase,
     private readonly updatePlatformAgentUseCase: UpdatePlatformAgentVariablesUseCase,
+    // Inject New Use Cases
+    private readonly createFromScratchUseCase: CreateAgentFromScratchUseCase,
+    private readonly clonePlatformAgentUseCase: ClonePlatformAgentUseCase,
+    private readonly listAssignmentsUseCase: ListPlatformAgentAssignmentsUseCase,
   ) {}
 
   register = async (
@@ -291,6 +302,47 @@ export class AdminPlatformAgentController {
         message: "Platform agent variables updated successfully",
         data,
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createFromScratch = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const result = await this.createFromScratchUseCase.execute(req.body);
+      sendSuccess(res, result, HttpStatus.CREATED);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  cloneAgent = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const result = await this.clonePlatformAgentUseCase.execute(req.body);
+      sendSuccess(res, result, HttpStatus.CREATED);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listAssignments = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const result = await this.listAssignmentsUseCase.execute(
+        param(req, "id"),
+      );
+      sendSuccess(res, result);
     } catch (err) {
       next(err);
     }

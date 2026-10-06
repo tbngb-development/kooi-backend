@@ -9,6 +9,8 @@ import type {
   UpdatePlanInput,
   CreatePlanVersionInput,
   UpdatePlanOverridesInput,
+  ListPlanSubscribersQuery,
+  ListPlanSubscribersResponse,
 } from "../dto/plan.dto";
 import type { EffectivePlanTerms } from "../../domain/entities/plan.entity";
 
@@ -68,6 +70,11 @@ export interface PlanRepository {
     status: TenantPlanStatus,
     createdBy?: string,
   ): Promise<void>;
+
+  listSubscribers(
+    query: ListPlanSubscribersQuery,
+  ): Promise<ListPlanSubscribersResponse>;
+
   /**
    * Records a BONUS_EXPIRED TenantPlanEvent for audit trail.
    * No-op if tenant plan is not ACTIVE.

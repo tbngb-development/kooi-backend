@@ -131,6 +131,34 @@ export class PrismaAssistantRepository implements AssistantRepository {
     return this.toEntityData(assistant);
   }
 
+  async findByTenantId(tenantId: string) {
+    const assistants = await prisma.assistant.findMany({
+      where: { tenantId, isDeleted: false },
+      select: {
+        id: true,
+        name: true,
+        platformAgentId: true,
+        tenantId: true,
+        config: true,
+      },
+    });
+
+    return assistants.map((a) => ({
+      ...a,
+      config: a.config as Record<string, unknown>,
+    }));
+  }
+
+  async repointPlatformAgent(
+    assistantId: string,
+    newPlatformAgentId: string,
+  ): Promise<void> {
+    await prisma.assistant.update({
+      where: { id: assistantId },
+      data: { platformAgentId: newPlatformAgentId },
+    });
+  }
+
   async softDelete(tenantId: string, id: string): Promise<void> {
     await prisma.assistant.update({
       where: { id, tenantId },

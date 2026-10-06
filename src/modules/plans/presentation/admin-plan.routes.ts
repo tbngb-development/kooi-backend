@@ -49,5 +49,10 @@ export function buildAdminPlanRoutes(
     controller.changeTenantPlan,
   );
 
+  router.get(
+    "/:planId/subscribers",
+    controller.listSubscribers,
+  );
+
   return router;
 }

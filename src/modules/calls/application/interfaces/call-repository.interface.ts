@@ -109,10 +109,7 @@ export interface CallRepository {
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult>;
 
-  findById(
-    tenantId: string,
-    id: string,
-  ): Promise<DetailedCallResult | null>;
+  findById(tenantId: string, id: string): Promise<DetailedCallResult | null>;
 
   findTranscriptById(
     tenantId: string,
@@ -145,6 +142,7 @@ export interface CallRepository {
       phone: string;
       email: string | null;
       company: string | null;
+      batchId: string | null;
       metadata: Record<string, unknown> | null;
     };
     campaign: {
@@ -154,4 +152,13 @@ export interface CallRepository {
       tenantId: string;
     };
   } | null>;
+
+  createInboundCall(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    campaignId: string;
+    leadId: string;
+    batchId?: string | null;
+  }): Promise<{ id: string }>;
+  
 }
