@@ -70,9 +70,25 @@ export class PlanVersionImmutableError extends ConflictError {
   }
 }
 
+export class PlanVersionNotPublishedError extends ConflictError {
+  constructor(versionId: string, status: string) {
+    super(
+      `Cannot assign or activate PlanVersion '${versionId}' because its status is '${status}'. Only PUBLISHED versions can be assigned.`,
+    );
+  }
+}
+
+export class CannotArchiveLastPublishedVersionError extends ConflictError {
+  constructor(planName: string) {
+    super(
+      `Cannot archive the only published version of active plan '${planName}'. Publish a new version or deactivate the plan first.`,
+    );
+  }
+}
+
 export class NoPublishedPlanVersionError extends NotFoundError {
-  constructor(planSlugOrId: string) {
-    super(`No published version found for plan ${planSlugOrId}`);
+  constructor(planSlugOrName: string) {
+    super(`No published version found for plan ${planSlugOrName}`);
   }
 }
 

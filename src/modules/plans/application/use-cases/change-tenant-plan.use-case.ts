@@ -1,4 +1,5 @@
 import type { PlanRepository } from "../interfaces/plan-repository.interface";
+import type { PlanChangeDirection, ChangePlanResponse } from "../dto/plan.dto";
 import {
   TenantPlanNotFoundError,
   PlanNotFoundError,
@@ -8,8 +9,6 @@ import {
 import { AppError } from "../../../../shared/errors";
 import { HttpStatus } from "../../../../shared/constants";
 
-export type PlanChangeDirection = "UPGRADE" | "DOWNGRADE" | "LATERAL";
-
 export interface ChangeTenantPlanInput {
   tenantId: string;
   newPlanId: string;
@@ -17,36 +16,10 @@ export interface ChangeTenantPlanInput {
   skipOnboardingFeeDiff?: boolean; // admin override
 }
 
-export interface ChangeTenantPlanResult {
-  tenantId: string;
-  previousPlanVersionId: string;
-  newPlanVersionId: string;
-  direction: PlanChangeDirection;
-  onboardingFeeDifference: number; // paisa; 0 if no additional charge
-  requiresPayment: boolean;
-  effectiveImmediately: boolean;
-}
-
-/**
- * Handles tenant plan changes (upgrade, downgrade, lateral).
- *
- * Business Rules:
- *  1. Tenant must have an ACTIVE plan to change.
- *  2. New plan must have a PUBLISHED version.
- *  3. Custom/Enterprise plans cannot be self-selected.
- *  4. Onboarding fee difference:
- *     - Upgrade (new fee > old fee): tenant pays the difference
- *     - Downgrade/Lateral: no refund, no additional charge
- *  5. Wallet balance carries over unchanged.
- *  6. Existing bonus is NOT clawed back.
- *  7. New plan's bonus is NOT granted (one-time onboarding bonus only).
- *  8. New per-minute rate and limits take effect immediately upon activation.
- *  9. Downgrades require admin approval (skipOnboardingFeeDiff = true by admin).
- */
 export class ChangeTenantPlanUseCase {
   constructor(private readonly planRepo: PlanRepository) {}
 
-  async execute(input: ChangeTenantPlanInput): Promise<ChangeTenantPlanResult> {
+  async execute(input: ChangeTenantPlanInput): Promise<ChangePlanResponse> {
     // 1. Validate current tenant plan
     const currentPlan = await this.planRepo.getActivePlanForTenant(
       input.tenantId,
@@ -58,7 +31,7 @@ export class ChangeTenantPlanUseCase {
       throw new PlanNotActiveError();
     }
 
-    // 2. Validate new plan
+    // 2. Validate target plan
     const newPlan = await this.planRepo.findById(input.newPlanId);
     if (!newPlan || !newPlan.isActive) {
       throw new PlanNotFoundError(input.newPlanId);
@@ -89,13 +62,13 @@ export class ChangeTenantPlanUseCase {
       );
     }
 
-    // 5. Determine direction
+    // 5. Determine direction using plan hierarchy (displayOrder)
     const direction = this.determineDirection(
-      currentPlan.onboardingFee,
-      newVersion.onboardingFee,
+      currentPlan.planDisplayOrder,
+      newPlan.displayOrder,
     );
 
-    // 6. Calculate onboarding fee difference
+    // 6. Calculate fee difference (Upgrade only)
     let onboardingFeeDifference = 0;
     let requiresPayment = false;
 
@@ -107,7 +80,7 @@ export class ChangeTenantPlanUseCase {
       requiresPayment = onboardingFeeDifference > 0;
     }
 
-    // 7. If payment is required, don't activate yet — return info for payment flow
+    // 7. If payment required, return settlement info for checkout
     if (requiresPayment) {
       return {
         tenantId: input.tenantId,
@@ -120,11 +93,11 @@ export class ChangeTenantPlanUseCase {
       };
     }
 
-    // 8. Activate the new plan version immediately
+    // 8. Activate new plan version immediately (lateral, downgrade, or waived fee)
     await this.planRepo.activatePlan(
       input.tenantId,
       newVersion.id,
-      currentPlan.bonusExpiresAt, // preserve existing bonus expiry
+      currentPlan.bonusExpiresAt,
       input.initiatedBy,
     );
 
@@ -140,11 +113,11 @@ export class ChangeTenantPlanUseCase {
   }
 
   private determineDirection(
-    currentFee: number,
-    newFee: number,
+    currentOrder: number,
+    newOrder: number,
   ): PlanChangeDirection {
-    if (newFee > currentFee) return "UPGRADE";
-    if (newFee < currentFee) return "DOWNGRADE";
+    if (newOrder > currentOrder) return "UPGRADE";
+    if (newOrder < currentOrder) return "DOWNGRADE";
     return "LATERAL";
   }
 }

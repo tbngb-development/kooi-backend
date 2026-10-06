@@ -1,48 +1,15 @@
+import type { PlanVersionStatus, TenantPlanStatus } from "@prisma/client";
 import type {
-  CallingChannel,
-  DashboardTier,
-  AgentCapability,
-  IntegrationTier,
-  SupportTier,
-  PricingModel,
-  PlanVersionStatus,
-  TenantPlanStatus,
-} from "@prisma/client";
-import type { EffectivePlanTerms } from "../../domain/entities/plan.entity";
+  PlanVersionConfig,
+  EffectivePlanTerms,
+} from "../../domain/entities/plan.entity";
 
-export interface PlanVersionResponse {
+export interface PlanVersionResponse extends PlanVersionConfig {
   id: string;
   planId: string;
   version: number;
   status: PlanVersionStatus;
   currency: string;
-
-  pricingModel: PricingModel;
-  onboardingFee: number;
-  onboardingFeeOriginal: number | null;
-  perMinuteRate: number;
-  billingMinimumSec: number;
-  billingIncrementSec: number;
-
-  maxActiveCampaigns: number | null;
-  maxLeadsPerBatch: number | null;
-  maxAgents: number | null;
-  maxTeamMembers: number | null;
-  retryAutomation: boolean;
-  industryPackLimit: number | null;
-
-  callingChannel: CallingChannel;
-  brochureUpload: boolean;
-
-  dashboardTier: DashboardTier;
-  agentCapability: AgentCapability;
-  integrations: IntegrationTier;
-  supportTier: SupportTier;
-
-  lowBalanceThreshold: number;
-  includedBalance: number;
-  bonusValidityDays: number | null;
-
   publishedAt: string | null;
   archivedAt: string | null;
   createdAt: string;
@@ -81,75 +48,24 @@ export interface TenantPlanResponse {
   updatedAt: string;
 }
 
-export interface CreatePlanInput {
+export type CreatePlanVersionInput = Partial<PlanVersionConfig> & {
+  onboardingFee: number;
+  perMinuteRate: number;
+};
+
+export type CreatePlanInput = CreatePlanVersionInput & {
   name: string;
   slug: string;
   displayOrder?: number;
   description?: string | null;
-
-  // Initial Version Configuration
-  pricingModel?: PricingModel;
-  onboardingFee: number;
-  onboardingFeeOriginal?: number | null;
-  perMinuteRate: number;
-  billingMinimumSec?: number;
-  billingIncrementSec?: number;
-
-  maxActiveCampaigns?: number | null;
-  maxLeadsPerBatch?: number | null;
-  maxAgents?: number | null;
-  maxTeamMembers?: number | null;
-  retryAutomation?: boolean;
-  industryPackLimit?: number | null;
-
-  callingChannel?: CallingChannel;
-  brochureUpload?: boolean;
-
-  dashboardTier?: DashboardTier;
-  agentCapability?: AgentCapability;
-  integrations?: IntegrationTier;
-  supportTier?: SupportTier;
-
-  lowBalanceThreshold?: number;
-  includedBalance?: number;
-  bonusValidityDays?: number | null;
-
   publishImmediately?: boolean;
-}
+};
 
 export interface UpdatePlanInput {
   name?: string;
   displayOrder?: number;
   isActive?: boolean;
   description?: string | null;
-}
-
-export interface CreatePlanVersionInput {
-  pricingModel?: PricingModel;
-  onboardingFee: number;
-  onboardingFeeOriginal?: number | null;
-  perMinuteRate: number;
-  billingMinimumSec?: number;
-  billingIncrementSec?: number;
-
-  maxActiveCampaigns?: number | null;
-  maxLeadsPerBatch?: number | null;
-  maxAgents?: number | null;
-  maxTeamMembers?: number | null;
-  retryAutomation?: boolean;
-  industryPackLimit?: number | null;
-
-  callingChannel?: CallingChannel;
-  brochureUpload?: boolean;
-
-  dashboardTier?: DashboardTier;
-  agentCapability?: AgentCapability;
-  integrations?: IntegrationTier;
-  supportTier?: SupportTier;
-
-  lowBalanceThreshold?: number;
-  includedBalance?: number;
-  bonusValidityDays?: number | null;
 }
 
 export interface UpdatePlanOverridesInput {
@@ -161,11 +77,13 @@ export interface ChangePlanInput {
   newPlanId: string;
 }
 
+export type PlanChangeDirection = "UPGRADE" | "DOWNGRADE" | "LATERAL";
+
 export interface ChangePlanResponse {
   tenantId: string;
   previousPlanVersionId: string;
   newPlanVersionId: string;
-  direction: "UPGRADE" | "DOWNGRADE" | "LATERAL";
+  direction: PlanChangeDirection;
   onboardingFeeDifference: number;
   requiresPayment: boolean;
   effectiveImmediately: boolean;

@@ -16,7 +16,14 @@ import type {
   UpdatePlanOverridesInput,
 } from "../../application/dto/plan.dto";
 import { resolveEffectiveTerms } from "../../domain/entities/plan.entity";
-import { PlanVersionImmutableError } from "../../domain/errors/plan.errors";
+import {
+  PlanNotFoundError,
+  PlanVersionNotFoundError,
+  TenantPlanNotFoundError,
+  PlanVersionImmutableError,
+  PlanVersionNotPublishedError,
+  CannotArchiveLastPublishedVersionError,
+} from "../../domain/errors/plan.errors";
 
 export class PrismaPlanRepository implements PlanRepository {
   // ── Plan Metadata (Admin) ─────────────────────────────────────
@@ -79,6 +86,9 @@ export class PrismaPlanRepository implements PlanRepository {
   }
 
   async update(id: string, input: UpdatePlanInput): Promise<Plan> {
+    const existing = await prisma.plan.findUnique({ where: { id } });
+    if (!existing) throw new PlanNotFoundError(id);
+
     return prisma.plan.update({
       where: { id },
       data: {
@@ -165,6 +175,9 @@ export class PrismaPlanRepository implements PlanRepository {
     input: CreatePlanVersionInput,
   ): Promise<PlanVersion> {
     return prisma.$transaction(async (tx) => {
+      const plan = await tx.plan.findUnique({ where: { id: planId } });
+      if (!plan) throw new PlanNotFoundError(planId);
+
       const latest = await tx.planVersion.findFirst({
         where: { planId },
         orderBy: { version: "desc" },
@@ -212,9 +225,12 @@ export class PrismaPlanRepository implements PlanRepository {
   async publishVersion(versionId: string): Promise<PlanVersion> {
     return prisma.$transaction(async (tx) => {
       const v = await tx.planVersion.findUnique({ where: { id: versionId } });
-      if (!v) throw new Error("Plan version not found");
+      if (!v) throw new PlanVersionNotFoundError(versionId);
       if (v.status === "ARCHIVED") {
         throw new PlanVersionImmutableError(v.status);
+      }
+      if (v.status === "PUBLISHED") {
+        return v; // Idempotent publish
       }
 
       // Archive previous published versions of the same plan
@@ -241,12 +257,39 @@ export class PrismaPlanRepository implements PlanRepository {
   }
 
   async archiveVersion(versionId: string): Promise<PlanVersion> {
-    return prisma.planVersion.update({
-      where: { id: versionId },
-      data: {
-        status: "ARCHIVED",
-        archivedAt: new Date(),
-      },
+    return prisma.$transaction(async (tx) => {
+      const version = await tx.planVersion.findUnique({
+        where: { id: versionId },
+        include: { plan: true },
+      });
+      if (!version) throw new PlanVersionNotFoundError(versionId);
+
+      if (version.status === "ARCHIVED") {
+        return version; // Idempotent
+      }
+
+      // Safeguard: Do not allow archiving the only published version of an active plan
+      if (version.plan.isActive && version.status === "PUBLISHED") {
+        const otherPublished = await tx.planVersion.count({
+          where: {
+            planId: version.planId,
+            status: "PUBLISHED",
+            id: { not: versionId },
+          },
+        });
+
+        if (otherPublished === 0) {
+          throw new CannotArchiveLastPublishedVersionError(version.plan.name);
+        }
+      }
+
+      return tx.planVersion.update({
+        where: { id: versionId },
+        data: {
+          status: "ARCHIVED",
+          archivedAt: new Date(),
+        },
+      });
     });
   }
 
@@ -303,6 +346,19 @@ export class PrismaPlanRepository implements PlanRepository {
     createdBy?: string,
   ): Promise<TenantPlan> {
     return prisma.$transaction(async (tx) => {
+      const planVersion = await tx.planVersion.findUnique({
+        where: { id: planVersionId },
+      });
+      if (!planVersion || planVersion.planId !== planId) {
+        throw new PlanVersionNotFoundError(planVersionId);
+      }
+      if (planVersion.status !== "PUBLISHED") {
+        throw new PlanVersionNotPublishedError(
+          planVersionId,
+          planVersion.status,
+        );
+      }
+
       const existing = await tx.tenantPlan.findUnique({
         where: { tenantId },
       });
@@ -354,7 +410,14 @@ export class PrismaPlanRepository implements PlanRepository {
       const planVersion = await tx.planVersion.findUnique({
         where: { id: planVersionId },
       });
-      if (!planVersion) throw new Error("PlanVersion not found");
+      if (!planVersion) throw new PlanVersionNotFoundError(planVersionId);
+
+      if (planVersion.status !== "PUBLISHED") {
+        throw new PlanVersionNotPublishedError(
+          planVersionId,
+          planVersion.status,
+        );
+      }
 
       const tenantPlan = await tx.tenantPlan.upsert({
         where: { tenantId },
@@ -401,7 +464,7 @@ export class PrismaPlanRepository implements PlanRepository {
       const tenantPlan = await tx.tenantPlan.findUnique({
         where: { tenantId },
       });
-      if (!tenantPlan) throw new Error("TenantPlan not found");
+      if (!tenantPlan) throw new TenantPlanNotFoundError(tenantId);
 
       const updated = await tx.tenantPlan.update({
         where: { tenantId },
@@ -435,6 +498,9 @@ export class PrismaPlanRepository implements PlanRepository {
     createdBy?: string,
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
+      const existing = await tx.tenantPlan.findUnique({ where: { tenantId } });
+      if (!existing) throw new TenantPlanNotFoundError(tenantId);
+
       const tp = await tx.tenantPlan.update({
         where: { tenantId },
         data: { status },
@@ -492,6 +558,7 @@ export class PrismaPlanRepository implements PlanRepository {
       where: {
         tenantId,
         status: { in: ["DRAFT", "RUNNING"] },
+        isDeleted: false,
       },
     });
   }
@@ -501,14 +568,11 @@ export class PrismaPlanRepository implements PlanRepository {
       where: {
         tenantId,
         status: "RUNNING",
+        isDeleted: false,
       },
     });
   }
 
-  /**
-   * Counts how many distinct campaigns are scheduled to run
-   * within [targetTime - window, targetTime + window].
-   */
   async countConcurrentCampaignsAtTime(
     tenantId: string,
     targetTime: Date,
@@ -526,11 +590,10 @@ export class PrismaPlanRepository implements PlanRepository {
       where: {
         tenantId,
         campaignId: excludeCampaignId ? { not: excludeCampaignId } : undefined,
+        isDeleted: false,
         status: { in: ["SCHEDULED", "RUNNING"] },
         OR: [
-          // 1. Currently live running batches
           { status: "RUNNING" },
-          // 2. Scheduled in the overlapping time window
           {
             status: "SCHEDULED",
             scheduledAt: {
@@ -549,7 +612,7 @@ export class PrismaPlanRepository implements PlanRepository {
 
   async countAgents(tenantId: string): Promise<number> {
     return prisma.assistant.count({
-      where: { tenantId },
+      where: { tenantId, isDeleted: false },
     });
   }
 
