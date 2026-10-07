@@ -12,6 +12,7 @@ export function getQueue(name: string): Queue.Queue {
   if (existing) return existing;
 
   const queue = new Queue(name, env.redis.url, {
+    prefix: env.redis.prefix,
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "exponential", delay: 5000 },

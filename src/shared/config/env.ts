@@ -33,6 +33,7 @@ export const env = {
 
   redis: {
     url: process.env.REDIS_URL || "redis://localhost:6379",
+    prefix: process.env.REDIS_PREFIX || `{${process.env.nodeEnv}}`,
   },
 
   cors: {
@@ -45,7 +46,7 @@ export const env = {
     apiUrl: process.env.BOLNA_API_URL || "https://api.bolna.ai",
     encryptionSecret: requireEnv("BOLNA_KEY_ENCRYPTION_SECRET"),
     bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
-    testNumber: process.env.BOLNA_TEST_INBOUND_NUMBER ?? ''
+    testNumber: process.env.BOLNA_TEST_INBOUND_NUMBER ?? "",
   },
 
   webhook: {
