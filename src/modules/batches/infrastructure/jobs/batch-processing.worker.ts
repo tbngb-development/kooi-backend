@@ -277,7 +277,7 @@ export class BatchProcessingWorker {
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batchId}.csv`,
         retryConfig: retryConfig ?? undefined,
-        // fromPhoneNumbers: [env.bolna.testNumber],
+        fromPhoneNumbers: [env.bolna.testNumber],
         webhookUrl,
       });
 
