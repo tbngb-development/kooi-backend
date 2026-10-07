@@ -79,8 +79,8 @@ export class CreateAgentFromScratchUseCase {
               sampling_rate: 16000,
               endpointing: 250,
             },
-            input: { provider: "plivo", format: "wav" },
-            output: { provider: "plivo", format: "wav" },
+            input: { provider: "vobiz", format: "wav" },
+            output: { provider: "vobiz", format: "wav" },
           },
           task_config: {
             call_terminate: 120,
