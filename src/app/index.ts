@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
@@ -16,6 +17,40 @@ export function buildApp(container = buildContainer()): Express {
   const app = express();
   app.set("trust proxy", 1);
 
+  // ── 1. Security Headers (Helmet) ──────────────────────────────
+  app.use(
+    helmet({
+      // Prevent clickjacking via iframes
+      frameguard: { action: "deny" },
+
+      // Enforce strict MIME-type checking (X-Content-Type-Options: nosniff)
+      noSniff: true,
+
+      // Hide X-Powered-By: Express header
+      hidePoweredBy: true,
+
+      // Enforce HTTPS across subdomains in production (1 year max-age)
+      strictTransportSecurity:
+        env.nodeEnv === "production"
+          ? {
+              maxAge: 31536000,
+              includeSubDomains: true,
+              preload: true,
+            }
+          : false,
+
+      // Control referrer information sent in outbound links/requests
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+
+      // Allow cross-origin asset/API consumption by your Next.js frontend
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+
+      // CSP disabled for pure JSON REST APIs (avoids interfering with Next.js/integrations)
+      contentSecurityPolicy: false,
+    }),
+  );
+
+  // ── 2. CORS & Cookie Parser ──────────────────────────────────
   app.use(
     cors({
       origin: env.cors.origins,
@@ -27,7 +62,7 @@ export function buildApp(container = buildContainer()): Express {
 
   app.use(cookieParser());
 
-  // ── 2. RAZORPAY WEBHOOK — MUST be before express.json() ──────
+  // ── 3. RAZORPAY WEBHOOK — MUST be before express.json() ──────
   // express.raw() needs an unconsumed body stream to produce a Buffer.
   // If express.json() runs first, the stream is already drained.
   app.use(
@@ -35,17 +70,17 @@ export function buildApp(container = buildContainer()): Express {
     buildRazorpayWebhookRoutes(container.payments.webhookController),
   );
 
-  // ── 3. Body parsers (after webhook routes) ──────
+  // ── 4. Body parsers (after webhook routes) ────────────────────
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
   // Structured request logger
   app.use(createRequestLogger(container.logger));
 
-  // ── 4. Bolna webhook routes (JSON body is fine here) ──────
+  // ── 5. Bolna webhook routes (JSON body is fine here) ──────────
   app.use("/api/webhooks", buildWebhookRoutes(container.webhooks.controller));
 
-  // ── 5. Client API routes ──────
+  // ── 6. Client API routes ──────────────────────────────────────
   const globalApiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1500,
@@ -61,7 +96,7 @@ export function buildApp(container = buildContainer()): Express {
   const apiRoutes = buildRoutes(container);
   app.use("/api", globalApiLimiter, apiRoutes);
 
-  // ── 6. 404 & Global Error Handling ──────
+  // ── 7. 404 & Global Error Handling ────────────────────────────
   app.use((req, res) => {
     sendError(
       res,
