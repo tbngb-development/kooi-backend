@@ -81,11 +81,13 @@ export class ParseLeadsUseCase {
     const rowsWithPhone = rows.filter((r) => r.phone && r.phone.trim() !== "");
     const missingPhoneCount = rows.length - rowsWithPhone.length;
 
-    const indianRows = rowsWithPhone
-      .filter((r) => isIndianPhone(r.phone))
-      .map((r) => ({ ...r, phone: normalizePhoneNumber(r.phone) }));
+    const normalizedRows = rowsWithPhone.map((r) => ({
+      ...r,
+      phone: normalizePhoneNumber(r.phone),
+    }));
 
-    const nonIndianNumbers = rowsWithPhone
+    const indianRows = normalizedRows.filter((r) => isIndianPhone(r.phone));
+    const nonIndianNumbers = normalizedRows
       .filter((r) => !isIndianPhone(r.phone))
       .map((r) => r.phone);
 

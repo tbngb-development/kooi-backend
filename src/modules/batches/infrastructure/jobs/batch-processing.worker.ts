@@ -110,16 +110,19 @@ export class BatchProcessingWorker {
         return;
       }
 
-      const validRows = rows
-        .filter(
-          (r) => r.phone && r.phone.trim() !== "" && isIndianPhone(r.phone),
-        )
-        .map((r) => ({ ...r, phone: normalizePhoneNumber(r.phone) }));
+      const normalizedRows = rows
+        .filter((r) => r.phone && r.phone.trim() !== "")
+        .map((r) => ({
+          ...r,
+          phone: normalizePhoneNumber(r.phone),
+        }));
 
+      const validRows = normalizedRows.filter((r) => isIndianPhone(r.phone));
+    
       if (validRows.length === 0) {
         await this.failBatch(
           batchId,
-          "No valid Indian phone numbers found in the uploaded file.",
+          "No valid contact numbers found in the uploaded file.",
         );
         return;
       }
