@@ -62,10 +62,8 @@ export class BatchProcessingWorker {
       retryConfig,
     } = job.data;
 
-    // ── 0. Workspace Migration Freeze Guard ─────────────────────
     await assertTenantNotFrozen(tenantId);
 
-    // ── Pre-check: Ensure batch still exists in database ──────
     const existingBatch = await this.batchRepo.findById(
       tenantId,
       campaignId,
@@ -74,30 +72,18 @@ export class BatchProcessingWorker {
     if (!existingBatch) {
       this.log?.warn(
         "Batch was deleted before processing started, aborting job",
-        {
-          action: "batch.worker.aborted_missing",
-          batchId,
-          tenantId,
-        },
+        { action: "batch.worker.aborted_missing", batchId, tenantId },
       );
       return;
     }
 
-    this.log?.info("Batch processing started", {
-      action: "batch.worker.start",
-      batchId,
-      tenantId,
-      campaignId,
-      fileName,
-      attempt: job.attemptsMade + 1,
-    });
-
     try {
-      // ── STAGE 1: PARSE & VALIDATE (0-30%) ──────────────────────
+      // ── STAGE 1: PARSE & VALIDATE ──────────────────────────────
       await this.batchRepo.updateProgress(batchId, "PARSING", 5);
 
       const fileResponse = await axios.get(rawFileUrl, {
         responseType: "arraybuffer",
+        headers: { "Accept-Encoding": "identity" },
         timeout: 30_000,
       });
       const fileBuffer = Buffer.from(fileResponse.data);
@@ -106,7 +92,11 @@ export class BatchProcessingWorker {
 
       const { rows } = parseLeadBuffer(fileBuffer, fileName);
       if (rows.length === 0) {
-        await this.failBatch(batchId, "Uploaded file contains no data rows.");
+        await this.failBatch(
+          batchId,
+          campaignId,
+          "Uploaded file contains no data rows.",
+        );
         return;
       }
 
@@ -118,10 +108,11 @@ export class BatchProcessingWorker {
         }));
 
       const validRows = normalizedRows.filter((r) => isIndianPhone(r.phone));
-    
+
       if (validRows.length === 0) {
         await this.failBatch(
           batchId,
+          campaignId,
           "No valid contact numbers found in the uploaded file.",
         );
         return;
@@ -155,10 +146,12 @@ export class BatchProcessingWorker {
         newLeads = uniqueRows.filter((r) => !existingPhones.has(r.phone));
       }
 
+      // ── EARLY EXIT ON 100% DUPLICATES ─────────────────────────
       if (newLeads.length === 0) {
         await this.failBatch(
           batchId,
-          `All ${uniqueRows.length} leads in the file are duplicates of existing leads in this campaign.`,
+          campaignId,
+          `All ${uniqueRows.length} lead(s) are duplicates of existing leads in this campaign.`,
         );
         return;
       }
@@ -172,6 +165,7 @@ export class BatchProcessingWorker {
       ) {
         await this.failBatch(
           batchId,
+          campaignId,
           `Batch exceeds plan limit of ${activePlan.maxLeadsPerBatch} leads per batch (${newLeads.length} found).`,
         );
         return;
@@ -179,10 +173,9 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 30);
 
-      // ── STAGE 2: STORE & REASSIGN LEADS (30-60%) ───────────────
+      // ── STAGE 2: STORE & REASSIGN LEADS ─────────────────────────
       await this.batchRepo.updateProgress(batchId, "STORING", 35);
 
-      // 1. Insert new unique phone numbers
       for (let i = 0; i < newLeads.length; i += CHUNK_SIZE) {
         const chunk = newLeads.slice(i, i + CHUNK_SIZE);
         await this.batchRepo.createLeads(
@@ -202,7 +195,6 @@ export class BatchProcessingWorker {
         await this.batchRepo.updateProgress(batchId, "STORING", progress);
       }
 
-      // 2. If skipCrossBatchDedup is true, reassign existing campaign leads to this batch
       if (env.skipCrossBatchDedup) {
         const allPhones = newLeads.map((r) => r.phone);
         for (let i = 0; i < allPhones.length; i += 1000) {
@@ -215,13 +207,13 @@ export class BatchProcessingWorker {
         }
       }
 
-      // 3. Verify total leads available for this batch
       const pendingLeads = await this.batchRepo.findPendingLeads(batchId);
       const totalAvailable = pendingLeads.length;
 
       if (totalAvailable === 0) {
         await this.failBatch(
           batchId,
+          campaignId,
           "No valid leads available to process in this batch.",
         );
         return;
@@ -230,7 +222,7 @@ export class BatchProcessingWorker {
       await this.batchRepo.updateTotalLeads(batchId, totalAvailable);
       await this.batchRepo.updateProgress(batchId, "STORING", 60);
 
-      // ── STAGE 3: BOLNA SYNC (60-90%) ───────────────────────────
+      // ── STAGE 3: BOLNA SYNC ─────────────────────────────────────
       await this.batchRepo.updateProgress(batchId, "SYNCING", 65);
 
       const campaign = await this.campaignRepo.findByIdWithRelations(
@@ -240,6 +232,7 @@ export class BatchProcessingWorker {
       if (!campaign) {
         await this.failBatch(
           batchId,
+          campaignId,
           "Campaign was deleted during processing.",
         );
         return;
@@ -248,12 +241,12 @@ export class BatchProcessingWorker {
       if (!campaign.assistant) {
         await this.failBatch(
           batchId,
+          campaignId,
           "Campaign assistant is not configured or missing.",
         );
         return;
       }
 
-      // Convert DB pending leads to LeadRow type-safely (null -> undefined)
       const leadsForBolna: LeadRow[] = pendingLeads.map((l) => ({
         ...(l.metadata as Record<string, unknown>),
         phone: l.phone,
@@ -287,7 +280,7 @@ export class BatchProcessingWorker {
       const bolnaBatchId = bolnaResult.batch_id;
       await this.batchRepo.updateProgress(batchId, "SYNCING", 85);
 
-      // ── STAGE 4: FINALIZE (90-100%) ────────────────────────────
+      // ── STAGE 4: FINALIZE ──────────────────────────────────────
       await this.batchRepo.updateProgress(batchId, "FINALIZING", 90);
 
       let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" = "CREATED";
@@ -329,7 +322,6 @@ export class BatchProcessingWorker {
         bolnaScheduledAt,
       });
 
-      // Recalculate campaign totals accurately across all active batches
       await this.batchRepo.recalculateCampaignStats(campaignId);
 
       if (runImmediately && campaign.status === "DRAFT") {
@@ -351,6 +343,8 @@ export class BatchProcessingWorker {
       });
     } catch (err) {
       const technicalMessage = err instanceof Error ? err.message : String(err);
+      const maxAttempts = job.opts.attempts ?? 3;
+      const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
 
       this.log?.error("Batch processing failed", err, {
         action: "batch.worker.error",
@@ -358,32 +352,40 @@ export class BatchProcessingWorker {
         tenantId,
         campaignId,
         attempt: job.attemptsMade + 1,
+        maxAttempts,
+        isFinalAttempt,
         error: technicalMessage,
       });
 
-      if (job.attemptsMade + 1 >= (job.opts.attempts ?? 3)) {
-        await this.failBatch(batchId, technicalMessage);
+      // Mark FAILED on the final attempt before Bull gives up
+      if (isFinalAttempt) {
+        await this.failBatch(batchId, campaignId, technicalMessage);
       }
-
+      
       throw err;
     }
   }
 
   private async failBatch(
     batchId: string,
+    campaignId: string,
     technicalError: string,
   ): Promise<void> {
     try {
       const userMessage = toUserFriendlyError(technicalError);
       await this.batchRepo.updateProcessingError(batchId, userMessage);
 
+      // Recalculate stats so the campaign does not stay locked in PROCESSING
+      await this.batchRepo.recalculateCampaignStats(campaignId);
+
       this.log?.warn("Batch marked as failed", {
         action: "batch.worker.failed",
         batchId,
+        campaignId,
         userMessage,
       });
-    } catch {
-      // Non-fatal: if row is gone, swallow silently
+    } catch (err) {
+      this.log?.error("Failed to mark batch as failed", err, { batchId });
     }
   }
 }
