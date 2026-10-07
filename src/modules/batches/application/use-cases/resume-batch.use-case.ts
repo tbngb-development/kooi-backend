@@ -15,6 +15,7 @@ import { env } from "../../../../shared/config/env";
 import type { LeadRow } from "../../../leads/infrastructure/leadParser";
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 export class ResumeBatchUseCase {
   constructor(
@@ -30,6 +31,9 @@ export class ResumeBatchUseCase {
     campaignId: string,
     batchId: string,
   ): Promise<ResumeBatchOutput> {
+    // ── 0. Workspace Migration Freeze Guard ─────────────────────
+    await assertTenantNotFrozen(tenantId);
+    
     const batchData = await this.batchRepo.findById(
       tenantId,
       campaignId,

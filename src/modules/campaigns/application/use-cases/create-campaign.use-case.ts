@@ -9,6 +9,7 @@ import {
 } from "../../domain/errors/campaign.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 export class CreateCampaignUseCase {
   constructor(
@@ -18,6 +19,9 @@ export class CreateCampaignUseCase {
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
+    // ── 0. Workspace Migration Freeze Guard ─────────────────────
+    await assertTenantNotFrozen(tenantId);
+
     // 1. Fetch active tenant plan
     const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
 

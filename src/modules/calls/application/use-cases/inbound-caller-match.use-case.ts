@@ -55,17 +55,19 @@ export class InboundCallerMatchUseCase {
       return this.buildUnknownCallerResponse(normalizedPhone);
     }
 
-    // 2. Update existing call record's bolnaCallId to the new inbound execution_id
-    //    This ensures all subsequent webhook events (ringing, in-progress, completed)
-    //    resolve instantly via findCallByBolnaCallId(execution_id).
-    await this.linkExecutionIdToCallRecord(
-      matchResult.lead.id,
-      matchResult.campaign.id,
+    const { lead, campaign } = matchResult;
+
+    // 2. CREATE A BRAND NEW CALL RECORD for this inbound execution
+    //    Guarantees independent tracking, billing, transcript, and audio recording.
+    await this.createInboundCallRecord(
       input.executionId,
+      campaign.tenantId,
+      campaign.id,
+      lead.id,
+      lead.batchId,
     );
 
     // 3. Build response with campaign variables and dynamic welcome message
-    const { lead, campaign } = matchResult;
     const campaignVariables = campaign.variables ?? {};
     const leadMetadata = (lead.metadata ?? {}) as Record<string, string>;
 
@@ -82,7 +84,6 @@ export class InboundCallerMatchUseCase {
     const formattedName = cleanCustomerName(lead.name);
     const hasCustomerName = isValidCustomerName(lead.name);
 
-    // 4. Dynamic Inbound Callback Welcome Message
     const welcomeMessage = `Hi, this is ${agentName} from ${builderName}. How may I help you?`;
 
     const response: InboundCallerMatchOutput = {
@@ -107,7 +108,7 @@ export class InboundCallerMatchUseCase {
       }
     }
 
-    this.logger?.info("Inbound caller matched successfully", {
+    this.logger?.info("Inbound caller matched and new call created", {
       action: "inbound.caller_match.found",
       agentId: input.agentId,
       executionId: input.executionId,
@@ -119,88 +120,38 @@ export class InboundCallerMatchUseCase {
     return response;
   }
 
-  /**
-   * Links the new inbound execution_id to the existing outbound call record.
-   *
-   * Strategy:
-   * 1. Find the most recent call for this lead in this campaign
-   * 2. If found and its bolnaCallId differs from the new execution_id:
-   *    - Push the old bolnaCallId into callHistory for audit trail
-   *    - Replace bolnaCallId with the new inbound execution_id
-   * 3. If no existing call found, do nothing (webhook will create one)
-   */
-  private async linkExecutionIdToCallRecord(
-    leadId: string,
+  private async createInboundCallRecord(
+    bolnaCallId: string,
+    tenantId: string,
     campaignId: string,
-    newExecutionId: string,
+    leadId: string,
+    batchId?: string | null,
   ): Promise<void> {
     try {
-      const existingCall = await prisma.call.findFirst({
-        where: {
-          leadId,
+      // Upsert/Create safe against duplicate caller-match hits
+      await prisma.call.upsert({
+        where: { bolnaCallId },
+        create: {
+          bolnaCallId,
+          tenantId,
           campaignId,
-          isDeleted: false,
+          leadId,
+          batchId: batchId ?? null,
+          status: "CALLING",
+          startedAt: new Date(),
         },
-        orderBy: { createdAt: "desc" },
+        update: {},
       });
 
-      if (!existingCall) {
-        this.logger?.debug("No existing call record to link", {
-          action: "inbound.caller_match.no_call_record",
-          leadId,
-          campaignId,
-        });
-        return;
-      }
-
-      if (existingCall.bolnaCallId === newExecutionId) {
-        return; // Already linked
-      }
-
-      // Preserve old bolnaCallId in call history
-      const history =
-        (existingCall.callHistory as Array<{
-          attempt: number;
-          bolnaCallId: string;
-          status: string;
-          duration: number | null;
-          cost: number | null;
-          timestamp: string;
-        }>) ?? [];
-
-      if (existingCall.bolnaCallId) {
-        history.push({
-          attempt: history.length + 1,
-          bolnaCallId: existingCall.bolnaCallId,
-          status: existingCall.status,
-          duration: existingCall.duration,
-          cost: existingCall.cost,
-          timestamp: existingCall.updatedAt.toISOString(),
-        });
-      }
-
-      await prisma.call.update({
-        where: { id: existingCall.id },
-        data: {
-          bolnaCallId: newExecutionId,
-          callHistory: history,
-        },
-      });
-
-      this.logger?.info("Inbound execution_id linked to call record", {
-        action: "inbound.caller_match.linked",
-        callId: existingCall.id,
-        leadId,
-        oldBolnaCallId: existingCall.bolnaCallId,
-        newExecutionId,
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { status: "CALLING" },
       });
     } catch (err) {
-      // Non-fatal: if linking fails, the webhook fallback will still resolve
-      this.logger?.error("Failed to link execution_id to call record", err, {
-        action: "inbound.caller_match.link_failed",
+      this.logger?.error("Failed to create new inbound call record", err, {
+        action: "inbound.caller_match.create_call_failed",
+        bolnaCallId,
         leadId,
-        campaignId,
-        newExecutionId,
       });
     }
   }

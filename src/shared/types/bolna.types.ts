@@ -1,3 +1,18 @@
+// ── Bolna User Profile (GET /user/me) ────────────────────────────
+
+export interface BolnaUserConcurrency {
+  max: number;
+  current: number;
+}
+
+export interface BolnaUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  wallet: number;
+  concurrency: BolnaUserConcurrency;
+}
+
 export interface BolnaCallPayload {
   agent_id: string;
   recipient_phone_number: string;
@@ -115,14 +130,6 @@ export interface CallHistoryItem {
   cost?: number | null;
   timestamp: string;
   errorMessage?: string | null;
-}
-
-// Existing Assistant, Task and Prompt Configuration structures remain unmodified below...
-export interface BolnaCreateAgentPayload {
-  agent_name: string;
-  agent_welcome_message: string;
-  agent_type: string;
-  tasks: BolnaTask[];
 }
 
 export interface BolnaLLMConfig {
@@ -340,6 +347,42 @@ export interface BolnaDispositionCreateResponse {
 export interface BolnaCategoryCreatePayload {
   name: string;
   model: string;
+}
+// ── Bolna V2 Create Agent Types ──────────────────────────────────────
+
+export interface BolnaAgentConfigPayload {
+  agent_name: string;
+  agent_welcome_message?: string | null;
+  agent_type?: string;
+  tasks: Array<Record<string, unknown>>;
+  webhook_url?: string | null;
+  calling_guardrails?: Record<string, unknown> | null;
+  call_summary_enabled?: boolean;
+  ingest_source_config?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface BolnaAgentPromptsPayload {
+  task_1: {
+    system_prompt: string;
+  };
+  [key: string]: unknown;
+}
+
+export interface BolnaCreateAgentPayload {
+  agent_config: BolnaAgentConfigPayload;
+  agent_prompts: BolnaAgentPromptsPayload;
+}
+
+export interface BolnaCreateAgentResponse {
+  agent_id: string;
+  state: "created";
+  version_id?: string;
+}
+
+export interface BolnaDeleteAgentResponse {
+  message: string;
+  state: "deleted";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

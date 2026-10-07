@@ -29,6 +29,12 @@ export class PaymentAlreadyProcessedError extends AppError {
   }
 }
 
+export class InvalidPaymentStateError extends AppError {
+  constructor(message = "Invalid payment state") {
+    super(HttpStatus.BAD_REQUEST, message, "INVALID_PAYMENT_STATE");
+  }
+}
+
 export class PlanAlreadyActiveError extends AppError {
   constructor() {
     super(

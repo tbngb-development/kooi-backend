@@ -4,9 +4,9 @@ import type {
   AgentBolnaExtractionBinding,
 } from "@prisma/client";
 import type {
-  RegisterPlatformAgentDTO,
   UpdatePlatformAgentDTO,
   ListPlatformAgentsFilters,
+  RegisterPlatformAgentDTO,
 } from "../dto/platform-agent.dto";
 
 export type PlatformAgentWithCount = PlatformAgent & {
@@ -51,6 +51,14 @@ export interface AgentExtractionConfig {
 
 export interface UpdateAgentVariablesData {
   requiredVariables?: unknown;
+}
+
+export interface ClonePlatformAgentInput {
+  sourcePlatformAgentId: string;
+  bolnaId: string;
+  bolnaApiKeyId: string;
+  slug: string;
+  name?: string;
 }
 
 export interface PlatformAgentRepository {
@@ -112,4 +120,6 @@ export interface PlatformAgentRepository {
   getBolnaBindings(
     platformAgentId: string,
   ): Promise<AgentBolnaExtractionBinding[]>;
+  cloneFrom(input: ClonePlatformAgentInput): Promise<PlatformAgent>;
+  deleteById(id: string): Promise<void>;
 }

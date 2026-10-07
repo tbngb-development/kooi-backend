@@ -9,7 +9,9 @@ import {
   importFromBolnaSchema,
   assignCategoriesSchema,
   assignDispositionsSchema,
-  updateExtractionConfigSchema, // [NEW]
+  updateExtractionConfigSchema,
+  createAgentFromScratchSchema,
+  clonePlatformAgentSchema, // [NEW]
 } from "./platform-agent.schema";
 
 export function buildAdminPlatformAgentRoutes(
@@ -38,6 +40,18 @@ export function buildAdminPlatformAgentRoutes(
   router.post("/:id/sync", controller.sync);
   router.delete("/:id", controller.remove);
   router.post("/:id/sync-blueprint", controller.syncBlueprint);
+
+  router.post(
+    "/create-agent",
+    validate(createAgentFromScratchSchema),
+    controller.createFromScratch,
+  );
+  router.post(
+    "/clone",
+    validate(clonePlatformAgentSchema),
+    controller.cloneAgent,
+  );
+  router.get("/:id/assignments", controller.listAssignments);
 
   // ── dynamic extractions assignment ─────────────────────────────────────────
   router.get("/:id/extractions", controller.getAgentExtractionsHandler);

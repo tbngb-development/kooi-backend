@@ -36,6 +36,7 @@ import {
 } from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 export class CreateBatchUseCase {
   constructor(
@@ -48,6 +49,9 @@ export class CreateBatchUseCase {
   ) {}
 
   async execute(input: CreateBatchInput): Promise<CreateBatchOutput> {
+    // ── 0. Workspace Migration Freeze Guard ─────────────────────
+    await assertTenantNotFrozen(input.tenantId);
+
     // 1. Validate campaign
     const campaign = await this.campaignRepo.findByIdWithRelations(
       input.tenantId,

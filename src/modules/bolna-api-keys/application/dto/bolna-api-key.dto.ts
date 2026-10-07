@@ -16,6 +16,12 @@ export interface BolnaApiKeyResponse {
   isActive: boolean;
   assignedTenantCount: number;
   lastAccessedAt: string | null;
+  bolnaProfileName: string | null;
+  bolnaProfileEmail: string | null;
+  bolnaWalletBalance: number | null;
+  bolnaConcurrencyMax: number | null;
+  bolnaProfileFetchedAt: string | null;
+  profileWarning: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

@@ -235,13 +235,20 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
-  async revokeAllUserRefreshTokens(userId: string): Promise<void> {
-    await prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
+  async revokeAllUserRefreshTokens(userId: string): Promise<number> {
+    const result = await prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
     });
+
+    return result.count;
   }
-  
+
   async cleanupExpiredRefreshTokens(olderThanDays: number): Promise<number> {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - olderThanDays);
@@ -251,6 +258,42 @@ export class PrismaAuthRepository implements AuthRepository {
         OR: [{ expiresAt: { lt: cutoff } }, { revokedAt: { lt: cutoff } }],
       },
     });
+    return result.count;
+  }
+
+  /**
+   * Family-aware cleanup:
+   * 1. Finds all distinct familyIds that contain any token revoked or expired older than `olderThanDays`.
+   * 2. Deletes ALL records belonging to those families in a single atomic batch.
+   */
+  async cleanupOrphanedAndExpiredTokenFamilies(
+    olderThanDays = 14,
+  ): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - olderThanDays);
+
+    // Step 1: Identify all dead / compromised family IDs
+    const expiredFamilies = await prisma.refreshToken.findMany({
+      where: {
+        OR: [{ revokedAt: { lt: cutoff } }, { expiresAt: { lt: cutoff } }],
+      },
+      select: { familyId: true },
+      distinct: ["familyId"],
+    });
+
+    if (expiredFamilies.length === 0) {
+      return 0;
+    }
+
+    const familyIds = expiredFamilies.map((f) => f.familyId);
+
+    // Step 2: Cascade delete all tokens in those families
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        familyId: { in: familyIds },
+      },
+    });
+
     return result.count;
   }
 

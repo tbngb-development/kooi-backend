@@ -59,6 +59,21 @@ export interface AssistantRepository {
     id: string,
     config: Record<string, unknown>,
   ): Promise<AssistantEntityData>;
+
+  findByTenantId(tenantId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      platformAgentId: string;
+      tenantId: string;
+      config: Record<string, unknown>;
+    }>
+  >;
+
+  repointPlatformAgent(
+    assistantId: string,
+    newPlatformAgentId: string,
+  ): Promise<void>;
   softDelete(tenantId: string, id: string): Promise<void>;
   restore(tenantId: string, id: string): Promise<void>;
 }

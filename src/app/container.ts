@@ -1,5 +1,3 @@
-// app/container.ts
-
 import { PrismaAuthRepository } from "../modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { JwtTokenService } from "../modules/auth/infrastructure/services/jwt-token.service";
 import { JwtPasswordResetTokenService } from "../modules/auth/infrastructure/services/jwt-password-reset-token.service";
@@ -15,6 +13,7 @@ import {
 import { ResendEmailService } from "../shared/config/external/email/resend.email";
 import { RedisOtpService } from "../modules/auth/infrastructure/services/redis-otp.service";
 
+// Module container builders
 import { buildAuthModule, type AuthModule } from "../modules/auth/container";
 import {
   buildAssistantModule,
@@ -60,8 +59,6 @@ import {
   buildInviteModule,
   type InviteModule,
 } from "../modules/invites/container";
-import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
-
 import {
   buildPlatformAgentModule,
   type PlatformAgentModule,
@@ -74,7 +71,15 @@ import {
   buildIndustryPackModule,
   type IndustryPackModule,
 } from "../modules/industry-packs/container";
+
+// Repository Concrete Implementations for DI Wiring
+import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
 import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
+import { PrismaAssistantRepository } from "../modules/assistants/infrastructure/repositories/prisma-assistant.repository";
+import { PrismaPlatformAgentRepository } from "../modules/platform-agents/infrastructure/repositories/prisma-platform-agent.repository";
+import { BolnaTemplateProviderImpl } from "../modules/platform-agents/infrastructure/services/bolna-template.provider";
+
+// Logging
 import type { Logger } from "../shared/logging/logger.interface";
 import { createLogger } from "../shared/config/logging/winston.logger";
 
@@ -99,6 +104,8 @@ export interface AppContainer {
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
+
+  // Backwards compatibility references
   assistantModule: AssistantModule;
   platformAgentModule: PlatformAgentModule;
   bolnaApiKeyModule: BolnaApiKeyModule;
@@ -113,7 +120,7 @@ export interface AppContainer {
 export function buildContainer(): AppContainer {
   const logger = createLogger();
 
-  // ── Infrastructure ──────────────────────────────────────────────────
+  // ── Infrastructure & Shared Drivers ──────────────────────────────────
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
@@ -127,15 +134,16 @@ export function buildContainer(): AppContainer {
     logger.child({ module: "bolna-factory" }),
   );
 
-  const assistantModule = buildAssistantModule({
-    bolnaClientFactory,
-  });
-
-  const platformAgentModule = buildPlatformAgentModule({ logger });
-
-  // shared repository
   const rechargeRepository = new PrismaRechargeRepository();
 
+  // ── Core Repositories Instantiated for Cross-Module Wiring ───────────
+  const assistantRepo = new PrismaAssistantRepository();
+  const platformAgentRepo = new PrismaPlatformAgentRepository();
+  const templateProvider = new BolnaTemplateProviderImpl(apiKeyRepository);
+
+  // ── Module Construction ─────────────────────────────────────────────
+
+  // 1. Auth Module
   const auth = buildAuthModule({
     authRepository,
     tokenService,
@@ -146,12 +154,28 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // ── Core Commercial Foundation ──────────────────────────────────────
+  // 2. Plans Module
   const plans = buildPlanModule();
-  const bolnaApiKeys = buildBolnaApiKeyModule();
+
+  // 3. Platform Agents Module (depends only on core repositories and logger)
+  const platformAgents = buildPlatformAgentModule({
+    platformAgentRepo,
+    templateProvider,
+    logger,
+  });
+
+  // 4. Bolna API Keys Module (requires cross-module cloning parameters)
+  const bolnaApiKeys = buildBolnaApiKeyModule({
+    assistantRepo,
+    platformAgentRepo,
+    templateProvider,
+    cloneAgentUseCase: platformAgents.cloneAgentToWorkspaceUseCase,
+    logger,
+  });
+
   const enforcePlan = new EnforcePlanMiddleware(plans.repository);
 
-  // ── Wallet (depends on plans + bolna + email) ───────────────────────
+  // 5. Wallet Module
   const wallet = buildWalletModule({
     planRepository: plans.repository,
     bolnaClientFactory,
@@ -159,7 +183,7 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // ── Payments (depends on wallet + plans + bolna key auto-assign) ─────
+  // 6. Payments Module
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
     planRepository: plans.repository,
@@ -168,7 +192,7 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // ── Invites ─────────────────────────────────────────────────────────
+  // 7. Invites Module
   const invites = buildInviteModule({
     planRepository: plans.repository,
     authRepository,
@@ -179,10 +203,14 @@ export function buildContainer(): AppContainer {
     tokenService,
     emailService: email,
   });
+
+  // 8. Assistants Module
+  const assistants = buildAssistantModule({ bolnaClientFactory });
+
   return {
     logger,
     auth,
-    assistants: buildAssistantModule({ bolnaClientFactory }),
+    assistants,
     tenants: buildTenantModule(),
     campaigns: buildCampaignModule({ logger }),
     batches: buildBatchModule({
@@ -198,7 +226,8 @@ export function buildContainer(): AppContainer {
       debitWalletForCall: wallet.useCases.debitWalletForCall,
       logger,
     }),
-    platformAgents: platformAgentModule,
+
+    platformAgents,
     extractions: buildExtractionModule(),
     industryPacks: buildIndustryPackModule(),
 
@@ -208,9 +237,10 @@ export function buildContainer(): AppContainer {
     payments,
     invites,
 
-    assistantModule,
-    platformAgentModule,
-    bolnaApiKeyModule: buildBolnaApiKeyModule(),
+    // Aliased references preserving clean DI architecture
+    assistantModule: assistants,
+    platformAgentModule: platformAgents,
+    bolnaApiKeyModule: bolnaApiKeys,
 
     authenticate: new AuthenticateMiddleware(tokenService, authRepository),
     authorize: new AuthorizeMiddleware(),

@@ -9,86 +9,58 @@ import type {
   TenantPlanStatus,
 } from "@prisma/client";
 
-/**
- * Authoritative commercial and entitlement terms applied to a tenant.
- * Computed by applying TenantPlan overrides on top of the assigned PlanVersion defaults.
- */
-export interface EffectivePlanTerms {
-  planId: string;
-  planName: string;
-  planSlug: string;
-  planVersionId: string;
-  version: number;
-  currency: string;
+// ── Composable Plan Configuration Traits ────────────────────────────────────
 
-  // Commercials (Integer Paisa)
+export interface PlanCommercials {
   pricingModel: PricingModel;
-  onboardingFee: number;
+  onboardingFee: number; // in integer Paisa
   onboardingFeeOriginal: number | null;
-  perMinuteRate: number;
+  perMinuteRate: number; // in integer Paisa
   billingMinimumSec: number;
   billingIncrementSec: number;
+}
 
-  // Limits (null = unlimited)
+export interface PlanLimits {
   maxActiveCampaigns: number | null;
   maxLeadsPerBatch: number | null;
   maxAgents: number | null;
   maxTeamMembers: number | null;
   retryAutomation: boolean;
   industryPackLimit: number | null;
+}
 
-  // Capabilities
+export interface PlanCapabilities {
   callingChannel: CallingChannel;
   brochureUpload: boolean;
+}
 
-  // Feature Tiers
+export interface PlanTiers {
   dashboardTier: DashboardTier;
   agentCapability: AgentCapability;
   integrations: IntegrationTier;
   supportTier: SupportTier;
+}
 
-  // Wallet / Thresholds
+export interface PlanWalletConfig {
   lowBalanceThreshold: number;
   includedBalance: number;
   bonusValidityDays: number | null;
-
-  // Overrides applied
-  isCustomPriced: boolean;
 }
 
-export interface PlanVersionEntity {
+export type PlanVersionConfig = PlanCommercials &
+  PlanLimits &
+  PlanCapabilities &
+  PlanTiers &
+  PlanWalletConfig;
+
+// ── Domain Entities ──────────────────────────────────────────────────────────
+
+export interface PlanVersionEntity extends PlanVersionConfig {
   id: string;
   planId: string;
   version: number;
   status: PlanVersionStatus;
   currency: string;
-
-  pricingModel: PricingModel;
-  onboardingFee: number;
-  onboardingFeeOriginal: number | null;
-  perMinuteRate: number;
-  billingMinimumSec: number;
-  billingIncrementSec: number;
-
-  maxActiveCampaigns: number | null;
-  maxLeadsPerBatch: number | null;
-  maxAgents: number | null;
-  maxTeamMembers: number | null;
-  retryAutomation: boolean;
-  industryPackLimit: number | null;
-
-  callingChannel: CallingChannel;
-  brochureUpload: boolean;
-
-  dashboardTier: DashboardTier;
-  agentCapability: AgentCapability;
-  integrations: IntegrationTier;
-  supportTier: SupportTier;
-
-  lowBalanceThreshold: number;
-  includedBalance: number;
-  bonusValidityDays: number | null;
-
   publishedAt: Date | null;
   archivedAt: Date | null;
   createdAt: Date;
@@ -121,40 +93,50 @@ export interface TenantPlanEntity {
   updatedAt: Date;
 }
 
+export interface PlanOverrides {
+  onboardingFeeOverride?: number | null;
+  perMinuteRateOverride?: number | null;
+}
+
 /**
- * Pure domain function to resolve effective terms.
+ * Authoritative commercial and entitlement terms applied to a tenant.
+ * Computed by applying TenantPlan overrides on top of the assigned PlanVersion defaults.
+ */
+export interface EffectivePlanTerms extends PlanVersionConfig {
+  planId: string;
+  planName: string;
+  planSlug: string;
+  planDisplayOrder: number;
+  planVersionId: string;
+  version: number;
+  currency: string;
+  isCustomPriced: boolean;
+}
+
+/**
+ * Pure domain function to resolve effective commercial and feature terms.
  */
 export function resolveEffectiveTerms(
-  plan: Pick<PlanEntity, "id" | "name" | "slug">,
+  plan: Pick<PlanEntity, "id" | "name" | "slug" | "displayOrder">,
   version: PlanVersionEntity,
-  overrides?: {
-    onboardingFeeOverride?: number | null;
-    perMinuteRateOverride?: number | null;
-  },
+  overrides?: PlanOverrides,
 ): EffectivePlanTerms {
   const effectiveOnboardingFee =
-    overrides?.onboardingFeeOverride !== undefined &&
-    overrides?.onboardingFeeOverride !== null
-      ? overrides.onboardingFeeOverride
-      : version.onboardingFee;
-
+    overrides?.onboardingFeeOverride ?? version.onboardingFee;
   const effectivePerMinuteRate =
-    overrides?.perMinuteRateOverride !== undefined &&
-    overrides?.perMinuteRateOverride !== null
-      ? overrides.perMinuteRateOverride
-      : version.perMinuteRate;
+    overrides?.perMinuteRateOverride ?? version.perMinuteRate;
 
-  const isCustomPriced =
-    (overrides?.onboardingFeeOverride !== undefined &&
-      overrides?.onboardingFeeOverride !== null) ||
-    (overrides?.perMinuteRateOverride !== undefined &&
-      overrides?.perMinuteRateOverride !== null) ||
-    version.pricingModel === "CUSTOM";
+  const hasOverrides =
+    overrides?.onboardingFeeOverride != null ||
+    overrides?.perMinuteRateOverride != null;
+
+  const isCustomPriced = hasOverrides || version.pricingModel === "CUSTOM";
 
   return {
     planId: plan.id,
     planName: plan.name,
     planSlug: plan.slug,
+    planDisplayOrder: plan.displayOrder,
     planVersionId: version.id,
     version: version.version,
     currency: version.currency,

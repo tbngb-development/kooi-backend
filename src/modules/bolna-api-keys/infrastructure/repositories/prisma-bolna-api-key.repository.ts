@@ -1,4 +1,4 @@
-import type { BolnaApiKey } from "@prisma/client";
+import type { BolnaApiKey, BolnaApiKeyType, Prisma } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   BolnaApiKeyRepository,
@@ -10,7 +10,9 @@ import { NoAvailableApiKeyError } from "../../domain/errors/bolna-api-key.errors
 export class PrismaBolnaApiKeyRepository implements BolnaApiKeyRepository {
   // ── Runtime resolution ─────────────────────────────────────────
 
-  async findKeyForTenant(tenantId?: string | null): Promise<BolnaApiKey | null> {
+  async findKeyForTenant(
+    tenantId?: string | null,
+  ): Promise<BolnaApiKey | null> {
     // 1. If called in Admin scope or without a tenantId, use the platform default key
     if (!tenantId) {
       return prisma.bolnaApiKey.findFirst({
@@ -96,6 +98,110 @@ export class PrismaBolnaApiKeyRepository implements BolnaApiKeyRepository {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  // ── Profile management ─────────────────────────────────
+
+  async updateProfile(
+    keyId: string,
+    profile: {
+      bolnaProfileName: string | null;
+      bolnaProfileEmail: string | null;
+      bolnaWalletBalance: number | null;
+      bolnaConcurrencyMax: number | null;
+      bolnaConcurrencyCurrent: number | null;
+      bolnaProfileFetchedAt: Date;
+    },
+  ): Promise<void> {
+    await prisma.bolnaApiKey.update({
+      where: { id: keyId },
+      data: profile,
+    });
+  }
+
+  // ── Key metadata update ────────────────────────────────
+
+  async updateKey(
+    keyId: string,
+    data: {
+      keyIdentifier?: string;
+      encryptedKey?: string;
+      type?: BolnaApiKeyType;
+    },
+  ): Promise<void> {
+    await prisma.bolnaApiKey.update({
+      where: { id: keyId },
+      data,
+    });
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────
+
+  async activate(keyId: string): Promise<void> {
+    await prisma.bolnaApiKey.update({
+      where: { id: keyId },
+      data: { isActive: true },
+    });
+  }
+
+  // ── Tenant listing ─────────────────────────────────────
+
+  async listTenantsForKey(
+    keyId: string,
+    options: { page: number; limit: number; search?: string },
+  ): Promise<{
+    tenants: Array<{
+      id: string;
+      name: string;
+      email: string;
+      isActive: boolean;
+      workspaceSwitchStatus: string;
+      createdAt: Date;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const { page, limit, search } = options;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TenantWhereInput = {
+      bolnaApiKeyId: keyId,
+    };
+
+    if (search && search.trim().length > 0) {
+      where.OR = [
+        { name: { contains: search.trim(), mode: "insensitive" } },
+        { email: { contains: search.trim(), mode: "insensitive" } },
+      ];
+    }
+
+    const [tenants, total] = await Promise.all([
+      prisma.tenant.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          workspaceSwitchStatus: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.tenant.count({ where }),
+    ]);
+
+    return {
+      tenants,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────

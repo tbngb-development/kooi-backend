@@ -21,6 +21,7 @@ import {
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import { toUserFriendlyError } from "../../domain/rules/batch-error-messages";
 import axios from "axios";
+import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 export interface BatchJobData {
   batchId: string;
@@ -60,6 +61,9 @@ export class BatchProcessingWorker {
       runImmediately,
       retryConfig,
     } = job.data;
+
+    // ── 0. Workspace Migration Freeze Guard ─────────────────────
+    await assertTenantNotFrozen(tenantId);
 
     // ── Pre-check: Ensure batch still exists in database ──────
     const existingBatch = await this.batchRepo.findById(
@@ -273,7 +277,7 @@ export class BatchProcessingWorker {
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batchId}.csv`,
         retryConfig: retryConfig ?? undefined,
-        fromPhoneNumbers: ["+918064261668"],
+        fromPhoneNumbers: [env.bolna.testNumber],
         webhookUrl,
       });
 

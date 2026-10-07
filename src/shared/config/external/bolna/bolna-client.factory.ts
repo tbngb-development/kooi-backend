@@ -7,6 +7,7 @@ import type { Logger } from "../../../logging/logger.interface";
 
 export interface IBolnaClientFactory {
   forTenant(tenantId: string): Promise<IBolnaClient>;
+  forApiKey(apiKeyId: string): Promise<IBolnaClient>;
 }
 
 export class BolnaClientFactory implements IBolnaClientFactory {
@@ -20,7 +21,6 @@ export class BolnaClientFactory implements IBolnaClientFactory {
     if (!tenantKey) throw new TenantHasNoApiKeyError(tenantId);
     if (!tenantKey.isActive) throw new TenantHasNoApiKeyError(tenantId);
 
-    // Fire-and-forget: update last accessed timestamp using structured logging
     this.apiKeyRepository.updateLastAccessed(tenantKey.id).catch((err) =>
       this.logger?.error(
         "Failed to update last accessed timestamp for Bolna key",
@@ -39,6 +39,32 @@ export class BolnaClientFactory implements IBolnaClientFactory {
       decryptedApiKey,
       env.bolna.apiUrl,
       this.logger?.child({ module: "bolna-client", tenantId }),
+    );
+  }
+
+  async forApiKey(apiKeyId: string): Promise<IBolnaClient> {
+    const keyRecord = await this.apiKeyRepository.findById(apiKeyId);
+    if (!keyRecord || !keyRecord.isActive) {
+      throw new TenantHasNoApiKeyError(`api-key:${apiKeyId}`);
+    }
+
+    this.apiKeyRepository.updateLastAccessed(keyRecord.id).catch((err) =>
+      this.logger?.error(
+        "Failed to update last accessed timestamp for Bolna key",
+        err,
+        {
+          action: "bolna.factory.update_last_accessed_failed",
+          apiKeyId,
+        },
+      ),
+    );
+
+    const decryptedApiKey = decryptKey(keyRecord.encryptedKey);
+
+    return new BolnaClient(
+      decryptedApiKey,
+      env.bolna.apiUrl,
+      this.logger?.child({ module: "bolna-client", apiKeyId }),
     );
   }
 }
