@@ -10,6 +10,7 @@ import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/ap
 import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
+import type { Queue } from "bull";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -38,6 +39,7 @@ export class ProcessCallWebhookUseCase {
     private readonly webhookRepo: WebhookRepository,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
     private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly classifierQueue?: Queue,
     private readonly logger?: Logger,
   ) {}
 
@@ -317,6 +319,22 @@ export class ProcessCallWebhookUseCase {
           durationSec: duration,
         });
       }
+    }
+
+    // ── Classifier Extraction (async, non-blocking) ──────────────
+    if (this.classifierQueue && transcript) {
+      this.classifierQueue
+        .add(
+          { callId: call.id, tenantId: call.tenantId },
+          { jobId: `classifier-${call.id}` },
+        )
+        .catch((err) =>
+          this.logger?.warn("Classifier enqueue failed", {
+            action: "webhook.call.classifier_enqueue_failed",
+            callId: call.id,
+            error: err?.message,
+          }),
+        );
     }
 
     this.logger?.info("Call completed", {

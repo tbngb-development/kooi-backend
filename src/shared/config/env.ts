@@ -65,5 +65,25 @@ export const env = {
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
   },
 
+  classifier: {
+    // Provider: 'native' | 'ai-gateway'
+    provider: (process.env.CLASSIFIER_PROVIDER || "native") as
+      "native" | "ai-gateway",
+
+    // Native TypeSafe API Key
+    typesafeApiKey: process.env.TYPESAFE_API_KEY || "",
+    typesafeBaseUrl: process.env.TYPESAFE_BASE_URL || "https://api.typesafe.ai",
+
+    // Vercel AI Gateway (alternative)
+    aiGatewayApiKey: process.env.AI_GATEWAY_API_KEY || "",
+    aiGatewayBaseUrl:
+      process.env.AI_GATEWAY_BASE_URL ||
+      "https://ai-gateway.vercel.sh/typesafe",
+
+    model: process.env.CLASSIFIER_MODEL || "typesafe-ai/jev",
+    maxTranscriptLength:
+      Number(process.env.CLASSIFIER_MAX_TRANSCRIPT_LENGTH) || 8000,
+  },
+
   skipCrossBatchDedup: process.env.SKIP_CROSS_BATCH_DEDUP === "true",
 } as const;
