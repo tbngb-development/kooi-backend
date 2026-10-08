@@ -98,7 +98,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         take: limitNum,
       }),
       prisma.campaign.count({ where }),
-      this.getTenantCampaignOverview(tenantId, isDeleted),
+      this.getTenantCampaignOverview(tenantId),
     ]);
 
     return {
@@ -116,11 +116,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
   // Helper isolation for tenant aggregated overview metrics
   private async getTenantCampaignOverview(
     tenantId: string,
-    isDeleted: boolean,
+    isDeleted?: boolean,
   ): Promise<CampaignListOverview> {
     const baseWhere = {
       tenantId,
-      isDeleted,
     };
 
     const [totalCampaigns, totalLeads, totalCalls, runningCampaigns] =
@@ -300,7 +299,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
   ): Promise<CampaignStatsResult> {
     const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, tenantId, isDeleted: false },
+      where: { id: campaignId, tenantId },
       include: {
         assistant: {
           include: {
