@@ -52,6 +52,7 @@ export class ProcessCallWebhookUseCase {
     }
 
     const state = payload.status.toLowerCase().replace("_", "-");
+    this.logger?.warn("call status: ", { state });
 
     switch (state) {
       case "queued":
@@ -59,11 +60,25 @@ export class ProcessCallWebhookUseCase {
 
       case "scheduled":
       case "rescheduled": {
+        this.logger?.warn("call scheduled: ", { payload });
         const resolved = await this.resolveCallRecord(callId, payload);
         if (resolved) {
           await this.webhookRepo.updateCallTerminalState(resolved.id, {
             status: "SCHEDULED",
           });
+
+          const lastRetry =
+            payload.retry_history?.[payload.retry_history.length - 1];
+          if (lastRetry?.status) {
+            const rawStatus = lastRetry.status.toLowerCase();
+            const leadStatus: LeadStatus =
+              rawStatus === "busy"
+                ? "BUSY"
+                : rawStatus === "no-answer" || rawStatus === "no_answer"
+                  ? "NO_ANSWER"
+                  : "FAILED";
+            await this.webhookRepo.updateLeadStatus(resolved.leadId, leadStatus);
+          }
         }
         break;
       }
@@ -366,8 +381,7 @@ export class ProcessCallWebhookUseCase {
     status: "NO_ANSWER" | "BUSY" | "FAILED",
     _payload?: WebhookCallPayload,
   ): Promise<void> {
-    const retryConfig =
-      call.retryConfig ?? call.campaignDefaultRetryConfig;
+    const retryConfig = call.retryConfig ?? call.campaignDefaultRetryConfig;
     const retryEnabled = Boolean(retryConfig?.enabled);
     const retryStatuses = retryConfig?.retry_on_statuses ?? [
       "no-answer",

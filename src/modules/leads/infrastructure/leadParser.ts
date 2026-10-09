@@ -4,6 +4,9 @@ import fs from "fs";
 import path from "path";
 import { MissingRequiredHeaderError } from "../domain/errors/lead.errors";
 import { cleanCustomerName } from "../domain/rules/name.rules";
+import { isValidE164 } from "../domain/rules/phone.rules";
+
+export { isValidE164 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

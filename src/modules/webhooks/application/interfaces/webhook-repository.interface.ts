@@ -3,6 +3,7 @@ import {
   type LeadStatus,
   type BatchStatus,
   type CampaignStatus,
+  type LeadStopReason,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
@@ -131,6 +132,10 @@ export interface WebhookRepository {
     status: BatchStatus,
     completedAt?: Date,
   ): Promise<void>;
+  stopBatchCallsAndLeads(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<{ stoppedCalls: number; stoppedLeads: number }>;
   updateCampaignStatus(
     campaignId: string,
     status: CampaignStatus,

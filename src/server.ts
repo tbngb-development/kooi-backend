@@ -41,6 +41,10 @@ function gracefulShutdown(signal: string): void {
     process.exit(0);
   });
 
+  // Terminate open keep-alive sockets so server.close does not hang on idle clients
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
+
   setTimeout(() => {
     console.error("Forced shutdown after timeout");
     process.exit(1);

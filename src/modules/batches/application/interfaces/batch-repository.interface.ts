@@ -82,6 +82,11 @@ export interface BatchRepository {
     reason: LeadStopReason,
   ): Promise<number>;
 
+  stopBatchCallsAndLeads(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<{ stoppedCalls: number; stoppedLeads: number }>;
+
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;
 
   recalculateCampaignStats(campaignId: string): Promise<void>;
