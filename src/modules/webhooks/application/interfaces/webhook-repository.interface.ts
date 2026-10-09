@@ -45,6 +45,12 @@ export interface AgentDispositionMap {
     slug: string;
     isObjective: boolean;
     isSubjective: boolean;
+    objectiveOptions?: Array<{
+      value: string;
+      condition: string;
+      sortOrder?: number;
+      sub_options?: unknown[];
+    }> | null;
   }[];
 }
 

@@ -16,6 +16,7 @@ import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/ge
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
 import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
+import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
 export interface CampaignModuleDeps {
@@ -65,6 +66,11 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   // Clean dependency injection: repository owns atomic database access
   const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
   const restoreCampaign = new RestoreCampaignUseCase(campaignRepo);
+  const updateCampaignStatus = new UpdateCampaignStatusUseCase(
+    campaignRepo,
+    batchRepo,
+    log,
+  );
 
   return {
     tenantController: new TenantCampaignController(
@@ -85,6 +91,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       getCampaignStats,
       archiveCampaign,
       restoreCampaign,
+      updateCampaignStatus,
     ),
   };
 }

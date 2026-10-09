@@ -1,6 +1,7 @@
 export interface DispositionObjectiveOption {
   value: string;
   condition: string;
+  sortOrder?: number;
 }
 
 export interface DispositionSeed {

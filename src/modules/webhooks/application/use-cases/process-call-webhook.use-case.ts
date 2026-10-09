@@ -19,6 +19,7 @@ interface DynamicExtractionEntry {
   localDispositionSlug: string | null;
   subjective: string | null;
   objective: string | null;
+  sortOrder?: number | null;
   isObjective: boolean;
   isSubjective: boolean;
   confidence: number | null;
@@ -476,6 +477,12 @@ export class ProcessCallWebhookUseCase {
         displayName: string;
         isObjective: boolean;
         isSubjective: boolean;
+        objectiveOptions?: Array<{
+          value: string;
+          condition: string;
+          sortOrder?: number;
+          sub_options?: unknown[];
+        }> | null;
       }
     >();
     for (const disp of agentMap.dispositions) {
@@ -485,6 +492,7 @@ export class ProcessCallWebhookUseCase {
         displayName: disp.displayName,
         isObjective: disp.isObjective,
         isSubjective: disp.isSubjective,
+        objectiveOptions: disp.objectiveOptions ?? null,
       };
       dispositionLookup.set(disp.name.toLowerCase(), entry);
       dispositionLookup.set(disp.slug.toLowerCase(), entry);
@@ -507,12 +515,33 @@ export class ProcessCallWebhookUseCase {
           dispositionLookup.get(dispName.toLowerCase()) ??
           dispositionLookup.get(dispName);
 
+        let sortOrder: number | null = null;
+        if (
+          localDisp?.isObjective &&
+          value.objective != null &&
+          localDisp.objectiveOptions &&
+          Array.isArray(localDisp.objectiveOptions)
+        ) {
+          const cleanObj = String(value.objective).trim().toLowerCase();
+          const matchedIdx = localDisp.objectiveOptions.findIndex(
+            (opt) => opt.value?.trim().toLowerCase() === cleanObj,
+          );
+          if (matchedIdx !== -1) {
+            const matchedOpt = localDisp.objectiveOptions[matchedIdx];
+            sortOrder =
+              typeof matchedOpt.sortOrder === "number"
+                ? matchedOpt.sortOrder
+                : matchedIdx;
+          }
+        }
+
         const entry: DynamicExtractionEntry = {
           localDispositionId: localDisp?.id ?? null,
           localDispositionSlug: localDisp?.slug ?? null,
           localDispositionDisplayName: localDisp?.displayName ?? null,
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
+          sortOrder,
           isObjective: localDisp?.isObjective ?? false,
           isSubjective: localDisp?.isSubjective ?? false,
           confidence: (value.confidence as number) ?? null,
@@ -580,6 +609,7 @@ export class ProcessCallWebhookUseCase {
       categoryName: string;
       objectiveValue: string;
       confidence: number | null;
+      sortOrder: number;
     }> = [];
 
     for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
@@ -600,6 +630,7 @@ export class ProcessCallWebhookUseCase {
             categoryName,
             objectiveValue: entry.objective.trim(),
             confidence: entry.confidence,
+            sortOrder: entry.sortOrder ?? 0,
           });
         }
       }
@@ -638,6 +669,7 @@ export class ProcessCallWebhookUseCase {
         categoryName: e.categoryName,
         objectiveValue: e.objectiveValue,
         confidence: e.confidence,
+        sortOrder: e.sortOrder,
       })),
     });
 

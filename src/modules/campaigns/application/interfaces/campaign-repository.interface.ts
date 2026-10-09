@@ -122,7 +122,7 @@ export interface CampaignRepository {
     campaignId: string,
     status: CampaignStatus,
     extra?: { startedAt?: Date; completedAt?: Date },
-  ): Promise<void>;
+  ): Promise<CampaignEntityData>;
 
   incrementTotalLeads(campaignId: string, count: number): Promise<void>;
 

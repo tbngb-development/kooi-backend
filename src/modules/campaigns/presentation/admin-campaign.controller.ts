@@ -11,7 +11,11 @@ import type { GetCampaignUseCase } from "../application/use-cases/get-campaign.u
 import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campaign-stats.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { RestoreCampaignUseCase } from "../application/use-cases/restore-campaign.use-case";
-import { listCampaignsQuerySchema } from "./campaign.schema";
+import type { UpdateCampaignStatusUseCase } from "../application/use-cases/update-campaign-status.use-case";
+import {
+  listCampaignsQuerySchema,
+  updateCampaignStatusSchema,
+} from "./campaign.schema";
 
 export class AdminCampaignController {
   constructor(
@@ -20,6 +24,7 @@ export class AdminCampaignController {
     private readonly getCampaignStatsUseCase: GetCampaignStatsUseCase,
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly restoreCampaignUseCase: RestoreCampaignUseCase,
+    private readonly updateCampaignStatusUseCase: UpdateCampaignStatusUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -120,6 +125,34 @@ export class AdminCampaignController {
         { id: campaignId },
         200,
         "Campaign restored by Admin successfully",
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const campaignId = param(req, "id");
+      const body = updateCampaignStatusSchema.parse(req.body);
+
+      const updated = await this.updateCampaignStatusUseCase.execute({
+        tenantId,
+        campaignId,
+        status: body.status,
+        cascadeToBatches: body.cascadeToBatches,
+      });
+
+      sendSuccess(
+        res,
+        updated,
+        200,
+        "Campaign status updated successfully",
       );
     } catch (err) {
       next(err);

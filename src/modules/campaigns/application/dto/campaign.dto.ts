@@ -131,6 +131,7 @@ export interface ExtractionOverviewDisposition {
     value: string;
     count: number;
     percentage: number;
+    sortOrder?: number;
   }>;
   totalCount: number;
 }
