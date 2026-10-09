@@ -9,6 +9,7 @@ import type {
   BatchStatus,
   LeadStatus,
   CampaignStatus,
+  LeadStopReason,
 } from "@prisma/client";
 
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
@@ -221,6 +222,60 @@ export class PrismaWebhookRepository implements WebhookRepository {
         status,
         ...(completedAt && { completedAt }),
       },
+    });
+  }
+
+  async stopBatchCallsAndLeads(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<{ stoppedCalls: number; stoppedLeads: number }> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Find all in-flight or scheduled retry calls belonging to this batch
+      const activeCalls = await tx.call.findMany({
+        where: {
+          batchId,
+          status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+        },
+        select: { id: true, leadId: true },
+      });
+
+      const callIds = activeCalls.map((c) => c.id);
+      const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+
+      // 2. Transition matching calls to STOPPED
+      let stoppedCalls = 0;
+      if (callIds.length > 0) {
+        const callUpdate = await tx.call.updateMany({
+          where: { id: { in: callIds } },
+          data: {
+            status: "STOPPED",
+            endedAt: new Date(),
+          },
+        });
+        stoppedCalls = callUpdate.count;
+      }
+
+      // 3. Transition uncalled leads (PENDING / CALLING) and leads with stopped retry calls to STOPPED
+      const leadUpdate = await tx.lead.updateMany({
+        where: {
+          batchId,
+          OR: [
+            { status: { in: ["PENDING", "CALLING"] } },
+            ...(scheduledOrActiveLeadIds.length > 0
+              ? [{ id: { in: scheduledOrActiveLeadIds } }]
+              : []),
+          ],
+        },
+        data: {
+          status: "STOPPED",
+          stoppedReason: reason,
+        },
+      });
+
+      return {
+        stoppedCalls,
+        stoppedLeads: leadUpdate.count,
+      };
     });
   }
 

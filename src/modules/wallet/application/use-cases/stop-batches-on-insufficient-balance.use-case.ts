@@ -64,15 +64,48 @@ export class StopBatchesOnInsufficientBalanceUseCase {
           await bolnaClient.batches.stop(batch.bolnaBatchId);
         }
 
-        await prisma.leadBatch.update({
-          where: { id: batch.id },
-          data: { status: "STOPPED" },
-        });
+        await prisma.$transaction(async (tx) => {
+          // Update batch status
+          await tx.leadBatch.update({
+            where: { id: batch.id },
+            data: { status: "STOPPED" },
+          });
 
-        // Mark remaining uncalled leads as STOPPED
-        await prisma.lead.updateMany({
-          where: { batchId: batch.id, status: "PENDING" },
-          data: { status: "STOPPED", stoppedReason: "LOW_BALANCE" },
+          // Find active/scheduled calls in this batch
+          const activeCalls = await tx.call.findMany({
+            where: {
+              batchId: batch.id,
+              status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+            },
+            select: { id: true, leadId: true },
+          });
+
+          const callIds = activeCalls.map((c) => c.id);
+          const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+
+          if (callIds.length > 0) {
+            await tx.call.updateMany({
+              where: { id: { in: callIds } },
+              data: {
+                status: "STOPPED",
+                endedAt: new Date(),
+              },
+            });
+          }
+
+          // Mark uncalled and scheduled retry leads as STOPPED
+          await tx.lead.updateMany({
+            where: {
+              batchId: batch.id,
+              OR: [
+                { status: { in: ["PENDING", "CALLING"] } },
+                ...(scheduledOrActiveLeadIds.length > 0
+                  ? [{ id: { in: scheduledOrActiveLeadIds } }]
+                  : []),
+              ],
+            },
+            data: { status: "STOPPED", stoppedReason: "LOW_BALANCE" },
+          });
         });
       } catch (err) {
         this.logger.error("Failed to stop batch on credit limit", err, {
