@@ -40,6 +40,11 @@ export class ProcessBatchWebhookUseCase {
       return;
     }
 
+    // Strict rule: batch status SCHEDULED is only set when user actually scheduled it
+    if (newStatus === "SCHEDULED" && !leadBatch.scheduledAt) {
+      return;
+    }
+
     // 1. Update this specific batch status
     await this.webhookRepo.updateBatchStatus(
       leadBatch.id,

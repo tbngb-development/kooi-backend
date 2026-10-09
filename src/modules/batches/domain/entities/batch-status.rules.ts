@@ -32,7 +32,7 @@ const VALID_TRANSITIONS: Record<BatchStatus, BatchStatus[]> = {
   SCHEDULED: ["RUNNING", "STOPPED", "FAILED"],
   RUNNING: ["COMPLETED", "STOPPED", "FAILED"],
   STOPPED: ["COMPLETED", "RUNNING"],
-  COMPLETED: [],
+  COMPLETED: ["RUNNING"],
   FAILED: [],
 };
 
