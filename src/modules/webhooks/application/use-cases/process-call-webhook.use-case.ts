@@ -11,38 +11,6 @@ import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 import type { Queue } from "bull";
-import type { CallStatus } from "@prisma/client";
-import { evaluateCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
-
-const TERMINAL_CALL_STATUSES = new Set<CallStatus>([
-  "COMPLETED",
-  "FAILED",
-  "NO_ANSWER",
-  "BUSY",
-  "STOPPED",
-]);
-
-function mapPayloadStateToCallStatus(state: string): CallStatus | null {
-  switch (state) {
-    case "completed":
-    case "ended":
-    case "call-completed":
-      return "COMPLETED";
-    case "no-answer":
-      return "NO_ANSWER";
-    case "busy":
-      return "BUSY";
-    case "failed":
-    case "error":
-    case "balance-low":
-      return "FAILED";
-    case "stopped":
-    case "canceled":
-      return "STOPPED";
-    default:
-      return null;
-  }
-}
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -83,50 +51,6 @@ export class ProcessCallWebhookUseCase {
 
     const state = payload.status.toLowerCase().replace("_", "-");
 
-    // ── Idempotency & Out-of-Order Guard ──────────────────────────────────────
-    const existingCall = await this.webhookRepo.findCallByBolnaCallId(callId);
-    if (existingCall && TERMINAL_CALL_STATUSES.has(existingCall.status)) {
-      const retryCount =
-        payload.retry_count ?? payload.batch_run_details?.retried ?? 0;
-      const recordedAttempts =
-        (existingCall.callHistory as CallHistoryItem[])?.length ?? 0;
-
-      // Only evaluate terminal idempotency if this is NOT a new retry attempt
-      if (retryCount <= recordedAttempts) {
-        const incomingTerminalStatus = mapPayloadStateToCallStatus(state);
-
-        // Case 1: Intermediate event arriving after terminal settlement (late delivery)
-        if (!incomingTerminalStatus) {
-          this.logger?.debug(
-            "Late intermediate webhook dropped for terminal call",
-            {
-              action: "webhook.call.late_intermediate_dropped",
-              callId,
-              currentStatus: existingCall.status,
-              incomingState: state,
-            },
-          );
-          return;
-        }
-
-        // Case 2: Conflicting terminal state arriving after settlement
-        if (incomingTerminalStatus !== existingCall.status) {
-          this.logger?.warn(
-            "Conflicting terminal webhook dropped for call",
-            {
-              action: "webhook.call.conflicting_terminal_dropped",
-              callId,
-              currentStatus: existingCall.status,
-              incomingTerminalStatus,
-            },
-          );
-          return;
-        }
-
-        // Case 3: Same terminal state -> ALLOW execution to proceed for idempotent field updates
-      }
-    }
-
     switch (state) {
       case "queued":
       case "scheduled":
@@ -142,9 +66,9 @@ export class ProcessCallWebhookUseCase {
 
         await this.webhookRepo.updateCallStatusAndHistory(
           resolved.id,
-          resolved.bolnaCallId ?? callId,
+          callId,
           "CALLING",
-          resolved.callHistory,
+          [],
         );
         if (resolved.batchId) {
           await this.webhookRepo.updateBatchStatus(
@@ -227,50 +151,13 @@ export class ProcessCallWebhookUseCase {
     payload: WebhookCallPayload,
   ): Promise<ResolvedCallContext | null> {
     const call = await this.webhookRepo.findCallByBolnaCallId(bolnaCallId);
-    const retryCount =
-      payload.retry_count ?? payload.batch_run_details?.retried ?? 0;
-
-    if (call) {
-      const currentHistory = (call.callHistory as CallHistoryItem[]) ?? [];
-
-      // If Bolna indicates a new retry attempt beyond what is currently archived in history
-      if (retryCount > currentHistory.length) {
-        const bolnaRetryEntry = payload.retry_history?.find(
-          (h) => h.attempt === currentHistory.length,
-        );
-
-        const historyItem: CallHistoryItem = {
-          attempt: currentHistory.length,
-          bolnaCallId: call.bolnaCallId ?? bolnaCallId,
-          status: call.status,
-          duration: bolnaRetryEntry?.duration ?? call.duration,
-          cost: call.cost,
-          timestamp: call.updatedAt.toISOString(),
-          errorMessage:
-            bolnaRetryEntry?.error_message ?? payload.error_message ?? null,
-          hangupReason:
-            bolnaRetryEntry?.hangup_reason ??
-            payload.telephony_data?.hangup_reason ??
-            null,
-        };
-
-        const updatedHistory = [...currentHistory, historyItem];
-
-        return this.webhookRepo.updateCallStatusAndHistory(
-          call.id,
-          call.bolnaCallId ?? bolnaCallId,
-          "CALLING",
-          updatedHistory,
-        );
-      }
-
-      return call;
-    }
+    if (call) return call;
 
     const bolnaBatchId = payload.batch_id;
     const phone =
       payload.telephony_data?.to_number ??
       payload.context_details?.recipient_phone_number;
+    const retried = payload.batch_run_details?.retried ?? 0;
 
     if (!bolnaBatchId || !phone) return null;
 
@@ -292,31 +179,26 @@ export class ProcessCallWebhookUseCase {
       batch.id,
     );
 
-    if (existingCall) {
+    if (existingCall && retried > 0) {
       const history = (existingCall.callHistory as CallHistoryItem[]) ?? [];
+      history.push({
+        attempt: retried,
+        bolnaCallId: existingCall?.bolnaCallId ?? bolnaCallId,
+        status: existingCall.status,
+        duration: existingCall.duration,
+        cost: existingCall.cost,
+        timestamp: existingCall.updatedAt.toISOString(),
+      });
 
-      if (retryCount > history.length) {
-        const historyItem: CallHistoryItem = {
-          attempt: history.length,
-          bolnaCallId: existingCall.bolnaCallId ?? bolnaCallId,
-          status: existingCall.status,
-          duration: existingCall.duration,
-          cost: existingCall.cost,
-          timestamp: existingCall.updatedAt.toISOString(),
-          errorMessage: payload.error_message ?? null,
-          hangupReason: payload.telephony_data?.hangup_reason ?? null,
-        };
+      return this.webhookRepo.updateCallStatusAndHistory(
+        existingCall.id,
+        bolnaCallId,
+        "CALLING",
+        history,
+      );
+    }
 
-        const updatedHistory = [...history, historyItem];
-
-        return this.webhookRepo.updateCallStatusAndHistory(
-          existingCall.id,
-          existingCall.bolnaCallId ?? bolnaCallId,
-          "CALLING",
-          updatedHistory,
-        );
-      }
-
+    if (existingCall && retried === 0) {
       return existingCall;
     }
 
@@ -402,20 +284,13 @@ export class ProcessCallWebhookUseCase {
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
 
-    if (call.status !== "COMPLETED") {
-      await this.webhookRepo.incrementTerminalStats(
-        call.campaignId,
-        call.batchId,
-        "COMPLETED",
-      );
-    }
+    await this.webhookRepo.incrementTerminalStats(
+      call.campaignId,
+      call.batchId,
+      "COMPLETED",
+    );
 
-    if (
-      call.status !== "COMPLETED" &&
-      this.debitWalletForCall &&
-      duration &&
-      duration > 0
-    ) {
+    if (this.debitWalletForCall && duration && duration > 0) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
           tenantId: call.tenantId,
@@ -447,11 +322,7 @@ export class ProcessCallWebhookUseCase {
     }
 
     // ── Classifier Extraction (async, non-blocking) ──────────────
-    if (
-      call.status !== "COMPLETED" &&
-      this.classifierQueue &&
-      transcript
-    ) {
+    if (this.classifierQueue && transcript) {
       this.classifierQueue
         .add(
           { callId: call.id, tenantId: call.tenantId },
@@ -491,13 +362,11 @@ export class ProcessCallWebhookUseCase {
     const leadStatus = status === "FAILED" ? "FAILED" : "NO_ANSWER";
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
-    if (call.status !== status) {
-      await this.webhookRepo.incrementTerminalStats(
-        call.campaignId,
-        call.batchId,
-        status,
-      );
-    }
+    await this.webhookRepo.incrementTerminalStats(
+      call.campaignId,
+      call.batchId,
+      status,
+    );
 
     this.logger?.debug("Call terminal", {
       action: "webhook.call.terminal",
@@ -842,20 +711,31 @@ export class ProcessCallWebhookUseCase {
     );
 
     if (statuses.length > 0) {
-      const targetStatus = evaluateCampaignStatusFromBatches(statuses);
+      // FIX: Ensure unstarted/draft "CREATED" batches never block campaign completion.
+      // Reconciles status based on whether any active dialing/scheduling is in progress.
+      const hasActiveBatches = statuses.some(
+        (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
+      );
 
-      if (targetStatus && targetStatus !== "RUNNING") {
-        await this.webhookRepo.updateCampaignStatus(
-          call.campaignId,
-          targetStatus,
-          new Date(),
-        );
+      if (!hasActiveBatches) {
+        const executedBatches = statuses.filter((s) => s !== "CREATED");
 
-        this.logger?.info("Campaign marked as finished from call webhook", {
-          action: "webhook.call.campaign_completed",
-          campaignId: call.campaignId,
-          finalCampaignStatus: targetStatus,
-        });
+        if (executedBatches.length > 0) {
+          const allFailed = executedBatches.every((s) => s === "FAILED");
+          const finalCampaignStatus = allFailed ? "FAILED" : "COMPLETED";
+
+          await this.webhookRepo.updateCampaignStatus(
+            call.campaignId,
+            finalCampaignStatus,
+            new Date(),
+          );
+
+          this.logger?.info("Campaign marked as finished from call webhook", {
+            action: "webhook.call.campaign_completed",
+            campaignId: call.campaignId,
+            finalCampaignStatus,
+          });
+        }
       }
     } else {
       const legacyActive =
