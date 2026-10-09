@@ -9,9 +9,10 @@ import type {
   BatchStatus,
   LeadStatus,
   CampaignStatus,
+  LeadStopReason,
 } from "@prisma/client";
 
-import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 const callSelectFields = {
   id: true,
@@ -28,6 +29,17 @@ const callSelectFields = {
   summary: true,
   callHistory: true,
   updatedAt: true,
+  batch: {
+    select: {
+      retryConfig: true,
+      scheduledAt: true,
+    },
+  },
+  campaign: {
+    select: {
+      defaultRetryConfig: true,
+    },
+  },
 } as const;
 
 export class PrismaWebhookRepository implements WebhookRepository {
@@ -46,10 +58,19 @@ export class PrismaWebhookRepository implements WebhookRepository {
     summary: string | null;
     callHistory: unknown;
     updatedAt: Date;
+    batch?: {
+      retryConfig: unknown;
+      scheduledAt?: Date | null;
+    } | null;
+    campaign?: {
+      defaultRetryConfig: unknown;
+    } | null;
   }): ResolvedCallContext {
     return {
       ...raw,
       callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
+      retryConfig: (raw.batch?.retryConfig as RetryConfig | null) ?? null,
+      campaignDefaultRetryConfig: (raw.campaign?.defaultRetryConfig as RetryConfig | null) ?? null,
     };
   }
 
@@ -67,7 +88,13 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async findBatchIdByBolnaBatchId(bolnaBatchId: string) {
     return prisma.leadBatch.findUnique({
       where: { bolnaBatchId },
-      select: { id: true, campaignId: true, tenantId: true, status: true },
+      select: {
+        id: true,
+        campaignId: true,
+        tenantId: true,
+        status: true,
+        scheduledAt: true,
+      },
     });
   }
 
@@ -198,6 +225,60 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
+  async stopBatchCallsAndLeads(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<{ stoppedCalls: number; stoppedLeads: number }> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Find all in-flight or scheduled retry calls belonging to this batch
+      const activeCalls = await tx.call.findMany({
+        where: {
+          batchId,
+          status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+        },
+        select: { id: true, leadId: true },
+      });
+
+      const callIds = activeCalls.map((c) => c.id);
+      const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+
+      // 2. Transition matching calls to STOPPED
+      let stoppedCalls = 0;
+      if (callIds.length > 0) {
+        const callUpdate = await tx.call.updateMany({
+          where: { id: { in: callIds } },
+          data: {
+            status: "STOPPED",
+            endedAt: new Date(),
+          },
+        });
+        stoppedCalls = callUpdate.count;
+      }
+
+      // 3. Transition uncalled leads (PENDING / CALLING) and leads with stopped retry calls to STOPPED
+      const leadUpdate = await tx.lead.updateMany({
+        where: {
+          batchId,
+          OR: [
+            { status: { in: ["PENDING", "CALLING"] } },
+            ...(scheduledOrActiveLeadIds.length > 0
+              ? [{ id: { in: scheduledOrActiveLeadIds } }]
+              : []),
+          ],
+        },
+        data: {
+          status: "STOPPED",
+          stoppedReason: reason,
+        },
+      });
+
+      return {
+        stoppedCalls,
+        stoppedLeads: leadUpdate.count,
+      };
+    });
+  }
+
   async updateCampaignStatus(
     campaignId: string,
     status: CampaignStatus,
@@ -318,6 +399,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
                                     slug: true,
                                     isObjective: true,
                                     isSubjective: true,
+                                    objectiveOptions: true,
                                   },
                                 },
                               },
@@ -349,11 +431,20 @@ export class PrismaWebhookRepository implements WebhookRepository {
         slug: string;
         isObjective: boolean;
         isSubjective: boolean;
+        objectiveOptions?: Array<{
+          value: string;
+          condition: string;
+          sortOrder?: number;
+          sub_options?: unknown[];
+        }> | null;
       }
     >();
     for (const catRel of platformAgent.categories) {
       for (const dispRel of catRel.category.dispositions) {
-        dispositionMap.set(dispRel.disposition.id, dispRel.disposition);
+        dispositionMap.set(dispRel.disposition.id, {
+          ...dispRel.disposition,
+          objectiveOptions: dispRel.disposition.objectiveOptions as any,
+        });
       }
     }
 
@@ -362,37 +453,5 @@ export class PrismaWebhookRepository implements WebhookRepository {
       dispositions: Array.from(dispositionMap.values()),
     };
   }
-
-  async getExtractionConfigForCall(callId: string): Promise<{
-    platformAgentId: string;
-    extractionConfig: unknown;
-  } | null> {
-    const call = await prisma.call.findUnique({
-      where: { id: callId },
-      select: {
-        campaign: {
-          select: {
-            assistant: {
-              select: {
-                platformAgent: {
-                  select: {
-                    id: true,
-                    extractionConfig: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const agent = call?.campaign?.assistant?.platformAgent;
-    if (!agent || !agent.extractionConfig) return null;
-
-    return {
-      platformAgentId: agent.id,
-      extractionConfig: agent.extractionConfig,
-    };
-  }
 }
+

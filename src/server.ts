@@ -21,6 +21,7 @@ const server = app.listen(env.port, () => {
     container.batches.schedulers.batchProcessing.start();
     container.bolnaApiKeys.schedulers.agentClone.start();
     container.auth.schedulers.refreshTokenCleanup.start();
+    container.classifier.schedulers.classifierExtraction.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -34,10 +35,15 @@ function gracefulShutdown(signal: string): void {
   container.batches.schedulers.batchProcessing.stop();
   container.bolnaApiKeys.schedulers.agentClone.stop();
   container.auth.schedulers.refreshTokenCleanup.stop();
+  container.classifier.schedulers.classifierExtraction.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);
   });
+
+  // Terminate open keep-alive sockets so server.close does not hang on idle clients
+  server.closeIdleConnections?.();
+  server.closeAllConnections?.();
 
   setTimeout(() => {
     console.error("Forced shutdown after timeout");

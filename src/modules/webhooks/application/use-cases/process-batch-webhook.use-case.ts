@@ -12,10 +12,12 @@ export class ProcessBatchWebhookUseCase {
 
   async execute(payload: WebhookBatchPayload): Promise<void> {
     const bolnaBatchId = payload.batch_id;
-
+    
     const state = (payload.state ?? payload.status)?.toLowerCase();
+    this.logger?.warn("batch webhook usecase payload state: ", {state})
+    
+    this.logger?.warn("batch webhook usecase payload: ", {payload})
     if (!state) return;
-
     if (!bolnaBatchId) {
       throw new WebhookResolutionError("Missing batch_id context.");
     }
@@ -40,12 +42,37 @@ export class ProcessBatchWebhookUseCase {
       return;
     }
 
+    // Strict rule: batch status SCHEDULED is only set when user actually scheduled it
+    if (newStatus === "SCHEDULED" && !leadBatch.scheduledAt) {
+      return;
+    }
+
     // 1. Update this specific batch status
     await this.webhookRepo.updateBatchStatus(
       leadBatch.id,
       newStatus,
       newStatus === "COMPLETED" ? new Date() : undefined,
     );
+
+    // If batch was stopped by Bolna, synchronize remaining calls and leads to STOPPED
+    if (newStatus === "STOPPED") {
+      try {
+        const { stoppedCalls, stoppedLeads } =
+          await this.webhookRepo.stopBatchCallsAndLeads(leadBatch.id, "MANUAL");
+        this.logger?.info("Batch calls and leads marked as stopped from webhook", {
+          action: "webhook.batch.calls_and_leads_stopped",
+          batchId: leadBatch.id,
+          stoppedCalls,
+          stoppedLeads,
+        });
+      } catch (err) {
+        this.logger?.error(
+          "Failed to mark batch calls and leads as stopped from webhook",
+          err,
+          { batchId: leadBatch.id },
+        );
+      }
+    }
 
     // 2. Fetch all batch statuses in this campaign
     const statuses = await this.webhookRepo.getAllBatchStatuses(

@@ -65,6 +65,7 @@ export const createDispositionSchema = z
         z.object({
           value: z.string(),
           condition: z.string(),
+          sortOrder: z.number().int().optional(),
           sub_options: z.array(z.any()).optional(),
         }),
       )
@@ -119,6 +120,7 @@ export const updateDispositionSchema = z
         z.object({
           value: z.string(),
           condition: z.string(),
+          sortOrder: z.number().int().optional(),
           sub_options: z.array(z.any()).optional(),
         }),
       )

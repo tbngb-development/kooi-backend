@@ -112,6 +112,10 @@ export class PrismaCallRepository implements CallRepository {
               categoryName: true,
               objectiveValue: true,
               confidence: true,
+              sortOrder: true,
+            },
+            orderBy: {
+              sortOrder: "asc",
             },
           },
           extractionInsights: {
@@ -451,18 +455,23 @@ export class PrismaCallRepository implements CallRepository {
   }
 
   private flattenObjectiveValues(
-    options: Array<{ value: string; sub_options?: unknown[] }> | null,
+    options: Array<{ value: string; sortOrder?: number; sub_options?: unknown[] }> | null,
   ): string[] {
     if (!options) return [];
 
+    const sortedOptions = [...options].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
+
     const values: string[] = [];
-    for (const opt of options) {
+    for (const opt of sortedOptions) {
       values.push(opt.value);
       if (opt.sub_options && Array.isArray(opt.sub_options)) {
         values.push(
           ...this.flattenObjectiveValues(
             opt.sub_options as Array<{
               value: string;
+              sortOrder?: number;
               sub_options?: unknown[];
             }>,
           ),

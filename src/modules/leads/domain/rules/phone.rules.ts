@@ -1,4 +1,21 @@
 /**
+ * ITU-T E.164 international phone number format:
+ * - Starts with '+'
+ * - Followed by 1-3 digit country code (first digit 1-9)
+ * - Followed by subscriber number
+ * - Total length of digits: 7 to 15
+ */
+export const E164_PHONE_REGEX = /^\+[1-9]\d{6,14}$/;
+
+/**
+ * Checks if a string is a valid E.164 international phone number.
+ */
+export function isValidE164(phone: string): boolean {
+  if (!phone) return false;
+  return E164_PHONE_REGEX.test(phone.trim());
+}
+
+/**
  * Normalizes raw phone strings into E.164 format.
  *
  * Extracted from the Bolna client so it can be shared across
@@ -37,3 +54,4 @@ export function normalizePhoneNumber(
   );
   return `+${cleaned}`;
 }
+

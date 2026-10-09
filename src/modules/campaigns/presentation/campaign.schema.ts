@@ -59,6 +59,13 @@ export const parseManualLeadsSchema = z.object({
     .max(1000, "Maximum 1000 leads per manual submission"),
 });
 
+export const updateCampaignStatusSchema = z.object({
+  status: z.enum(["DRAFT", "RUNNING", "COMPLETED", "FAILED"]),
+  cascadeToBatches: z.boolean().optional().default(true),
+});
+
+export type UpdateCampaignStatusBody = z.infer<typeof updateCampaignStatusSchema>;
+
 export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
 
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;

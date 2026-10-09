@@ -3,8 +3,9 @@ import {
   type LeadStatus,
   type BatchStatus,
   type CampaignStatus,
+  type LeadStopReason,
 } from "@prisma/client";
-import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
   id: string;
@@ -21,6 +22,8 @@ export interface ResolvedCallContext {
   summary: string | null;
   callHistory: CallHistoryItem[];
   updatedAt: Date;
+  retryConfig?: RetryConfig | null;
+  campaignDefaultRetryConfig?: RetryConfig | null;
 }
 
 export interface CallCostSnapshotData {
@@ -43,6 +46,12 @@ export interface AgentDispositionMap {
     slug: string;
     isObjective: boolean;
     isSubjective: boolean;
+    objectiveOptions?: Array<{
+      value: string;
+      condition: string;
+      sortOrder?: number;
+      sub_options?: unknown[];
+    }> | null;
   }[];
 }
 
@@ -59,6 +68,7 @@ export interface WebhookRepository {
     tenantId: string;
     campaignId: string;
     status: BatchStatus;
+    scheduledAt?: Date | null;
   } | null>;
   findLeadByPhoneAndBatch(
     phone: string,
@@ -97,7 +107,7 @@ export interface WebhookRepository {
       recording?: string | null;
       cost?: number | null;
       extracted_data?: Record<string, any> | null;
-      endedAt: Date;
+      endedAt?: Date;
     },
   ): Promise<void>;
 
@@ -122,6 +132,10 @@ export interface WebhookRepository {
     status: BatchStatus,
     completedAt?: Date,
   ): Promise<void>;
+  stopBatchCallsAndLeads(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<{ stoppedCalls: number; stoppedLeads: number }>;
   updateCampaignStatus(
     campaignId: string,
     status: CampaignStatus,

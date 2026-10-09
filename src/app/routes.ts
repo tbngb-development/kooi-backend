@@ -32,6 +32,8 @@ import { buildAdminPlatformAgentRoutes } from "../modules/platform-agents/presen
 import { buildAdminExtractionRoutes } from "../modules/extractions/presentation/admin-extraction.routes";
 import { buildAdminIndustryPackRoutes } from "../modules/industry-packs/presentation/admin-industry-pack.routes";
 import { buildInboundCallerMatchRoutes } from "../modules/calls/presentation/inbound-caller-match.routes";
+import { buildAdminClassifierRoutes } from "../modules/classifier/presentation/admin-classifier.routes";
+import { buildTenantClassifierRoutes } from "../modules/classifier/presentation/tenant-classifier.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -126,6 +128,14 @@ export function buildRoutes(c: AppContainer): Router {
     buildTenantPaymentRoutes(c.payments.tenantController, c.authenticate),
   );
 
+  router.use(
+    "/v1/classifier",
+    buildTenantClassifierRoutes(
+      c.classifier.tenantController,
+      c.authenticate,
+    ),
+  );
+
   // ── Admin API v1  ──────────────────────
   router.use(
     "/v1/admin/auth",
@@ -178,6 +188,15 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/admin/industry-packs",
     buildAdminIndustryPackRoutes(
       c.industryPacks.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
+  router.use(
+    "/v1/admin/classifier",
+    buildAdminClassifierRoutes(
+      c.classifier.adminController,
       c.authenticate,
       c.authorize,
     ),

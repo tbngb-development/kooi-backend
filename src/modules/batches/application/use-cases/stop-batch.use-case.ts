@@ -94,20 +94,19 @@ export class StopBatchUseCase {
       status: "STOPPED",
     });
 
-    // 5. Mark all never-dialed (PENDING) leads in this batch as STOPPED
+    // 5. Mark all in-flight/scheduled retry calls and uncalled/retry leads in this batch as STOPPED
     //    so they are not dialed if the campaign resumes other batches
     try {
-      const stoppedLeadsCount = await this.batchRepo.markPendingLeadsAsStopped(
+      const { stoppedCalls, stoppedLeads } =
+        await this.batchRepo.stopBatchCallsAndLeads(batchId, "MANUAL");
+      this.log?.info("Batch calls and leads marked as stopped", {
+        action: "batch.stop.calls_and_leads_stopped",
         batchId,
-        "MANUAL",
-      );
-      this.log?.info("Pending leads marked as stopped", {
-        action: "batch.stop.leads_stopped",
-        batchId,
-        count: stoppedLeadsCount,
+        stoppedCalls,
+        stoppedLeads,
       });
     } catch (err) {
-      this.log?.error("Failed to mark pending leads as stopped", err, {
+      this.log?.error("Failed to mark batch calls and leads as stopped", err, {
         batchId,
       });
     }

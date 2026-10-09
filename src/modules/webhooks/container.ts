@@ -9,9 +9,11 @@ import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prism
 import { BolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import { PrismaBolnaApiKeyRepository } from "../bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
 import type { Logger } from "../../shared/logging/logger.interface";
+import type { Queue } from "bull";
 
 export interface WebhookModuleDeps {
   debitWalletForCall?: DebitWalletForCallUseCase;
+  classifierQueue?: Queue;
   logger: Logger;
 }
 
@@ -41,6 +43,7 @@ export function buildWebhookModule(
     webhookRepo,
     deps.debitWalletForCall,
     stopBatchesOnInsufficientBalance,
+    deps.classifierQueue,
     log,
   );
 

@@ -25,9 +25,11 @@ model Tenant {
   workspaceSwitchError   String?
   workspaceSwitchJobId   String?
 
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  classifierResults ClassifierCallResult[]
   memberships   TenantUser[]
   bolnaApiKeyId String?
   bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
@@ -267,6 +269,7 @@ enum LeadStatus {
   CALLING
   CALLED
   NO_ANSWER
+  BUSY
   FAILED
   STOPPED
 }
@@ -313,6 +316,7 @@ model Call {
   deletedAt   DateTime?
 
   callAnalysis CallAnalysis?
+  classifierResult ClassifierCallResult?
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
 
@@ -337,6 +341,7 @@ enum CallStatus {
   NO_ANSWER
   BUSY
   STOPPED
+  SCHEDULED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -743,6 +748,7 @@ model PlatformAgent {
   assistants Assistant[]
   categories    PlatformAgentCategory[]
   bolnaBindings AgentBolnaExtractionBinding[]
+  classifierLinks PlatformAgentClassifier[]
 
   bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
   industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
@@ -838,6 +844,7 @@ model IndustryPack {
   updatedAt DateTime @updatedAt
 
   platformAgents PlatformAgent[]
+  classifierDispositions ClassifierDisposition[]
 
   extractionCategories   ExtractionCategoryIndustry[]
   extractionDispositions ExtractionDispositionIndustry[]
@@ -933,6 +940,7 @@ model CallExtractionOverview {
   categoryName     String
   objectiveValue   String
   confidence       Float?
+  sortOrder        Int      @default(0)
   createdAt        DateTime @default(now())
 
   call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -940,6 +948,7 @@ model CallExtractionOverview {
 
   @@index([tenantId, campaignId, dispositionId])
   @@index([tenantId, campaignId, dispositionId, objectiveValue])
+  @@index([tenantId, campaignId, dispositionId, sortOrder])
   @@index([callId])
   @@index([batchId])
 }
@@ -968,6 +977,92 @@ model CallExtractionInsight {
 
   @@index([tenantId, campaignId, dispositionId])
   @@index([tenantId, campaignId, dispositionId, normalizedValue])
+  @@index([callId])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLASSIFIER EXTRACTION (Independent JEV-based objective evaluation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ClassifierQuestionType {
+  BOOLEAN
+  CHOICE
+  MULTI_CHOICE
+}
+
+enum ClassifierExtractionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+model ClassifierDisposition {
+  id               String                 @id @default(uuid())
+  slug             String
+  name             String
+  displayName      String
+  question         String
+  questionType     ClassifierQuestionType
+  objectiveOptions Json
+  industryPackId   String?
+  isActive         Boolean                @default(true)
+
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  industryPack     IndustryPack?          @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
+  agentLinks       PlatformAgentClassifier[]
+
+  @@unique([slug, industryPackId])
+  @@index([industryPackId])
+  @@index([isActive])
+}
+
+model PlatformAgentClassifier {
+  platformAgentId         String
+  classifierDispositionId String
+
+  platformAgent         PlatformAgent         @relation(fields: [platformAgentId], references: [id], onDelete: Cascade)
+  classifierDisposition ClassifierDisposition @relation(fields: [classifierDispositionId], references: [id], onDelete: Cascade)
+
+  @@id([platformAgentId, classifierDispositionId])
+  @@index([classifierDispositionId])
+}
+
+model ClassifierCallResult {
+  id               String                     @id @default(uuid())
+  callId           String                     @unique
+  tenantId         String
+  campaignId       String
+  batchId          String?
+  status           ClassifierExtractionStatus @default(PENDING)
+
+  dispositionCount Int                        @default(0)
+  transcriptLength Int                        @default(0)
+
+  rawResponse      Json?
+  results          Json?
+
+  inputTokens      Int?
+  outputTokens     Int?
+  gatewayCost      String?
+
+  errorMessage     String?
+  retryCount       Int                        @default(0)
+
+  enqueuedAt       DateTime                   @default(now())
+  processedAt      DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  call             Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tenant           Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, campaignId])
+  @@index([tenantId, status])
   @@index([callId])
   @@index([batchId])
 }

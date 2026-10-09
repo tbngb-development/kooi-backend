@@ -10,6 +10,8 @@ import { type StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/ap
 import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
+import type { Queue } from "bull";
+import type { LeadStatus, CallStatus } from "@prisma/client";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -17,6 +19,7 @@ interface DynamicExtractionEntry {
   localDispositionSlug: string | null;
   subjective: string | null;
   objective: string | null;
+  sortOrder?: number | null;
   isObjective: boolean;
   isSubjective: boolean;
   confidence: number | null;
@@ -38,6 +41,7 @@ export class ProcessCallWebhookUseCase {
     private readonly webhookRepo: WebhookRepository,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
     private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly classifierQueue?: Queue,
     private readonly logger?: Logger,
   ) {}
 
@@ -48,12 +52,36 @@ export class ProcessCallWebhookUseCase {
     }
 
     const state = payload.status.toLowerCase().replace("_", "-");
+    this.logger?.warn("call status: ", { state });
 
     switch (state) {
       case "queued":
-      case "scheduled":
-      case "rescheduled":
         break;
+
+      case "scheduled":
+      case "rescheduled": {
+        this.logger?.warn("call scheduled: ", { payload });
+        const resolved = await this.resolveCallRecord(callId, payload);
+        if (resolved) {
+          await this.webhookRepo.updateCallTerminalState(resolved.id, {
+            status: "SCHEDULED",
+          });
+
+          const lastRetry =
+            payload.retry_history?.[payload.retry_history.length - 1];
+          if (lastRetry?.status) {
+            const rawStatus = lastRetry.status.toLowerCase();
+            const leadStatus: LeadStatus =
+              rawStatus === "busy"
+                ? "BUSY"
+                : rawStatus === "no-answer" || rawStatus === "no_answer"
+                  ? "NO_ANSWER"
+                  : "FAILED";
+            await this.webhookRepo.updateLeadStatus(resolved.leadId, leadStatus);
+          }
+        }
+        break;
+      }
 
       case "initiated":
       case "ringing":
@@ -112,14 +140,14 @@ export class ProcessCallWebhookUseCase {
       case "no-answer": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "NO_ANSWER");
+        await this.handleCallTerminal(resolved, "NO_ANSWER", payload);
         break;
       }
 
       case "busy": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "BUSY");
+        await this.handleCallTerminal(resolved, "BUSY", payload);
         break;
       }
 
@@ -128,7 +156,7 @@ export class ProcessCallWebhookUseCase {
       case "balance-low": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "FAILED");
+        await this.handleCallTerminal(resolved, "FAILED", payload);
         break;
       }
 
@@ -319,6 +347,22 @@ export class ProcessCallWebhookUseCase {
       }
     }
 
+    // ── Classifier Extraction (async, non-blocking) ──────────────
+    if (this.classifierQueue && transcript) {
+      this.classifierQueue
+        .add(
+          { callId: call.id, tenantId: call.tenantId },
+          { jobId: `classifier-${call.id}` },
+        )
+        .catch((err) =>
+          this.logger?.warn("Classifier enqueue failed", {
+            action: "webhook.call.classifier_enqueue_failed",
+            callId: call.id,
+            error: err?.message,
+          }),
+        );
+    }
+
     this.logger?.info("Call completed", {
       action: "webhook.call.completed",
       callId: call.id,
@@ -335,13 +379,47 @@ export class ProcessCallWebhookUseCase {
   private async handleCallTerminal(
     call: ResolvedCallContext,
     status: "NO_ANSWER" | "BUSY" | "FAILED",
+    _payload?: WebhookCallPayload,
   ): Promise<void> {
+    const retryConfig = call.retryConfig ?? call.campaignDefaultRetryConfig;
+    const retryEnabled = Boolean(retryConfig?.enabled);
+    const retryStatuses = retryConfig?.retry_on_statuses ?? [
+      "no-answer",
+      "busy",
+      "failed",
+    ];
+    const currentAttempts =
+      (call.callHistory as CallHistoryItem[])?.length ?? 0;
+    const maxRetries = retryConfig?.max_retries ?? 0;
+
+    const statusKey =
+      status === "NO_ANSWER"
+        ? "no-answer"
+        : status === "BUSY"
+          ? "busy"
+          : "failed";
+    const willRetry =
+      retryEnabled &&
+      currentAttempts < maxRetries &&
+      retryStatuses.includes(statusKey);
+
+    const finalCallStatus: CallStatus = willRetry ? "SCHEDULED" : status;
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status,
+      status: finalCallStatus,
       endedAt: new Date(),
     });
 
-    const leadStatus = status === "FAILED" ? "FAILED" : "NO_ANSWER";
+    let leadStatus: LeadStatus;
+    if (retryEnabled) {
+      leadStatus =
+        status === "BUSY"
+          ? "BUSY"
+          : status === "FAILED"
+            ? "FAILED"
+            : "NO_ANSWER";
+    } else {
+      leadStatus = "CALLED";
+    }
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
     await this.webhookRepo.incrementTerminalStats(
@@ -354,7 +432,9 @@ export class ProcessCallWebhookUseCase {
       action: "webhook.call.terminal",
       callId: call.id,
       tenantId: call.tenantId,
-      status,
+      status: finalCallStatus,
+      leadStatus,
+      willRetry,
     });
 
     await this.checkBatchCompletion(call);
@@ -411,6 +491,12 @@ export class ProcessCallWebhookUseCase {
         displayName: string;
         isObjective: boolean;
         isSubjective: boolean;
+        objectiveOptions?: Array<{
+          value: string;
+          condition: string;
+          sortOrder?: number;
+          sub_options?: unknown[];
+        }> | null;
       }
     >();
     for (const disp of agentMap.dispositions) {
@@ -420,6 +506,7 @@ export class ProcessCallWebhookUseCase {
         displayName: disp.displayName,
         isObjective: disp.isObjective,
         isSubjective: disp.isSubjective,
+        objectiveOptions: disp.objectiveOptions ?? null,
       };
       dispositionLookup.set(disp.name.toLowerCase(), entry);
       dispositionLookup.set(disp.slug.toLowerCase(), entry);
@@ -442,12 +529,33 @@ export class ProcessCallWebhookUseCase {
           dispositionLookup.get(dispName.toLowerCase()) ??
           dispositionLookup.get(dispName);
 
+        let sortOrder: number | null = null;
+        if (
+          localDisp?.isObjective &&
+          value.objective != null &&
+          localDisp.objectiveOptions &&
+          Array.isArray(localDisp.objectiveOptions)
+        ) {
+          const cleanObj = String(value.objective).trim().toLowerCase();
+          const matchedIdx = localDisp.objectiveOptions.findIndex(
+            (opt) => opt.value?.trim().toLowerCase() === cleanObj,
+          );
+          if (matchedIdx !== -1) {
+            const matchedOpt = localDisp.objectiveOptions[matchedIdx];
+            sortOrder =
+              typeof matchedOpt.sortOrder === "number"
+                ? matchedOpt.sortOrder
+                : matchedIdx;
+          }
+        }
+
         const entry: DynamicExtractionEntry = {
           localDispositionId: localDisp?.id ?? null,
           localDispositionSlug: localDisp?.slug ?? null,
           localDispositionDisplayName: localDisp?.displayName ?? null,
           subjective: (value.subjective as string) ?? null,
           objective: (value.objective as string) ?? null,
+          sortOrder,
           isObjective: localDisp?.isObjective ?? false,
           isSubjective: localDisp?.isSubjective ?? false,
           confidence: (value.confidence as number) ?? null,
@@ -515,6 +623,7 @@ export class ProcessCallWebhookUseCase {
       categoryName: string;
       objectiveValue: string;
       confidence: number | null;
+      sortOrder: number;
     }> = [];
 
     for (const [categoryName, dispositions] of Object.entries(dynamicResult)) {
@@ -535,6 +644,7 @@ export class ProcessCallWebhookUseCase {
             categoryName,
             objectiveValue: entry.objective.trim(),
             confidence: entry.confidence,
+            sortOrder: entry.sortOrder ?? 0,
           });
         }
       }
@@ -573,6 +683,7 @@ export class ProcessCallWebhookUseCase {
         categoryName: e.categoryName,
         objectiveValue: e.objectiveValue,
         confidence: e.confidence,
+        sortOrder: e.sortOrder,
       })),
     });
 

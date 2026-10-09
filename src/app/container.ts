@@ -71,6 +71,10 @@ import {
   buildIndustryPackModule,
   type IndustryPackModule,
 } from "../modules/industry-packs/container";
+import {
+  buildClassifierModule,
+  type ClassifierModule,
+} from "../modules/classifier/container";
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
@@ -104,6 +108,7 @@ export interface AppContainer {
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
+  classifier: ClassifierModule;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -207,6 +212,8 @@ export function buildContainer(): AppContainer {
   // 8. Assistants Module
   const assistants = buildAssistantModule({ bolnaClientFactory });
 
+  const classifier = buildClassifierModule({ logger });
+
   return {
     logger,
     auth,
@@ -224,6 +231,7 @@ export function buildContainer(): AppContainer {
     users: buildUserModule({ passwordService }),
     webhooks: buildWebhookModule({
       debitWalletForCall: wallet.useCases.debitWalletForCall,
+      classifierQueue: classifier.queue,
       logger,
     }),
 
@@ -236,6 +244,7 @@ export function buildContainer(): AppContainer {
     wallet,
     payments,
     invites,
+    classifier,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
