@@ -13,6 +13,7 @@ import {
 import {
   parseLeadBuffer,
   isIndianPhone,
+  isValidE164,
   type LeadRow,
 } from "../../../leads/infrastructure/leadParser";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
@@ -86,10 +87,21 @@ export class ParseLeadsUseCase {
       phone: normalizePhoneNumber(r.phone),
     }));
 
-    const indianRows = normalizedRows.filter((r) => isIndianPhone(r.phone));
-    const nonIndianNumbers = normalizedRows
-      .filter((r) => !isIndianPhone(r.phone))
-      .map((r) => r.phone);
+    const indianRows: LeadRow[] = [];
+    const nonIndianNumbers: string[] = [];
+    let malformedPhoneCount = 0;
+
+    for (const r of normalizedRows) {
+      if (isIndianPhone(r.phone)) {
+        indianRows.push(r);
+      } else if (isValidE164(r.phone)) {
+        nonIndianNumbers.push(r.phone);
+      } else {
+        malformedPhoneCount++;
+      }
+    }
+
+    const totalInvalid = missingPhoneCount + malformedPhoneCount;
 
     // In-file deduplication
     const seenInFile = new Set<string>();
@@ -154,7 +166,7 @@ export class ParseLeadsUseCase {
       campaignId: input.campaignId,
       totalRows: rows.length,
       validIndian: indianRows.length,
-      invalid: missingPhoneCount,
+      invalid: totalInvalid,
       nonIndian: nonIndianNumbers.length,
       inFileDuplicates: inFileDuplicateNumbers.length,
       dbDuplicates: dbDuplicateNumbers.length,
@@ -164,7 +176,7 @@ export class ParseLeadsUseCase {
     return {
       total: rows.length,
       valid: indianRows.length,
-      invalid: missingPhoneCount,
+      invalid: totalInvalid,
       nonIndian: nonIndianNumbers.length,
       nonIndianNumbers,
       inFileDuplicates: inFileDuplicateNumbers.length,
