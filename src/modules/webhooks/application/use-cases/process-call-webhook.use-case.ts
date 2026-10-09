@@ -11,6 +11,7 @@ import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 import type { Queue } from "bull";
+import type { LeadStatus, CallStatus } from "@prisma/client";
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -53,9 +54,18 @@ export class ProcessCallWebhookUseCase {
 
     switch (state) {
       case "queued":
-      case "scheduled":
-      case "rescheduled":
         break;
+
+      case "scheduled":
+      case "rescheduled": {
+        const resolved = await this.resolveCallRecord(callId, payload);
+        if (resolved) {
+          await this.webhookRepo.updateCallTerminalState(resolved.id, {
+            status: "SCHEDULED",
+          });
+        }
+        break;
+      }
 
       case "initiated":
       case "ringing":
@@ -114,14 +124,14 @@ export class ProcessCallWebhookUseCase {
       case "no-answer": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "NO_ANSWER");
+        await this.handleCallTerminal(resolved, "NO_ANSWER", payload);
         break;
       }
 
       case "busy": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "BUSY");
+        await this.handleCallTerminal(resolved, "BUSY", payload);
         break;
       }
 
@@ -130,7 +140,7 @@ export class ProcessCallWebhookUseCase {
       case "balance-low": {
         const resolved = await this.resolveCallRecord(callId, payload);
         if (!resolved) break;
-        await this.handleCallTerminal(resolved, "FAILED");
+        await this.handleCallTerminal(resolved, "FAILED", payload);
         break;
       }
 
@@ -353,13 +363,48 @@ export class ProcessCallWebhookUseCase {
   private async handleCallTerminal(
     call: ResolvedCallContext,
     status: "NO_ANSWER" | "BUSY" | "FAILED",
+    _payload?: WebhookCallPayload,
   ): Promise<void> {
+    const retryConfig =
+      call.retryConfig ?? call.campaignDefaultRetryConfig;
+    const retryEnabled = Boolean(retryConfig?.enabled);
+    const retryStatuses = retryConfig?.retry_on_statuses ?? [
+      "no-answer",
+      "busy",
+      "failed",
+    ];
+    const currentAttempts =
+      (call.callHistory as CallHistoryItem[])?.length ?? 0;
+    const maxRetries = retryConfig?.max_retries ?? 0;
+
+    const statusKey =
+      status === "NO_ANSWER"
+        ? "no-answer"
+        : status === "BUSY"
+          ? "busy"
+          : "failed";
+    const willRetry =
+      retryEnabled &&
+      currentAttempts < maxRetries &&
+      retryStatuses.includes(statusKey);
+
+    const finalCallStatus: CallStatus = willRetry ? "SCHEDULED" : status;
     await this.webhookRepo.updateCallTerminalState(call.id, {
-      status,
+      status: finalCallStatus,
       endedAt: new Date(),
     });
 
-    const leadStatus = status === "FAILED" ? "FAILED" : "NO_ANSWER";
+    let leadStatus: LeadStatus;
+    if (retryEnabled) {
+      leadStatus =
+        status === "BUSY"
+          ? "BUSY"
+          : status === "FAILED"
+            ? "FAILED"
+            : "NO_ANSWER";
+    } else {
+      leadStatus = "CALLED";
+    }
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
     await this.webhookRepo.incrementTerminalStats(
@@ -372,7 +417,9 @@ export class ProcessCallWebhookUseCase {
       action: "webhook.call.terminal",
       callId: call.id,
       tenantId: call.tenantId,
-      status,
+      status: finalCallStatus,
+      leadStatus,
+      willRetry,
     });
 
     await this.checkBatchCompletion(call);

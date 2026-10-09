@@ -269,6 +269,7 @@ enum LeadStatus {
   CALLING
   CALLED
   NO_ANSWER
+  BUSY
   FAILED
   STOPPED
 }
@@ -340,6 +341,7 @@ enum CallStatus {
   NO_ANSWER
   BUSY
   STOPPED
+  SCHEDULED
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

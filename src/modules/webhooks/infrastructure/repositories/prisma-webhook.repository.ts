@@ -11,7 +11,7 @@ import type {
   CampaignStatus,
 } from "@prisma/client";
 
-import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 const callSelectFields = {
   id: true,
@@ -28,6 +28,17 @@ const callSelectFields = {
   summary: true,
   callHistory: true,
   updatedAt: true,
+  batch: {
+    select: {
+      retryConfig: true,
+      scheduledAt: true,
+    },
+  },
+  campaign: {
+    select: {
+      defaultRetryConfig: true,
+    },
+  },
 } as const;
 
 export class PrismaWebhookRepository implements WebhookRepository {
@@ -46,10 +57,19 @@ export class PrismaWebhookRepository implements WebhookRepository {
     summary: string | null;
     callHistory: unknown;
     updatedAt: Date;
+    batch?: {
+      retryConfig: unknown;
+      scheduledAt?: Date | null;
+    } | null;
+    campaign?: {
+      defaultRetryConfig: unknown;
+    } | null;
   }): ResolvedCallContext {
     return {
       ...raw,
       callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
+      retryConfig: (raw.batch?.retryConfig as RetryConfig | null) ?? null,
+      campaignDefaultRetryConfig: (raw.campaign?.defaultRetryConfig as RetryConfig | null) ?? null,
     };
   }
 
@@ -67,7 +87,13 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async findBatchIdByBolnaBatchId(bolnaBatchId: string) {
     return prisma.leadBatch.findUnique({
       where: { bolnaBatchId },
-      select: { id: true, campaignId: true, tenantId: true, status: true },
+      select: {
+        id: true,
+        campaignId: true,
+        tenantId: true,
+        status: true,
+        scheduledAt: true,
+      },
     });
   }
 
@@ -362,37 +388,5 @@ export class PrismaWebhookRepository implements WebhookRepository {
       dispositions: Array.from(dispositionMap.values()),
     };
   }
-
-  async getExtractionConfigForCall(callId: string): Promise<{
-    platformAgentId: string;
-    extractionConfig: unknown;
-  } | null> {
-    const call = await prisma.call.findUnique({
-      where: { id: callId },
-      select: {
-        campaign: {
-          select: {
-            assistant: {
-              select: {
-                platformAgent: {
-                  select: {
-                    id: true,
-                    extractionConfig: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const agent = call?.campaign?.assistant?.platformAgent;
-    if (!agent || !agent.extractionConfig) return null;
-
-    return {
-      platformAgentId: agent.id,
-      extractionConfig: agent.extractionConfig,
-    };
-  }
 }
+

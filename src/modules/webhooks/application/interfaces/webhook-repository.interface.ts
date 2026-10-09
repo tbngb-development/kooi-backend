@@ -4,7 +4,7 @@ import {
   type BatchStatus,
   type CampaignStatus,
 } from "@prisma/client";
-import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
+import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
   id: string;
@@ -21,6 +21,8 @@ export interface ResolvedCallContext {
   summary: string | null;
   callHistory: CallHistoryItem[];
   updatedAt: Date;
+  retryConfig?: RetryConfig | null;
+  campaignDefaultRetryConfig?: RetryConfig | null;
 }
 
 export interface CallCostSnapshotData {
@@ -59,6 +61,7 @@ export interface WebhookRepository {
     tenantId: string;
     campaignId: string;
     status: BatchStatus;
+    scheduledAt?: Date | null;
   } | null>;
   findLeadByPhoneAndBatch(
     phone: string,
@@ -97,7 +100,7 @@ export interface WebhookRepository {
       recording?: string | null;
       cost?: number | null;
       extracted_data?: Record<string, any> | null;
-      endedAt: Date;
+      endedAt?: Date;
     },
   ): Promise<void>;
 
