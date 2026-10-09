@@ -940,6 +940,7 @@ model CallExtractionOverview {
   categoryName     String
   objectiveValue   String
   confidence       Float?
+  sortOrder        Int      @default(0)
   createdAt        DateTime @default(now())
 
   call          Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -947,6 +948,7 @@ model CallExtractionOverview {
 
   @@index([tenantId, campaignId, dispositionId])
   @@index([tenantId, campaignId, dispositionId, objectiveValue])
+  @@index([tenantId, campaignId, dispositionId, sortOrder])
   @@index([callId])
   @@index([batchId])
 }

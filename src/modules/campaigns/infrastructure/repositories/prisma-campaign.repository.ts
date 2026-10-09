@@ -403,9 +403,27 @@ export class PrismaCampaignRepository implements CampaignRepository {
     const dispositionIds = [...new Set(rows.map((r) => r.dispositionId))];
     const visibleDispositions = await prisma.extractionDisposition.findMany({
       where: { id: { in: dispositionIds }, showInOverview: true },
-      select: { id: true },
+      select: { id: true, objectiveOptions: true },
     });
     const visibleIds = new Set(visibleDispositions.map((d) => d.id));
+
+    const dispositionSortMap = new Map<string, Map<string, number>>();
+    for (const d of visibleDispositions) {
+      const optMap = new Map<string, number>();
+      if (Array.isArray(d.objectiveOptions)) {
+        (d.objectiveOptions as Array<{ value: string; sortOrder?: number }>).forEach(
+          (opt, idx) => {
+            if (opt?.value) {
+              optMap.set(
+                opt.value.trim().toLowerCase(),
+                typeof opt.sortOrder === "number" ? opt.sortOrder : idx,
+              );
+            }
+          },
+        );
+      }
+      dispositionSortMap.set(d.id, optMap);
+    }
 
     const filteredRows = rows.filter((r) => visibleIds.has(r.dispositionId));
 
@@ -428,7 +446,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
         dispositionSlug: string;
         dispositionName: string;
         categoryName: string;
-        values: Array<{ value: string; count: number; percentage: number }>;
+        values: Array<{
+          value: string;
+          count: number;
+          percentage: number;
+          sortOrder?: number;
+        }>;
         totalCount: number;
       }
     >();
@@ -447,12 +470,17 @@ export class PrismaCampaignRepository implements CampaignRepository {
         dispositionMap.set(row.dispositionId, acc);
       }
 
+      const optSortMap = dispositionSortMap.get(row.dispositionId);
+      const sortOrder =
+        optSortMap?.get(row.objectiveValue.trim().toLowerCase()) ?? 0;
+
       const count = row._count;
       acc.totalCount += count;
       acc.values.push({
         value: row.objectiveValue,
         count,
         percentage: 0,
+        sortOrder,
       });
     }
 
@@ -464,6 +492,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
             ? parseFloat(((v.count / acc.totalCount) * 100).toFixed(1))
             : 0;
       }
+      acc.values.sort((a, b) => {
+        if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        }
+        return b.count - a.count;
+      });
       dispositions.push(acc);
     }
 

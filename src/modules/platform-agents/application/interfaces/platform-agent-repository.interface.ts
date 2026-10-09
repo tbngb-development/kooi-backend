@@ -21,6 +21,7 @@ export type PlatformAgentWithCount = PlatformAgent & {
 export interface DispositionObjectiveOption {
   value: string;
   condition: string;
+  sortOrder?: number;
   sub_options?: DispositionObjectiveOption[];
 }
 

@@ -344,6 +344,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
                                     slug: true,
                                     isObjective: true,
                                     isSubjective: true,
+                                    objectiveOptions: true,
                                   },
                                 },
                               },
@@ -375,11 +376,20 @@ export class PrismaWebhookRepository implements WebhookRepository {
         slug: string;
         isObjective: boolean;
         isSubjective: boolean;
+        objectiveOptions?: Array<{
+          value: string;
+          condition: string;
+          sortOrder?: number;
+          sub_options?: unknown[];
+        }> | null;
       }
     >();
     for (const catRel of platformAgent.categories) {
       for (const dispRel of catRel.category.dispositions) {
-        dispositionMap.set(dispRel.disposition.id, dispRel.disposition);
+        dispositionMap.set(dispRel.disposition.id, {
+          ...dispRel.disposition,
+          objectiveOptions: dispRel.disposition.objectiveOptions as any,
+        });
       }
     }
 
