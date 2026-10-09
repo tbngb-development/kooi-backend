@@ -130,6 +130,7 @@ export interface CallHistoryItem {
   cost?: number | null;
   timestamp: string;
   errorMessage?: string | null;
+  hangupReason?: string | null;
 }
 
 export interface BolnaLLMConfig {
