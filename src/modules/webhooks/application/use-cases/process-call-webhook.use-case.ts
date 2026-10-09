@@ -11,7 +11,38 @@ import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { InputJsonValue } from "@prisma/client/runtime/library";
 import type { Queue } from "bull";
+import type { CallStatus } from "@prisma/client";
 import { evaluateCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
+
+const TERMINAL_CALL_STATUSES = new Set<CallStatus>([
+  "COMPLETED",
+  "FAILED",
+  "NO_ANSWER",
+  "BUSY",
+  "STOPPED",
+]);
+
+function mapPayloadStateToCallStatus(state: string): CallStatus | null {
+  switch (state) {
+    case "completed":
+    case "ended":
+    case "call-completed":
+      return "COMPLETED";
+    case "no-answer":
+      return "NO_ANSWER";
+    case "busy":
+      return "BUSY";
+    case "failed":
+    case "error":
+    case "balance-low":
+      return "FAILED";
+    case "stopped":
+    case "canceled":
+      return "STOPPED";
+    default:
+      return null;
+  }
+}
 
 interface DynamicExtractionEntry {
   localDispositionId: string | null;
@@ -51,6 +82,50 @@ export class ProcessCallWebhookUseCase {
     }
 
     const state = payload.status.toLowerCase().replace("_", "-");
+
+    // ── Idempotency & Out-of-Order Guard ──────────────────────────────────────
+    const existingCall = await this.webhookRepo.findCallByBolnaCallId(callId);
+    if (existingCall && TERMINAL_CALL_STATUSES.has(existingCall.status)) {
+      const retryCount =
+        payload.retry_count ?? payload.batch_run_details?.retried ?? 0;
+      const recordedAttempts =
+        (existingCall.callHistory as CallHistoryItem[])?.length ?? 0;
+
+      // Only evaluate terminal idempotency if this is NOT a new retry attempt
+      if (retryCount <= recordedAttempts) {
+        const incomingTerminalStatus = mapPayloadStateToCallStatus(state);
+
+        // Case 1: Intermediate event arriving after terminal settlement (late delivery)
+        if (!incomingTerminalStatus) {
+          this.logger?.debug(
+            "Late intermediate webhook dropped for terminal call",
+            {
+              action: "webhook.call.late_intermediate_dropped",
+              callId,
+              currentStatus: existingCall.status,
+              incomingState: state,
+            },
+          );
+          return;
+        }
+
+        // Case 2: Conflicting terminal state arriving after settlement
+        if (incomingTerminalStatus !== existingCall.status) {
+          this.logger?.warn(
+            "Conflicting terminal webhook dropped for call",
+            {
+              action: "webhook.call.conflicting_terminal_dropped",
+              callId,
+              currentStatus: existingCall.status,
+              incomingTerminalStatus,
+            },
+          );
+          return;
+        }
+
+        // Case 3: Same terminal state -> ALLOW execution to proceed for idempotent field updates
+      }
+    }
 
     switch (state) {
       case "queued":
@@ -327,13 +402,20 @@ export class ProcessCallWebhookUseCase {
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
 
-    await this.webhookRepo.incrementTerminalStats(
-      call.campaignId,
-      call.batchId,
-      "COMPLETED",
-    );
+    if (call.status !== "COMPLETED") {
+      await this.webhookRepo.incrementTerminalStats(
+        call.campaignId,
+        call.batchId,
+        "COMPLETED",
+      );
+    }
 
-    if (this.debitWalletForCall && duration && duration > 0) {
+    if (
+      call.status !== "COMPLETED" &&
+      this.debitWalletForCall &&
+      duration &&
+      duration > 0
+    ) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
           tenantId: call.tenantId,
@@ -365,7 +447,11 @@ export class ProcessCallWebhookUseCase {
     }
 
     // ── Classifier Extraction (async, non-blocking) ──────────────
-    if (this.classifierQueue && transcript) {
+    if (
+      call.status !== "COMPLETED" &&
+      this.classifierQueue &&
+      transcript
+    ) {
       this.classifierQueue
         .add(
           { callId: call.id, tenantId: call.tenantId },
@@ -405,11 +491,13 @@ export class ProcessCallWebhookUseCase {
     const leadStatus = status === "FAILED" ? "FAILED" : "NO_ANSWER";
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
-    await this.webhookRepo.incrementTerminalStats(
-      call.campaignId,
-      call.batchId,
-      status,
-    );
+    if (call.status !== status) {
+      await this.webhookRepo.incrementTerminalStats(
+        call.campaignId,
+        call.batchId,
+        status,
+      );
+    }
 
     this.logger?.debug("Call terminal", {
       action: "webhook.call.terminal",
