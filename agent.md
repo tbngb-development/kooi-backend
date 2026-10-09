@@ -1,6 +1,7 @@
 # KOOI Backend — System Architecture, APIs & Business Logic Reference (v1 Production)
 
 > **Service:** KOOI Backend — Partner for your AI Voice Call Agents  
+> **Platform Scope:** KOOI is a multi-tenant enterprise voice automation platform designed for AI-driven lead qualification, outbound campaign execution, real-time inbound telephony routing, post-call extraction analysis, and automated usage billing. Not just for qualification, it supports any industry and any purchase, conversion, or workflow conducted via autonomous voice calling.  
 > **Environment:** v1 Production  
 > **Base URL:** `http://localhost:5001/api` (configurable via `PORT` & `env`)  
 > **Auth Architecture:** httpOnly, SameSite cookies (`access_token`, `refresh_token`) + optional Bearer fallback  
@@ -11,7 +12,7 @@
 
 ## 1. Executive Summary & Tech Stack
 
-KOOI is a multi-tenant enterprise voice automation platform designed for AI-driven lead qualification, outbound campaign execution, real-time inbound telephony routing, post-call extraction analysis, and automated usage billing.
+KOOI is a multi-tenant enterprise voice automation platform designed for AI-driven lead qualification, outbound campaign execution, real-time inbound telephony routing, post-call extraction analysis, and automated usage billing. Rather than being restricted strictly to lead qualification, KOOI is engineered to support any vertical and industry (Real Estate, BFSI, Healthcare, EdTech, Retail, Automotive) and any purchase, appointment, or conversion workflow executed through autonomous voice calling.
 
 ### Production Technology Stack
 
