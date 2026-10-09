@@ -276,15 +276,17 @@ export class PrismaCampaignRepository implements CampaignRepository {
     campaignId: string,
     status: CampaignStatus,
     extra?: { startedAt?: Date; completedAt?: Date },
-  ): Promise<void> {
-    await prisma.campaign.update({
+  ): Promise<CampaignEntityData> {
+    const campaign = await prisma.campaign.update({
       where: { id: campaignId },
       data: {
         status,
-        ...(extra?.startedAt && { startedAt: extra.startedAt }),
-        ...(extra?.completedAt && { completedAt: extra.completedAt }),
+        ...(extra?.startedAt !== undefined && { startedAt: extra.startedAt }),
+        ...(extra?.completedAt !== undefined && { completedAt: extra.completedAt }),
       },
     });
+
+    return this.toEntityData(campaign);
   }
 
   async incrementTotalLeads(campaignId: string, count: number): Promise<void> {

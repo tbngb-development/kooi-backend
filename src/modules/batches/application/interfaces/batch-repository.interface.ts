@@ -103,6 +103,10 @@ export interface BatchRepository {
 
   updateTotalLeads(batchId: string, count: number): Promise<void>;
 
+  cascadeStatusFromCampaign(
+    campaignId: string,
+    targetStatus: BatchStatus,
+  ): Promise<number>;
   softDelete(
     tenantId: string,
     campaignId: string,

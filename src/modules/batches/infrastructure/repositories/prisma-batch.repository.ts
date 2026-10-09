@@ -431,6 +431,36 @@ export class PrismaBatchRepository implements BatchRepository {
     await this.recalculateCampaignStats(campaignId);
   }
 
+  async cascadeStatusFromCampaign(
+    campaignId: string,
+    targetStatus: BatchStatus,
+  ): Promise<number> {
+    const activeStatuses: BatchStatus[] = [
+      "RUNNING",
+      "SCHEDULED",
+      "PROCESSING",
+      "CREATED",
+    ];
+
+    const result = await prisma.leadBatch.updateMany({
+      where: {
+        campaignId,
+        isDeleted: false,
+        status: { in: activeStatuses },
+      },
+      data: {
+        status: targetStatus,
+        ...(targetStatus === "COMPLETED" ||
+        targetStatus === "FAILED" ||
+        targetStatus === "STOPPED"
+          ? { completedAt: new Date() }
+          : {}),
+      },
+    });
+
+    return result.count;
+  }
+
   private toEntityData(batch: {
     id: string;
     bolnaBatchId: string | null;
