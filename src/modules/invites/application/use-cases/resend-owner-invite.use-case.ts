@@ -10,6 +10,7 @@ import {
 } from "../../domain/errors/invite.errors";
 import type { OwnerInviteResponse } from "../dto/invite.dto";
 import { toOwnerInviteResponse } from "../mappers/invite.mapper";
+import { calculateInvitePricing } from "../../domain/rules/invite-pricing.rules";
 
 const DEFAULT_EXPIRY_DAYS = 1; // ← Changed from 7 to 1
 
@@ -42,12 +43,11 @@ export class ResendOwnerInviteUseCase {
     const latestVersion = await this.planRepo.findLatestPublishedVersion(
       invite.planId,
     );
-    const originalFee = latestVersion?.onboardingFee ?? 0;
-    const discountPercent = invite.skipPayment ? 0 : invite.discountPercent;
-    const discountAmount = invite.skipPayment
-      ? originalFee
-      : Math.round(originalFee * (discountPercent / 100));
-    const payableAmount = originalFee - discountAmount;
+    const pricing = calculateInvitePricing(
+      latestVersion?.onboardingFee ?? 0,
+      invite.discountPercent,
+      invite.skipPayment,
+    );
 
     await this.email.send({
       to: invite.email,
@@ -57,10 +57,10 @@ export class ResendOwnerInviteUseCase {
         planName: invite.plan.name,
         inviteUrl,
         expiresAt: expiresAt.toISOString(),
-        onboardingFee: originalFee,
-        discountPercent,
-        discountAmount,
-        payableAmount,
+        onboardingFee: pricing.originalFee,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmount,
+        payableAmount: pricing.payableAmount,
         includedBalance: latestVersion?.includedBalance ?? 0,
         perMinuteRate: latestVersion?.perMinuteRate ?? 0,
         skipPayment: invite.skipPayment,

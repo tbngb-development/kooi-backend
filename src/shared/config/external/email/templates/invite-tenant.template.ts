@@ -12,6 +12,8 @@ import {
   escapeHtml,
 } from "./email-layout";
 
+import { paisaToInr } from "../../../../utils/money";
+
 export interface InviteTenantTemplateInput {
   tenantName: string;
   planName: string;
@@ -24,13 +26,6 @@ export interface InviteTenantTemplateInput {
   includedBalance: number; // paisa
   perMinuteRate: number; // paisa
   skipPayment: boolean;
-}
-
-function paisaToInr(paisa: number): string {
-  return `₹${(paisa / 100).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 export function inviteTenantEmailHtml(

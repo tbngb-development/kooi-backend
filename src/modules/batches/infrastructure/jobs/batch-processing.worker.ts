@@ -12,6 +12,10 @@ import {
   type LeadRow,
 } from "../../../leads/infrastructure/leadParser";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
+import {
+  deduplicateInFileLeads,
+  deduplicateCrossBatchLeads,
+} from "../../../leads/domain/rules/lead-dedup.rules";
 import { transformToBolnaCSV } from "../csv-transformer";
 import { env } from "../../../../shared/config/env";
 import {
@@ -118,14 +122,7 @@ export class BatchProcessingWorker {
         return;
       }
 
-      const seenInFile = new Set<string>();
-      const uniqueRows: LeadRow[] = [];
-      for (const row of validRows) {
-        if (!seenInFile.has(row.phone)) {
-          seenInFile.add(row.phone);
-          uniqueRows.push(row);
-        }
-      }
+      const { uniqueRows } = deduplicateInFileLeads(validRows);
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 20);
 
@@ -143,7 +140,10 @@ export class BatchProcessingWorker {
           existing.forEach((p) => existingPhones.add(p));
         }
 
-        newLeads = uniqueRows.filter((r) => !existingPhones.has(r.phone));
+        newLeads = deduplicateCrossBatchLeads(
+          uniqueRows,
+          existingPhones,
+        ).newLeads;
       }
 
       // ── EARLY EXIT ON 100% DUPLICATES ─────────────────────────

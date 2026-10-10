@@ -14,9 +14,11 @@ export interface LowBalanceTemplateInput {
   thresholdPaisa: number;
 }
 
+import { paisaToRupeesFixed } from "../../../../utils/money";
+
 export function lowBalanceEmailHtml(p: LowBalanceTemplateInput): string {
-  const balance = (p.balancePaisa / 100).toFixed(2);
-  const threshold = (p.thresholdPaisa / 100).toFixed(2);
+  const balance = paisaToRupeesFixed(p.balancePaisa);
+  const threshold = paisaToRupeesFixed(p.thresholdPaisa);
   const percentage =
     p.thresholdPaisa > 0
       ? Math.round((p.balancePaisa / p.thresholdPaisa) * 100)

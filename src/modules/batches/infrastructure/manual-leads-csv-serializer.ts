@@ -1,4 +1,5 @@
 import type { ManualLeadInput } from "../application/dto/batch.dto";
+import { serializeCsv } from "../../../shared/utils/csv";
 
 /**
  * Serializes manually entered leads into a CSV buffer compatible with
@@ -9,14 +10,11 @@ import type { ManualLeadInput } from "../application/dto/batch.dto";
  */
 export function serializeManualLeadsToCSV(leads: ManualLeadInput[]): Buffer {
   const headers = ["contact_number", "customer_name"];
-  const rows: string[][] = [headers];
+  const rows = leads.map((lead) => [
+    lead.contact_number.trim(),
+    (lead.customer_name ?? "").trim(),
+  ]);
 
-  for (const lead of leads) {
-    const phone = lead.contact_number.trim();
-    const name = (lead.customer_name ?? "").trim().replace(/"/g, '""');
-    rows.push([phone, `"${name}"`]);
-  }
-
-  const csvContent = rows.map((r) => r.join(",")).join("\n");
+  const csvContent = serializeCsv(headers, rows);
   return Buffer.from(csvContent, "utf-8");
 }

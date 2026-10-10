@@ -8,6 +8,7 @@ import {
   PHONE_ALIASES,
   type LeadRow,
 } from "../../leads/infrastructure/leadParser";
+import { serializeCsv } from "../../../shared/utils/csv";
 
 export interface CSVTransformResult {
   transformedBuffer: Buffer;
@@ -59,7 +60,7 @@ export function transformToBolnaCSV(
   }
 
   const headerArray = Array.from(headers);
-  const rows: string[][] = [headerArray];
+  const dataRows: string[][] = [];
   let validCount = 0;
   let filteredOutCount = 0;
 
@@ -91,24 +92,22 @@ export function transformToBolnaCSV(
       if (header === "contact_number") {
         rowData.push(normalizedPhone);
       } else if (header === "customer_name") {
-        rowData.push(
-          `"${(hasCustomerName ? formattedName : "").replace(/"/g, '""')}"`,
-        );
+        rowData.push(hasCustomerName ? formattedName : "");
       } else if (header === "welcome_message") {
-        rowData.push(`"${welcomeMessage.replace(/"/g, '""')}"`);
+        rowData.push(welcomeMessage);
       } else {
         const value =
           lead[header] !== undefined
             ? String(lead[header] ?? "")
             : String(campaignVariables[header] ?? "");
-        rowData.push(`"${value.replace(/"/g, '""')}"`);
+        rowData.push(value);
       }
     }
 
-    rows.push(rowData);
+    dataRows.push(rowData);
   }
 
-  const csvContent = rows.map((r) => r.join(",")).join("\n");
+  const csvContent = serializeCsv(headerArray, dataRows);
   const transformedBuffer = Buffer.from(csvContent, "utf-8");
 
   return { transformedBuffer, validCount, filteredOutCount };

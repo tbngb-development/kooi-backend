@@ -4,9 +4,9 @@ import fs from "fs";
 import path from "path";
 import { MissingRequiredHeaderError } from "../domain/errors/lead.errors";
 import { cleanCustomerName } from "../domain/rules/name.rules";
-import { isValidE164 } from "../domain/rules/phone.rules";
+import { isValidE164, isIndianPhone } from "../domain/rules/phone.rules";
 
-export { isValidE164 };
+export { isValidE164, isIndianPhone };
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,16 +76,6 @@ const sanitizePhone = (raw: string): string => {
     return "+" + cleaned.slice(1).replace(/\D/g, "");
   }
   return cleaned.replace(/\D/g, "");
-};
-
-// ── Indian Phone Validator ───────────────────────────────────────────────────
-
-export const isIndianPhone = (sanitizedPhone: string): boolean => {
-  if (!sanitizedPhone) return false;
-  const digits = sanitizedPhone.replace("+", "");
-  if (digits.length === 10) return true;
-  if (digits.length === 12 && digits.startsWith("91")) return true;
-  return false;
 };
 
 // ── Row Normalizer ───────────────────────────────────────────────────────────

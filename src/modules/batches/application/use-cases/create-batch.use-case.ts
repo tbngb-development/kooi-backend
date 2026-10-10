@@ -20,9 +20,12 @@ import {
 import {
   parseLeadBuffer,
   isIndianPhone,
-  type LeadRow,
 } from "../../../leads/infrastructure/leadParser";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
+import {
+  deduplicateInFileLeads,
+  deduplicateCrossBatchLeads,
+} from "../../../leads/domain/rules/lead-dedup.rules";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
 import { env } from "../../../../shared/config/env";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
@@ -137,14 +140,7 @@ export class CreateBatchUseCase {
     if (validRows.length === 0) throw new NoValidIndianPhonesError();
 
     // 6. In-file dedup
-    const seenInFile = new Set<string>();
-    const uniqueRows: LeadRow[] = [];
-    for (const row of validRows) {
-      if (!seenInFile.has(row.phone)) {
-        seenInFile.add(row.phone);
-        uniqueRows.push(row);
-      }
-    }
+    const { uniqueRows } = deduplicateInFileLeads(validRows);
 
     // 7. Cross-batch dedup
     let newLeads = uniqueRows;
@@ -154,7 +150,10 @@ export class CreateBatchUseCase {
         input.campaignId,
         phones,
       );
-      newLeads = uniqueRows.filter((r) => !existingPhones.has(r.phone));
+      newLeads = deduplicateCrossBatchLeads(
+        uniqueRows,
+        existingPhones,
+      ).newLeads;
     }
 
     if (newLeads.length === 0) throw new AllLeadsDuplicateError();

@@ -2,6 +2,7 @@ import type { InviteRepository } from "../interfaces/invite-repository.interface
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import { InviteNotFoundError } from "../../domain/errors/invite.errors";
 import type { PublicInviteView } from "../dto/invite.dto";
+import { calculateInvitePricing } from "../../domain/rules/invite-pricing.rules";
 
 export class GetOwnerInviteUseCase {
   constructor(
@@ -23,12 +24,12 @@ export class GetOwnerInviteUseCase {
     const includedBalance = latestVersion?.includedBalance ?? 0;
 
     // Compute discount
-    const discountPercent = invite.skipPayment ? 0 : invite.discountPercent;
-    const discountAmount = invite.skipPayment
-      ? originalFee
-      : Math.round(originalFee * (discountPercent / 100));
-    const payableAmount = originalFee - discountAmount;
-    const paymentRequired = !invite.skipPayment && payableAmount > 0;
+    const pricing = calculateInvitePricing(
+      originalFee,
+      invite.discountPercent,
+      invite.skipPayment,
+    );
+    const paymentRequired = !invite.skipPayment && pricing.payableAmount > 0;
 
     return {
       email: invite.email,
@@ -44,9 +45,9 @@ export class GetOwnerInviteUseCase {
         includedBalance,
       },
       skipPayment: invite.skipPayment,
-      discountPercent,
-      discountAmount,
-      payableAmount,
+      discountPercent: pricing.discountPercent,
+      discountAmount: pricing.discountAmount,
+      payableAmount: pricing.payableAmount,
       creditIncludedBalance: invite.creditIncludedBalance,
       paymentRequired,
     };

@@ -11,6 +11,8 @@ import {
   escapeHtml,
 } from "./email-layout";
 
+import { paisaToRupeesFixed } from "../../../../utils/money";
+
 export interface PaymentSuccessTemplateInput {
   tenantName: string;
   amountPaisa: number;
@@ -23,7 +25,7 @@ export interface PaymentSuccessTemplateInput {
 export function paymentSuccessEmailHtml(
   p: PaymentSuccessTemplateInput,
 ): string {
-  const amount = (p.amountPaisa / 100).toFixed(2);
+  const amount = paisaToRupeesFixed(p.amountPaisa);
   const formattedDate = formatUserDateTime(p.date ?? new Date());
 
   const content = sectionPadding(`
