@@ -118,3 +118,24 @@ export type CreateAgentFromScratchInput = z.infer<
   typeof createAgentFromScratchSchema
 >;
 export type ClonePlatformAgentInput = z.infer<typeof clonePlatformAgentSchema>;
+
+// ── Test Extraction Schemas ──────────────────────────────────────────
+export const testAgentExtractionSchema = z.object({
+  callId: z.string().uuid("Invalid call ID format").optional(),
+  customTranscript: z.string().min(1).max(30000).optional(),
+  dispositionIds: z.array(z.string().uuid("Invalid disposition ID")).optional(),
+  provider: z.enum(["gemini", "openai"]).optional().default("gemini"),
+  model: z.string().max(100).optional(),
+  apiKey: z.string().max(250).optional(),
+});
+
+export const listTestCallsQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.preprocess(
+    (val) => (val ? Number(val) : 20),
+    z.number().int().min(1).max(50).default(20),
+  ),
+});
+
+export type TestAgentExtractionBody = z.infer<typeof testAgentExtractionSchema>;
+export type ListTestCallsQuery = z.infer<typeof listTestCallsQuerySchema>;

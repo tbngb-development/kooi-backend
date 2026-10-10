@@ -97,11 +97,22 @@ export class ProcessCallWebhookUseCase {
           [],
         );
         if (resolved.batchId) {
-          await this.webhookRepo.updateBatchStatus(
-            resolved.batchId,
-            "RUNNING",
-            new Date(),
-          );
+          const batch = await prisma.leadBatch.findUnique({
+            where: { id: resolved.batchId },
+            select: { status: true },
+          });
+          if (
+            batch &&
+            batch.status !== "STOPPED" &&
+            batch.status !== "COMPLETED" &&
+            batch.status !== "FAILED"
+          ) {
+            await this.webhookRepo.updateBatchStatus(
+              resolved.batchId,
+              "RUNNING",
+              new Date(),
+            );
+          }
         }
         await this.webhookRepo.updateCampaignStatus(
           resolved.campaignId,
@@ -347,6 +358,22 @@ export class ProcessCallWebhookUseCase {
       }
     }
 
+    if (this.stopBatchesOnInsufficientBalance) {
+      this.stopBatchesOnInsufficientBalance
+        .execute({ tenantId: call.tenantId })
+        .catch((err) =>
+          this.logger?.error(
+            "Credit limit check failed during call completed webhook",
+            err,
+            {
+              action: "webhook.call.credit_check_completed",
+              tenantId: call.tenantId,
+              callId: call.id,
+            },
+          ),
+        );
+    }
+
     // ── Classifier Extraction (async, non-blocking) ──────────────
     if (this.classifierQueue && transcript) {
       this.classifierQueue
@@ -398,7 +425,20 @@ export class ProcessCallWebhookUseCase {
         : status === "BUSY"
           ? "busy"
           : "failed";
+
+    let isBatchStopped = false;
+    if (call.batchId) {
+      const batch = await prisma.leadBatch.findUnique({
+        where: { id: call.batchId },
+        select: { status: true },
+      });
+      if (batch?.status === "STOPPED") {
+        isBatchStopped = true;
+      }
+    }
+
     const willRetry =
+      !isBatchStopped &&
       retryEnabled &&
       currentAttempts < maxRetries &&
       retryStatuses.includes(statusKey);

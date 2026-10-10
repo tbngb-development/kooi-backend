@@ -53,6 +53,10 @@ export class CampaignEntity {
     return this.data.status === "COMPLETED" || this.data.status === "FAILED";
   }
 
+  get isDraft(): boolean {
+    return this.data.status === "DRAFT";
+  }
+
   /**
    * Only campaigns in DRAFT, COMPLETED, or FAILED statuses are allowed to be archived.
    * RUNNING campaigns cannot be archived.

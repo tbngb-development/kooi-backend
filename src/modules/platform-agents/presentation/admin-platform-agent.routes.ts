@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { AdminPlatformAgentController } from "./admin-platform-agent.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validate } from "../../../shared/middleware/validate";
+import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   registerPlatformAgentSchema,
   updatePlatformAgentSchema,
@@ -11,7 +11,9 @@ import {
   assignDispositionsSchema,
   updateExtractionConfigSchema,
   createAgentFromScratchSchema,
-  clonePlatformAgentSchema, // [NEW]
+  clonePlatformAgentSchema,
+  testAgentExtractionSchema,
+  listTestCallsQuerySchema,
 } from "./platform-agent.schema";
 
 export function buildAdminPlatformAgentRoutes(
@@ -82,6 +84,18 @@ export function buildAdminPlatformAgentRoutes(
     "/:id/extraction-config",
     validate(updateExtractionConfigSchema),
     controller.updatePlatformAgentVariablesHandler,
+  );
+
+  // ── Test Extraction Endpoints ──────────────────────────────────────────────
+  router.get(
+    "/:id/test-calls",
+    validateQuery(listTestCallsQuerySchema),
+    controller.listTestCalls,
+  );
+  router.post(
+    "/:id/test-extraction",
+    validate(testAgentExtractionSchema),
+    controller.testExtraction,
   );
 
   return router;

@@ -104,6 +104,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         campaignRepo,
         storage,
         bolnaProvider,
+        deps.checkBalanceForBatch,
         log,
       ),
       new DeleteBatchUseCase(batchRepo, bolnaProvider, log),

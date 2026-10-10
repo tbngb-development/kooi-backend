@@ -24,12 +24,16 @@ import type { GetAgentExtractionsUseCase } from "../application/use-cases/get-ag
 import type { SyncExtractionsToBolnaUseCase } from "../application/use-cases/sync-extractions-to-bolna.use-case";
 import type { UpdatePlatformAgentVariablesUseCase } from "../application/use-cases/update_platform-agent-variables";
 
-// NEW Workspace & Cloning Use Cases
 import type { CreateAgentFromScratchUseCase } from "../application/use-cases/create-agent-from-scratch.use-case";
 import type { ClonePlatformAgentUseCase } from "../application/use-cases/clone-platform-agent.use-case";
 import type { ListPlatformAgentAssignmentsUseCase } from "../application/use-cases/list-platform-agent-assignments.use-case";
+import type { TestPlatformAgentExtractionsUseCase } from "../application/use-cases/test-platform-agent-extractions.use-case";
+import type { ListTestCallCandidatesUseCase } from "../application/use-cases/list-test-call-candidates.use-case";
 
-import { listPlatformAgentsQuerySchema } from "./platform-agent.schema";
+import {
+  listPlatformAgentsQuerySchema,
+  type ListTestCallsQuery,
+} from "./platform-agent.schema";
 
 export class AdminPlatformAgentController {
   constructor(
@@ -54,6 +58,8 @@ export class AdminPlatformAgentController {
     private readonly createFromScratchUseCase: CreateAgentFromScratchUseCase,
     private readonly clonePlatformAgentUseCase: ClonePlatformAgentUseCase,
     private readonly listAssignmentsUseCase: ListPlatformAgentAssignmentsUseCase,
+    private readonly testExtractionsUseCase: TestPlatformAgentExtractionsUseCase,
+    private readonly listTestCallsUseCase: ListTestCallCandidatesUseCase,
   ) {}
 
   register = async (
@@ -342,6 +348,42 @@ export class AdminPlatformAgentController {
       const result = await this.listAssignmentsUseCase.execute(
         param(req, "id"),
       );
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  testExtraction = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const platformAgentId = param(req, "id");
+      const result = await this.testExtractionsUseCase.execute({
+        platformAgentId,
+        ...req.body,
+      });
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listTestCalls = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const platformAgentId = param(req, "id");
+      const { search, limit } = req.query as unknown as ListTestCallsQuery;
+      const result = await this.listTestCallsUseCase.execute({
+        platformAgentId,
+        search,
+        limit,
+      });
       sendSuccess(res, result);
     } catch (err) {
       next(err);

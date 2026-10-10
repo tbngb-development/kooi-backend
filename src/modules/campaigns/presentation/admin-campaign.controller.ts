@@ -12,9 +12,11 @@ import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campa
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { RestoreCampaignUseCase } from "../application/use-cases/restore-campaign.use-case";
 import type { UpdateCampaignStatusUseCase } from "../application/use-cases/update-campaign-status.use-case";
+import type { UpdateDraftCampaignUseCase } from "../application/use-cases/update-draft-campaign.use-case";
 import {
   listCampaignsQuerySchema,
   updateCampaignStatusSchema,
+  updateDraftCampaignSchema,
 } from "./campaign.schema";
 
 export class AdminCampaignController {
@@ -25,6 +27,7 @@ export class AdminCampaignController {
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly restoreCampaignUseCase: RestoreCampaignUseCase,
     private readonly updateCampaignStatusUseCase: UpdateCampaignStatusUseCase,
+    private readonly updateDraftCampaignUseCase: UpdateDraftCampaignUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -153,6 +156,49 @@ export class AdminCampaignController {
         updated,
         200,
         "Campaign status updated successfully",
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateDraft = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const campaignId = param(req, "id");
+      const tenantId =
+        (req.query.tenantId as string) ??
+        (req.body?.tenantId as string) ??
+        ((req as AuthRequest).user as TenantAuthContext)?.tenantId;
+
+      const body = updateDraftCampaignSchema.parse(req.body);
+
+      const finalRetryConfig =
+        body.defaultRetryConfig !== undefined
+          ? body.defaultRetryConfig
+          : body.retryConfig !== undefined
+          ? body.retryConfig
+          : body.retry;
+
+      const updated = await this.updateDraftCampaignUseCase.execute({
+        tenantId,
+        campaignId,
+        name: body.name,
+        description: body.description,
+        platformAgentId: body.platformAgentId,
+        assistantId: body.assistantId,
+        variables: body.variables,
+        defaultRetryConfig: finalRetryConfig,
+      });
+
+      sendSuccess(
+        res,
+        updated,
+        200,
+        "Draft campaign updated successfully",
       );
     } catch (err) {
       next(err);
