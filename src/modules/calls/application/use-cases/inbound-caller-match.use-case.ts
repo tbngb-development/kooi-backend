@@ -82,7 +82,9 @@ export class InboundCallerMatchUseCase {
       "our team";
 
     const formattedName = cleanCustomerName(lead.name);
-    const hasCustomerName = isValidCustomerName(lead.name);
+    const hasCustomerName = Boolean(
+      formattedName && isValidCustomerName(formattedName),
+    );
 
     const welcomeMessage = `Hi, this is ${agentName} from ${builderName}. How may I help you?`;
 

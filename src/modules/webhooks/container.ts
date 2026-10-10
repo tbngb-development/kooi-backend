@@ -19,6 +19,7 @@ export interface WebhookModuleDeps {
 
 export interface WebhookModule {
   controller: WebhookController;
+  processCallWebhook: ProcessCallWebhookUseCase;
 }
 
 export function buildWebhookModule(
@@ -57,5 +58,7 @@ export function buildWebhookModule(
 
   return {
     controller,
+    processCallWebhook,
   };
 }
+

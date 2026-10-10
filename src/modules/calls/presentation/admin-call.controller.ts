@@ -3,6 +3,7 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import type { ListCallsQuery, GetCallStatsQuery } from "./call.schema";
+import { syncBolnaExecutionSchema } from "./call.schema";
 import { sendSuccess } from "../../../shared/utils/response";
 import { AdminMessages } from "../../../shared/constants/messages";
 import { param } from "../../../shared/utils/paramHelper";
@@ -14,6 +15,7 @@ import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stat
 import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
 import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.use-case";
 import type { RestoreCallUseCase } from "../application/use-cases/restore-call.use-case";
+import type { SyncBolnaExecutionUseCase } from "../application/use-cases/sync-bolna-execution.use-case";
 
 export class AdminCallController {
   constructor(
@@ -24,6 +26,7 @@ export class AdminCallController {
     private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
     private readonly archiveCallUseCase: ArchiveCallUseCase,
     private readonly restoreCallUseCase: RestoreCallUseCase,
+    private readonly syncBolnaExecutionUseCase: SyncBolnaExecutionUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -169,4 +172,30 @@ export class AdminCallController {
       next(err);
     }
   };
+
+  syncBolna = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const callId = (req.params?.id as string | undefined) || (req.body?.callId as string | undefined);
+      const bolnaExecutionId = req.body?.bolnaExecutionId as string | undefined;
+      const tenantId =
+        (req.body?.tenantId as string | undefined) ??
+        (req.query?.tenantId as string | undefined);
+
+      const parsed = syncBolnaExecutionSchema.parse({
+        callId,
+        bolnaExecutionId,
+        tenantId,
+      });
+
+      const result = await this.syncBolnaExecutionUseCase.execute(parsed);
+      sendSuccess(res, result, 200, "Call synced successfully from Bolna");
+    } catch (err) {
+      next(err);
+    }
+  };
 }
+

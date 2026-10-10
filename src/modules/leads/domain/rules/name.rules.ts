@@ -58,6 +58,8 @@ function isInitialOrPrefix(word: string): boolean {
 
 // ── Main Functions ───────────────────────────────────────────────────────────
 
+export const MIN_CUSTOMER_NAME_LENGTH = 3;
+
 /**
  * Checks if a customer name is valid and conversational (not empty, not junk, not a template tag).
  */
@@ -67,15 +69,15 @@ export function isValidCustomerName(name: string | null | undefined): boolean {
   const trimmed = name.trim().toLowerCase();
   if (!trimmed) return false;
 
+  // Must contain at least MIN_CUSTOMER_NAME_LENGTH alphabetic characters (rejects single-letter initials like "N")
+  const lettersOnly = trimmed.replace(/[^a-z]/g, "");
+  if (lettersOnly.length < MIN_CUSTOMER_NAME_LENGTH) return false;
+
   // Reject template syntax like {{customer_name}}, {name}, <name>, [name], etc.
-  // Fixed: Removed unnecessary escapes inside [...]
   if (/^[{<([].*[}>)\]]$/.test(trimmed)) return false;
 
   // Reject common dummy/junk names
   if (JUNK_NAMES.has(trimmed)) return false;
-
-  // Must contain at least one letter
-  if (!/[a-zA-Z]/.test(trimmed)) return false;
 
   return true;
 }
@@ -87,7 +89,7 @@ export function isValidCustomerName(name: string | null | undefined): boolean {
 export function cleanCustomerName(raw: string | undefined | null): string {
   if (!isValidCustomerName(raw)) return "";
 
-  // Fixed: Replaces all punctuation and special characters with spaces cleanly
+  // Replaces all punctuation and special characters with spaces cleanly
   // "Md. Abbas-Firdous" -> "Md  Abbas Firdous"
   const sanitized = raw!.replace(/[^\w\s]/g, " ").trim();
 
@@ -101,6 +103,6 @@ export function cleanCustomerName(raw: string | undefined | null): string {
     }
   }
 
-  // Fallback: if all words were initials (e.g. "R K"), return the last token
-  return titleCase(parts[parts.length - 1]);
+  // If all tokens were initials/prefixes (e.g. "N", "N K", "Dr."), skip the name
+  return "";
 }

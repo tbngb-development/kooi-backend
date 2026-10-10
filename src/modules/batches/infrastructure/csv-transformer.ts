@@ -78,7 +78,9 @@ export function transformToBolnaCSV(
     const rowData: string[] = [];
 
     const formattedName = cleanCustomerName(lead.name);
-    const hasCustomerName = isValidCustomerName(lead.name);
+    const hasCustomerName = Boolean(
+      formattedName && isValidCustomerName(formattedName),
+    );
 
     // Dynamic welcome message
     const welcomeMessage = hasCustomerName

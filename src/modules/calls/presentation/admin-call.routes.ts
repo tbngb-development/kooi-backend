@@ -29,6 +29,10 @@ export function buildAdminCallRoutes(
   router.get("/available-filters", controller.getAvailableFilters);
   router.get("/:id/transcript", controller.getTranscript);
 
+  // Bolna reconciliation sync
+  router.post("/sync-bolna", controller.syncBolna);
+  router.post("/:id/sync-bolna", controller.syncBolna);
+
   // Admin soft delete & restore
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);
