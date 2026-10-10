@@ -29,6 +29,9 @@ import { CloneAgentToWorkspaceUseCase } from "./application/use-cases/clone-agen
 import { CreateAgentFromScratchUseCase } from "./application/use-cases/create-agent-from-scratch.use-case";
 import { ClonePlatformAgentUseCase } from "./application/use-cases/clone-platform-agent.use-case";
 import { ListPlatformAgentAssignmentsUseCase } from "./application/use-cases/list-platform-agent-assignments.use-case";
+import { TestPlatformAgentExtractionsUseCase } from "./application/use-cases/test-platform-agent-extractions.use-case";
+import { ListTestCallCandidatesUseCase } from "./application/use-cases/list-test-call-candidates.use-case";
+import { ExtractionLlmProvider } from "./infrastructure/services/extraction-llm.provider";
 
 import { AdminPlatformAgentController } from "./presentation/admin-platform-agent.controller";
 import type { Logger } from "../../shared/logging/logger.interface";
@@ -93,6 +96,12 @@ export function buildPlatformAgentModule(
 
   const listAssignmentsUseCase = new ListPlatformAgentAssignmentsUseCase();
 
+  const extractionLlmProvider = new ExtractionLlmProvider();
+  const testExtractionsUseCase = new TestPlatformAgentExtractionsUseCase(
+    extractionLlmProvider,
+  );
+  const listTestCallsUseCase = new ListTestCallCandidatesUseCase();
+
   const adminController = new AdminPlatformAgentController(
     new RegisterPlatformAgentUseCase(repository, templateProvider),
     new SyncPlatformAgentUseCase(repository, templateProvider),
@@ -127,6 +136,8 @@ export function buildPlatformAgentModule(
     createFromScratchUseCase,
     clonePlatformAgentUseCase,
     listAssignmentsUseCase,
+    testExtractionsUseCase,
+    listTestCallsUseCase,
   );
 
   return {
