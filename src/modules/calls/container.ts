@@ -14,14 +14,17 @@ import { InboundCallerMatchUseCase } from "./application/use-cases/inbound-calle
 import { InboundCallerMatchController } from "./presentation/inbound-caller-match.controller";
 import { SyncBolnaExecutionUseCase } from "./application/use-cases/sync-bolna-execution.use-case";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
-import type { ProcessCallWebhookUseCase } from "../webhooks/application/use-cases/process-call-webhook.use-case";
+import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
+import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
-  processCallWebhook: ProcessCallWebhookUseCase;
+  debitWalletForCall?: DebitWalletForCallUseCase;
+  classifierQueue?: Queue;
   logger: Logger;
 }
+
 export interface CallModule {
   adminController: AdminCallController;
   tenantController: TenantCallController;
@@ -47,7 +50,8 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
 
   const syncBolnaExecution = new SyncBolnaExecutionUseCase(
     deps.bolnaClientFactory,
-    deps.processCallWebhook,
+    deps.debitWalletForCall,
+    deps.classifierQueue,
     log,
   );
 
