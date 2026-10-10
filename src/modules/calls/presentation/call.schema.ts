@@ -61,6 +61,17 @@ export const availableFiltersQuerySchema = z.object({
   campaignId: z.string().uuid("Campaign ID is required"),
 });
 
+export const syncBolnaExecutionSchema = z
+  .object({
+    callId: z.string().uuid("Invalid call ID").optional(),
+    bolnaExecutionId: z.string().min(1, "Bolna Execution ID cannot be empty").optional(),
+    tenantId: z.string().uuid("Invalid tenant ID").optional(),
+  })
+  .refine((data) => Boolean(data.callId || data.bolnaExecutionId), {
+    message: "Either callId or bolnaExecutionId must be provided",
+    path: ["bolnaExecutionId"],
+  });
+
 export type AdminListCallsQuery = z.infer<typeof adminListCallsQuerySchema>;
 export type AdminGetCallStatsQuery = z.infer<
   typeof adminGetCallStatsQuerySchema
@@ -68,3 +79,4 @@ export type AdminGetCallStatsQuery = z.infer<
 export type ListCallsQuery = z.infer<typeof listCallsQuerySchema>;
 export type GetCallStatsQuery = z.infer<typeof getCallStatsQuerySchema>;
 export type AvailableFiltersQuery = z.infer<typeof availableFiltersQuerySchema>;
+export type SyncBolnaExecutionInput = z.infer<typeof syncBolnaExecutionSchema>;

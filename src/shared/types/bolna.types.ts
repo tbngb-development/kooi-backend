@@ -101,6 +101,7 @@ export interface BolnaExecution {
   error_message?: string | null;
   answered_by_voice_mail?: boolean;
   transcript?: string;
+  summary?: string | null;
   created_at: string;
   updated_at: string;
   telephony_data?: {
