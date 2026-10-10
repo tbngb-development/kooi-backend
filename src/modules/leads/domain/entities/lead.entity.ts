@@ -1,4 +1,4 @@
-import { type LeadStatus } from "@prisma/client";
+import { type LeadStatus, type LeadStopReason } from "@prisma/client";
 
 export interface LeadEntityData {
   id: string;
@@ -8,6 +8,7 @@ export interface LeadEntityData {
   company: string | null;
   status: LeadStatus;
   doNotCall: boolean;
+  stoppedReason?: LeadStopReason | null;
   tenantId: string;
   campaignId: string;
   batchId: string | null;

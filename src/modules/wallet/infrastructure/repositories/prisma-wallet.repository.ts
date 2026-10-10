@@ -176,19 +176,23 @@ export class PrismaWalletRepository implements WalletRepository {
         });
       }
 
-      // 4. Validate Funds
-      if (
-        !hasAvailableBalance(
-          {
-            cashBalance: currentCash,
-            bonusBalance: currentBonus,
-            bonusExpiresAt: null,
-          },
-          data.amount,
-          now,
-        )
-      ) {
-        throw new InsufficientBalanceError();
+      // 4. Validate Funds (allow overdraft for calls to prevent transaction loss)
+      const allowOverdraft =
+        data.allowOverdraft ?? data.sourceType === "CALL";
+      if (!allowOverdraft) {
+        if (
+          !hasAvailableBalance(
+            {
+              cashBalance: currentCash,
+              bonusBalance: currentBonus,
+              bonusExpiresAt: null,
+            },
+            data.amount,
+            now,
+          )
+        ) {
+          throw new InsufficientBalanceError();
+        }
       }
 
       // 5. Compute Deduction Split
