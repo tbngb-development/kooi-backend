@@ -106,3 +106,13 @@ export class CampaignNotDeletedError extends AppError {
     );
   }
 }
+
+export class CampaignNotDraftError extends AppError {
+  constructor(status: CampaignStatus) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Campaign can only be updated when in DRAFT status. Current status is '${status}'.`,
+      "CAMPAIGN_NOT_DRAFT",
+    );
+  }
+}

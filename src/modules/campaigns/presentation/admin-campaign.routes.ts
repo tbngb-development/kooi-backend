@@ -6,7 +6,10 @@ import type { AuthenticateMiddleware } from "../../../shared/middleware/authenti
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
 
 import { validate } from "../../../shared/middleware/validate";
-import { updateCampaignStatusSchema } from "./campaign.schema";
+import {
+  updateCampaignStatusSchema,
+  updateDraftCampaignSchema,
+} from "./campaign.schema";
 
 export function buildAdminCampaignRoutes(
   controller: AdminCampaignController,
@@ -21,6 +24,18 @@ export function buildAdminCampaignRoutes(
   router.get("/", controller.list);
   router.get("/:id", controller.get);
   router.get("/:id/stats", controller.stats);
+
+  // Administrative update of draft campaign details (naming, variables, retry, platform agent)
+  router.patch(
+    "/:id",
+    validate(updateDraftCampaignSchema),
+    controller.updateDraft,
+  );
+  router.put(
+    "/:id",
+    validate(updateDraftCampaignSchema),
+    controller.updateDraft,
+  );
 
   // Administrative status update
   router.patch(

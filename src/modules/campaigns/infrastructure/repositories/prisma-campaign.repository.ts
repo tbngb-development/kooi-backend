@@ -5,6 +5,7 @@ import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
   CampaignRepository,
   CreateCampaignData,
+  UpdateCampaignData,
   CampaignStatsResult,
   CampaignListItem,
   AssistantWithAgentData,
@@ -203,6 +204,18 @@ export class PrismaCampaignRepository implements CampaignRepository {
     return this.toEntityData(campaign);
   }
 
+  async findByIdGlobal(
+    campaignId: string,
+  ): Promise<CampaignEntityData | null> {
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+    });
+
+    if (!campaign) return null;
+
+    return this.toEntityData(campaign);
+  }
+
   async findByIdWithRelations(
     tenantId: string,
     campaignId: string,
@@ -265,6 +278,31 @@ export class PrismaCampaignRepository implements CampaignRepository {
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
         isDeleted: false,
+      },
+      include: { assistant: true },
+    });
+
+    return this.toEntityData(campaign);
+  }
+
+  async update(
+    tenantId: string,
+    campaignId: string,
+    data: UpdateCampaignData,
+  ): Promise<CampaignEntityData> {
+    const campaign = await prisma.campaign.update({
+      where: {
+        id: campaignId,
+        tenantId,
+      },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.assistantId !== undefined && { assistantId: data.assistantId }),
+        ...(data.variables !== undefined && { variables: data.variables }),
+        ...(data.defaultRetryConfig !== undefined && {
+          defaultRetryConfig: data.defaultRetryConfig as any,
+        }),
       },
       include: { assistant: true },
     });
@@ -656,6 +694,83 @@ export class PrismaCampaignRepository implements CampaignRepository {
         bolnaId: assistant.platformAgent.bolnaId,
         requiredVariables: assistant.platformAgent.requiredVariables as
           RequiredVariable[] | null,
+      },
+    };
+  }
+
+  async resolveAssistantForPlatformAgent(
+    tenantId: string,
+    platformAgentId: string,
+  ): Promise<AssistantWithAgentData | null> {
+    const existing = await prisma.assistant.findFirst({
+      where: {
+        tenantId,
+        platformAgentId,
+        isDeleted: false,
+      },
+      include: {
+        platformAgent: {
+          select: {
+            id: true,
+            bolnaId: true,
+            requiredVariables: true,
+          },
+        },
+      },
+    });
+
+    if (existing) {
+      return {
+        id: existing.id,
+        name: existing.name,
+        platformAgent: {
+          id: existing.platformAgent.id,
+          bolnaId: existing.platformAgent.bolnaId,
+          requiredVariables: existing.platformAgent.requiredVariables as
+            | RequiredVariable[]
+            | null,
+        },
+      };
+    }
+
+    const platformAgent = await prisma.platformAgent.findFirst({
+      where: {
+        id: platformAgentId,
+        isActive: true,
+      },
+    });
+
+    if (!platformAgent) {
+      return null;
+    }
+
+    const created = await prisma.assistant.create({
+      data: {
+        tenantId,
+        platformAgentId,
+        name: platformAgent.name,
+        config: platformAgent.defaultConfig as any,
+      },
+      include: {
+        platformAgent: {
+          select: {
+            id: true,
+            bolnaId: true,
+            requiredVariables: true,
+          },
+        },
+      },
+    });
+
+    return {
+      id: created.id,
+      name: created.name,
+      platformAgent: {
+        id: created.platformAgent.id,
+        bolnaId: created.platformAgent.bolnaId,
+        requiredVariables: created.platformAgent.requiredVariables as
+          | RequiredVariable[]
+          | null,
       },
     };
   }
