@@ -91,10 +91,8 @@ export class AdminClassifierController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      this.logger?.debug("list disposition api hit")
       const query = listClassifierDispositionsQuerySchema.parse(req.query);
       const result = await this.listDispositions.execute(query);
-      this.logger?.debug("list disposition result: ", result)
       sendSuccess(res, result);
     } catch (err) {
       next(err);
