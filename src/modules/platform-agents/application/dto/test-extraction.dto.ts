@@ -51,6 +51,7 @@ export interface TestCallCandidate {
   tenantName: string;
   duration: number | null;
   endedAt: string | null;
+  transcript: string;
   transcriptSnippet: string;
   transcriptLength: number;
   isFromThisAgent: boolean;

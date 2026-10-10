@@ -99,6 +99,7 @@ export class ListTestCallCandidatesUseCase {
           tenantName: c.tenant?.name ?? "Unknown Tenant",
           duration: c.duration,
           endedAt: c.endedAt ? c.endedAt.toISOString() : null,
+          transcript: transcriptText,
           transcriptSnippet: snippet,
           transcriptLength: transcriptText.length,
           isFromThisAgent,
