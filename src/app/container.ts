@@ -214,6 +214,18 @@ export function buildContainer(): AppContainer {
 
   const classifier = buildClassifierModule({ logger });
 
+  const webhooks = buildWebhookModule({
+    debitWalletForCall: wallet.useCases.debitWalletForCall,
+    classifierQueue: classifier.queue,
+    logger,
+  });
+
+  const calls = buildCallModule({
+    bolnaClientFactory,
+    processCallWebhook: webhooks.processCallWebhook,
+    logger,
+  });
+
   return {
     logger,
     auth,
@@ -226,14 +238,10 @@ export function buildContainer(): AppContainer {
       logger,
     }),
     leads: buildLeadModule(),
-    calls: buildCallModule({ logger }),
+    calls,
     dashboard: buildDashboardModule(),
     users: buildUserModule({ passwordService }),
-    webhooks: buildWebhookModule({
-      debitWalletForCall: wallet.useCases.debitWalletForCall,
-      classifierQueue: classifier.queue,
-      logger,
-    }),
+    webhooks,
 
     platformAgents,
     extractions: buildExtractionModule(),

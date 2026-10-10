@@ -321,11 +321,14 @@ export class ProcessCallWebhookUseCase {
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
 
-    await this.webhookRepo.incrementTerminalStats(
-      call.campaignId,
-      call.batchId,
-      "COMPLETED",
-    );
+    const isAlreadyCompleted = call.status === "COMPLETED";
+    if (!isAlreadyCompleted) {
+      await this.webhookRepo.incrementTerminalStats(
+        call.campaignId,
+        call.batchId,
+        "COMPLETED",
+      );
+    }
 
     if (this.debitWalletForCall && duration && duration > 0) {
       try {
@@ -462,11 +465,19 @@ export class ProcessCallWebhookUseCase {
     }
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
-    await this.webhookRepo.incrementTerminalStats(
-      call.campaignId,
-      call.batchId,
-      status,
-    );
+    const isAlreadyTerminal =
+      call.status === "COMPLETED" ||
+      call.status === "NO_ANSWER" ||
+      call.status === "BUSY" ||
+      call.status === "FAILED";
+
+    if (!isAlreadyTerminal) {
+      await this.webhookRepo.incrementTerminalStats(
+        call.campaignId,
+        call.batchId,
+        status,
+      );
+    }
 
     this.logger?.debug("Call terminal", {
       action: "webhook.call.terminal",

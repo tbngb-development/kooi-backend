@@ -31,6 +31,7 @@ export interface CreateBatchParams {
   webhookUrl?: string;
   fromPhoneNumbers?: string[];
 }
+
 export interface IBolnaClient {
   calls: {
     create(payload: BolnaCallPayload): Promise<BolnaCallResponse>;
@@ -53,6 +54,9 @@ export interface IBolnaClient {
     delete(
       bolnaBatchId: string,
     ): Promise<{ message: string; state: "deleted" }>;
+  };
+  executions: {
+    get(executionId: string): Promise<BolnaExecution>;
   };
   extractions: {
     listCategories(
@@ -297,6 +301,19 @@ export class BolnaClient implements IBolnaClient {
         message: string;
         state: "deleted";
       }>(`/batches/${bolnaBatchId}`);
+      return response.data;
+    },
+  };
+
+  executions = {
+    get: async (executionId: string): Promise<BolnaExecution> => {
+      this.logger?.debug("Fetching Bolna execution details", {
+        action: "bolna.executions.get",
+        executionId,
+      });
+      const response = await this.http.get<BolnaExecution>(
+        `/executions/${executionId}`,
+      );
       return response.data;
     },
   };

@@ -12,9 +12,14 @@ import { ArchiveCallUseCase } from "./application/use-cases/archive-call.use-cas
 import { RestoreCallUseCase } from "./application/use-cases/restore-call.use-case";
 import { InboundCallerMatchUseCase } from "./application/use-cases/inbound-caller-match.use-case";
 import { InboundCallerMatchController } from "./presentation/inbound-caller-match.controller";
+import { SyncBolnaExecutionUseCase } from "./application/use-cases/sync-bolna-execution.use-case";
+import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
+import type { ProcessCallWebhookUseCase } from "../webhooks/application/use-cases/process-call-webhook.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface CallModuleDeps {
+  bolnaClientFactory: IBolnaClientFactory;
+  processCallWebhook: ProcessCallWebhookUseCase;
   logger: Logger;
 }
 export interface CallModule {
@@ -40,6 +45,12 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     inboundCallerMatch,
   );
 
+  const syncBolnaExecution = new SyncBolnaExecutionUseCase(
+    deps.bolnaClientFactory,
+    deps.processCallWebhook,
+    log,
+  );
+
   return {
     tenantController: new TenantCallController(
       listCalls,
@@ -57,7 +68,9 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       getAvailableFilters,
       archiveCall,
       restoreCall,
+      syncBolnaExecution,
     ),
     inboundCallerController: inboundCallerMatchController,
   };
 }
+
