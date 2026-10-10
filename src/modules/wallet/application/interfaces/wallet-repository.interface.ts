@@ -34,6 +34,7 @@ export interface DebitWalletData {
   sourceId: string;
   idempotencyKey: string;
   createdBy?: string | null;
+  allowOverdraft?: boolean;
 }
 
 export interface ListTransactionsOptions {

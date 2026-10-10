@@ -17,12 +17,15 @@ import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
+import type { CheckBalanceForBatchUseCase } from "../../../wallet/application/use-cases/check-balance-for-batch.use-case";
+
 export class ResumeBatchUseCase {
   constructor(
     private readonly batchRepo: BatchRepository,
     private readonly campaignRepo: CampaignRepository,
     private readonly storage: FileStorageProvider,
     private readonly bolnaProvider: BolnaBatchProvider,
+    private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
   ) {}
 
@@ -48,6 +51,13 @@ export class ResumeBatchUseCase {
 
     const pendingLeads = await this.batchRepo.findPendingLeads(batchId);
     if (pendingLeads.length === 0) throw new BatchNoPendingLeadsError();
+
+    if (this.checkBalanceForBatch) {
+      await this.checkBalanceForBatch.execute({
+        tenantId,
+        leadCount: pendingLeads.length,
+      });
+    }
 
     const campaign = await this.campaignRepo.findByIdWithRelations(
       tenantId,

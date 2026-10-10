@@ -43,8 +43,7 @@ export class StopBatchesOnInsufficientBalanceUseCase {
     const runningBatches = await prisma.leadBatch.findMany({
       where: {
         tenantId: input.tenantId,
-        status: "RUNNING",
-        bolnaBatchId: { not: null },
+        status: { in: ["RUNNING", "SCHEDULED"] },
       },
     });
 
@@ -59,11 +58,19 @@ export class StopBatchesOnInsufficientBalanceUseCase {
     const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
 
     for (const batch of runningBatches) {
-      try {
-        if (batch.bolnaBatchId) {
+      if (batch.bolnaBatchId) {
+        try {
           await bolnaClient.batches.stop(batch.bolnaBatchId);
+        } catch (bolnaErr) {
+          this.logger.warn("Bolna batch stop failed or already stopped", {
+            error: bolnaErr,
+            batchId: batch.id,
+            bolnaBatchId: batch.bolnaBatchId,
+          });
         }
+      }
 
+      try {
         await prisma.$transaction(async (tx) => {
           // Update batch status
           await tx.leadBatch.update({
@@ -108,7 +115,7 @@ export class StopBatchesOnInsufficientBalanceUseCase {
           });
         });
       } catch (err) {
-        this.logger.error("Failed to stop batch on credit limit", err, {
+        this.logger.error("Failed to stop batch locally on credit limit", err, {
           action: "wallet.stop_batches.batch_failed",
           tenantId: input.tenantId,
           batchId: batch.id,

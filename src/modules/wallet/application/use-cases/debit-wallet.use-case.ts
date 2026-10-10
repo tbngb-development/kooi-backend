@@ -58,7 +58,7 @@ export class DebitWalletForCallUseCase {
 
     if (costPaisa <= 0) return null;
 
-    // 3. Perform Idempotent, Atomic Debit
+    // 3. Perform Idempotent, Atomic Debit (with overdraft allowed for calls)
     await this.walletRepo.debit({
       tenantId: input.tenantId,
       amount: costPaisa,
@@ -67,6 +67,7 @@ export class DebitWalletForCallUseCase {
       sourceId: input.callId,
       idempotencyKey: `call:${input.callId}:${input.bolnaCallId}`,
       createdBy: "SYSTEM",
+      allowOverdraft: true,
     });
 
     this.logger.info("Wallet debited for call", {
@@ -77,19 +78,21 @@ export class DebitWalletForCallUseCase {
       billableSeconds,
     });
 
-    // 4. Background Threshold & Batch Invariant Checks
+    // 4. Threshold & Batch Invariant Checks (halt batches immediately if limit breached)
     this.checkLowBalance.execute({ tenantId: input.tenantId }).catch((err) =>
       this.logger.error("Low balance check failed", err, {
         action: "wallet.low_balance_check",
         tenantId: input.tenantId,
       }),
     );
-    this.stopBatches.execute({ tenantId: input.tenantId }).catch((err) =>
+    try {
+      await this.stopBatches.execute({ tenantId: input.tenantId });
+    } catch (err) {
       this.logger.error("Stop batches check failed", err, {
         action: "wallet.stop_batches_check",
         tenantId: input.tenantId,
-      }),
-    );
+      });
+    }
 
     // 5. Return Full Historical Breakdown for Call Snapshot
     return {

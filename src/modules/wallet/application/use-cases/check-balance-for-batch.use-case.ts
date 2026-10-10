@@ -43,34 +43,55 @@ export class CheckBalanceForBatchUseCase {
 
     const estimatedCost = perCall.costPaisa * Math.max(input.leadCount, 0);
 
+    const creditLimitPaisa = plan.lowBalanceThreshold ?? 0;
+    const effectivePurchasingPower = availableBalance + creditLimitPaisa;
+
+    if (effectivePurchasingPower <= 0) {
+      this.logger.warn("Wallet credit limit reached for batch", {
+        action: "wallet.check_balance_batch",
+        tenantId: input.tenantId,
+        leadCount: input.leadCount,
+        balancePaisa: availableBalance,
+        creditLimitPaisa,
+      });
+      throw new InsufficientBalanceError(
+        `Wallet credit limit exceeded (balance: ₹${(availableBalance / 100).toFixed(2)}, credit limit: ₹${(creditLimitPaisa / 100).toFixed(2)}). Please recharge before launching or resuming batches.`,
+      );
+    }
+
+    const minRequiredPaisa = Math.floor(estimatedCost * 0.5);
+
     // Require at least 50% buffer to schedule the batch
-    if (availableBalance < Math.floor(estimatedCost * 0.5)) {
+    if (input.leadCount > 0 && effectivePurchasingPower < minRequiredPaisa) {
       this.logger.warn("Insufficient balance for batch", {
         action: "wallet.check_balance_batch",
         tenantId: input.tenantId,
         leadCount: input.leadCount,
         balancePaisa: availableBalance,
+        effectivePurchasingPower,
         estimatedCostPaisa: estimatedCost,
-        requiredMinimumPaisa: Math.floor(estimatedCost * 0.5),
+        requiredMinimumPaisa: minRequiredPaisa,
       });
       throw new InsufficientBalanceError(
-        `Insufficient balance. You need at least ₹${(Math.floor(estimatedCost * 0.5) / 100).toFixed(2)} to launch ${input.leadCount} leads.`,
+        `Insufficient balance. You need at least ₹${(minRequiredPaisa / 100).toFixed(2)} in available balance/credit to launch ${input.leadCount} leads.`,
       );
     }
 
-    if (availableBalance < estimatedCost) {
+    const warning = effectivePurchasingPower < estimatedCost;
+    if (warning) {
       this.logger.warn("Low balance warning for batch", {
         action: "wallet.check_balance_batch",
         tenantId: input.tenantId,
         leadCount: input.leadCount,
         balancePaisa: availableBalance,
+        effectivePurchasingPower,
         estimatedCostPaisa: estimatedCost,
       });
     }
 
     return {
       ok: true,
-      warning: availableBalance < estimatedCost,
+      warning,
       balance: availableBalance,
       estimatedCost,
     };

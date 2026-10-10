@@ -10,6 +10,15 @@ export interface CreateCampaignInput {
   defaultRetryConfig?: Record<string, unknown>;
 }
 
+export interface UpdateDraftCampaignInput {
+  name?: string;
+  description?: string | null;
+  platformAgentId?: string;
+  assistantId?: string;
+  variables?: Record<string, string>;
+  defaultRetryConfig?: Record<string, unknown> | null;
+}
+
 export interface ExtractVariablesInput {
   assistantId: string;
   filePath: string;

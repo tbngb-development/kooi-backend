@@ -19,6 +19,14 @@ export interface CreateCampaignData {
   defaultRetryConfig?: Record<string, unknown>;
 }
 
+export interface UpdateCampaignData {
+  name?: string;
+  description?: string | null;
+  assistantId?: string;
+  variables?: Record<string, string>;
+  defaultRetryConfig?: Record<string, unknown> | null;
+}
+
 export interface CampaignStatsResult {
   campaign: CampaignEntityData & {
     assistant: {
@@ -93,6 +101,8 @@ export interface CampaignRepository {
     campaignId: string,
   ): Promise<CampaignEntityData | null>;
 
+  findByIdGlobal(campaignId: string): Promise<CampaignEntityData | null>;
+
   findByIdWithRelations(
     tenantId: string,
     campaignId: string,
@@ -116,6 +126,12 @@ export interface CampaignRepository {
   create(
     tenantId: string,
     data: CreateCampaignData,
+  ): Promise<CampaignEntityData>;
+
+  update(
+    tenantId: string,
+    campaignId: string,
+    data: UpdateCampaignData,
   ): Promise<CampaignEntityData>;
 
   updateStatus(
@@ -144,6 +160,11 @@ export interface CampaignRepository {
   findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
+  ): Promise<AssistantWithAgentData | null>;
+
+  resolveAssistantForPlatformAgent(
+    tenantId: string,
+    platformAgentId: string,
   ): Promise<AssistantWithAgentData | null>;
 
   softDelete(
