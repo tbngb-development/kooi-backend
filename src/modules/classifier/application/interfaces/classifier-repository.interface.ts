@@ -58,7 +58,7 @@ export interface ClassifierRepository {
   createCallResult(data: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     dispositionCount: number;
     transcriptLength: number;
@@ -94,7 +94,7 @@ export interface ClassifierRepository {
   getCallTranscript(callId: string): Promise<{
     transcript: string | null;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     platformAgentId: string | null;
     industryPackId: string | null;

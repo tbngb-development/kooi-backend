@@ -88,7 +88,9 @@ export class StopBatchesOnInsufficientBalanceUseCase {
           });
 
           const callIds = activeCalls.map((c) => c.id);
-          const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+          const scheduledOrActiveLeadIds = activeCalls
+            .map((c) => c.leadId)
+            .filter((id): id is string => Boolean(id));
 
           if (callIds.length > 0) {
             await tx.call.updateMany({

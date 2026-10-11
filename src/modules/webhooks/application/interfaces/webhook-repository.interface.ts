@@ -4,6 +4,9 @@ import {
   type BatchStatus,
   type CampaignStatus,
   type LeadStopReason,
+  type InboundNumberStatus,
+  type CallSource,
+  type QuickDialStatus,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
@@ -11,9 +14,13 @@ export interface ResolvedCallContext {
   id: string;
   bolnaCallId: string | null;
   tenantId: string;
-  campaignId: string;
-  leadId: string;
+  campaignId: string | null;
+  leadId: string | null;
   batchId: string | null;
+  assistantId?: string | null;
+  inboundNumberId?: string | null;
+  quickDialJobId?: string | null;
+  source?: CallSource;
   status: CallStatus;
   duration: number | null;
   cost: number | null;
@@ -79,13 +86,39 @@ export interface WebhookRepository {
     phone: string,
     campaignId: string,
   ): Promise<{ id: string } | null>;
+  findLeadByPhoneAndTenant(
+    phone: string,
+    tenantId: string,
+  ): Promise<{ id: string } | null>;
+  createLead(data: {
+    tenantId: string;
+    phone: string;
+    name?: string | null;
+  }): Promise<{ id: string }>;
+
+  findInboundNumberByPhone(phone: string): Promise<{
+    id: string;
+    tenantId: string;
+    assistantId: string;
+    status: InboundNumberStatus;
+  } | null>;
+  findInboundNumberByAgentBolnaId(agentId: string): Promise<{
+    id: string;
+    tenantId: string;
+    assistantId: string;
+    status: InboundNumberStatus;
+  } | null>;
 
   createCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
-    leadId: string;
-    batchId: string | null;
+    campaignId?: string | null;
+    leadId?: string | null;
+    batchId?: string | null;
+    assistantId?: string | null;
+    inboundNumberId?: string | null;
+    quickDialJobId?: string | null;
+    source?: CallSource;
     status: CallStatus;
     startedAt: Date;
   }): Promise<ResolvedCallContext>;
@@ -110,6 +143,12 @@ export interface WebhookRepository {
       extracted_data?: Record<string, any> | null;
       endedAt?: Date;
     },
+  ): Promise<void>;
+
+  updateQuickDialJobStatus(
+    jobId: string,
+    status: QuickDialStatus,
+    error?: string | null,
   ): Promise<void>;
 
   updateLeadStatus(

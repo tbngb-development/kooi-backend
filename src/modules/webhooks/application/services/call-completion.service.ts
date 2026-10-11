@@ -80,11 +80,21 @@ export class CallCompletionService {
     });
 
     // 3. Mark lead as CALLED
-    await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
+    if (call.leadId) {
+      await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
+    }
+
+    // 3b. Mark QuickDialJob as COMPLETED if applicable
+    if (call.quickDialJobId) {
+      await this.webhookRepo.updateQuickDialJobStatus(
+        call.quickDialJobId,
+        "COMPLETED",
+      );
+    }
 
     // 4. Update terminal statistics counters
     const isAlreadyCompleted = call.status === "COMPLETED";
-    if (!isAlreadyCompleted) {
+    if (!isAlreadyCompleted && call.campaignId) {
       await this.webhookRepo.incrementTerminalStats(
         call.campaignId,
         call.batchId,
@@ -161,7 +171,7 @@ export class CallCompletionService {
       action: "webhook.call.completed",
       callId: call.id,
       tenantId: call.tenantId,
-      campaignId: call.campaignId,
+      campaignId: call.campaignId ?? undefined,
       batchId: call.batchId ? call.batchId : undefined,
       bolnaCallId: String(bolnaCallId),
       durationSec: duration,

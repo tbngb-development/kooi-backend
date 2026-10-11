@@ -1,4 +1,5 @@
 import { type CallEntityData } from "../../domain/entities/call.entity";
+import type { InboundNumberStatus, CallSource } from "@prisma/client";
 import type {
   AvailableFiltersResponse,
   DynamicFilterMap,
@@ -8,6 +9,7 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 export interface ListCallsFilters {
   campaignId?: string;
   leadId?: string;
+  source?: CallSource;
   status?: string;
   search?: string;
   dateFrom?: string;
@@ -33,6 +35,20 @@ export interface PaginatedCallsResult {
         id: string;
         name: string;
       } | null;
+      assistant?: {
+        id: string;
+        name: string;
+      } | null;
+      inboundNumber?: {
+        id: string;
+        phoneNumber: string;
+        provider: string;
+      } | null;
+      quickDialJob?: {
+        id: string;
+        recipientPhone: string;
+      } | null;
+
       extractionOverview: {
         dispositionSlug: string;
         objectiveValue: string;
@@ -132,6 +148,22 @@ export interface CallRepository {
 
   restore(callId: string): Promise<void>;
 
+  findInboundNumber(
+    agentId: string,
+    toNumber?: string,
+  ): Promise<InboundNumberContext | null>;
+
+  findTenantLeadByPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadContext | null>;
+
+  createInboundLead(data: {
+    tenantId: string;
+    phone: string;
+    name: string;
+  }): Promise<{ id: string }>;
+
   findInboundLeadContext(
     agentId: string,
     phone: string,
@@ -156,9 +188,40 @@ export interface CallRepository {
   createInboundCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
-    leadId: string;
+    assistantId?: string | null;
+    inboundNumberId?: string | null;
+    campaignId?: string | null;
+    leadId?: string | null;
     batchId?: string | null;
+    source?: CallSource;
   }): Promise<{ id: string }>;
-  
 }
+
+export interface InboundNumberContext {
+  id: string;
+  phoneNumber: string;
+  tenantId: string;
+  assistantId: string;
+  status: InboundNumberStatus;
+  assistant?: {
+    id: string;
+    name: string;
+    config: Record<string, unknown>;
+    platformAgent: {
+      id: string;
+      bolnaId: string;
+      welcomeMessage: string | null;
+      defaultConfig: unknown;
+    };
+  } | null;
+}
+
+export interface InboundLeadContext {
+  id: string;
+  name: string | null;
+  phone: string;
+  email: string | null;
+  company: string | null;
+  metadata: Record<string, unknown> | null;
+}
+

@@ -13,8 +13,10 @@ export class ListCallsUseCase {
     return this.callRepo.list(input.tenantId, {
       campaignId: input.campaignId,
       leadId: input.leadId,
+      source: input.source,
       status: input.status,
       search: input.search,
+
       dateFrom: input.dateFrom,
       dateTo: input.dateTo,
       sortBy: input.sortBy,

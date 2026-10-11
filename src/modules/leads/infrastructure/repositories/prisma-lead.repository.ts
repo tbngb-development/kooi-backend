@@ -15,6 +15,7 @@ export class PrismaLeadRepository implements LeadRepository {
   ): Promise<PaginatedLeadsResult> {
     const {
       campaignId,
+      source,
       status,
       dateFrom,
       dateTo,
@@ -33,7 +34,13 @@ export class PrismaLeadRepository implements LeadRepository {
     // Structured type-safe Prisma Filter Query Construction
     const where: Prisma.LeadWhereInput = {
       tenantId,
-      ...(campaignId && { campaignId }),
+      ...(campaignId
+        ? { campaignId }
+        : source === "CAMPAIGN"
+        ? { campaignId: { not: null } }
+        : source === "NON_CAMPAIGN"
+        ? { campaignId: null }
+        : {}),
     };
 
     if (status) {

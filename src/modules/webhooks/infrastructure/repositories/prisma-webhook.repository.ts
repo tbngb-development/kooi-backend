@@ -10,6 +10,8 @@ import type {
   LeadStatus,
   CampaignStatus,
   LeadStopReason,
+  CallSource,
+  QuickDialStatus,
 } from "@prisma/client";
 
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
@@ -21,6 +23,10 @@ const callSelectFields = {
   campaignId: true,
   leadId: true,
   batchId: true,
+  assistantId: true,
+  inboundNumberId: true,
+  quickDialJobId: true,
+  source: true,
   status: true,
   duration: true,
   cost: true,
@@ -47,9 +53,13 @@ export class PrismaWebhookRepository implements WebhookRepository {
     id: string;
     bolnaCallId: string | null;
     tenantId: string;
-    campaignId: string;
-    leadId: string;
+    campaignId: string | null;
+    leadId: string | null;
     batchId: string | null;
+    assistantId?: string | null;
+    inboundNumberId?: string | null;
+    quickDialJobId?: string | null;
+    source?: CallSource;
     status: CallStatus;
     duration: number | null;
     cost: number | null;
@@ -115,9 +125,100 @@ export class PrismaWebhookRepository implements WebhookRepository {
 
   async findLeadByPhoneAndCampaign(phone: string, campaignId: string) {
     return prisma.lead.findFirst({
-      where: { phone, campaignId },
+      where: { phone, campaignId, isDeleted: false },
       select: { id: true, phone: true },
     });
+  }
+
+  async findLeadByPhoneAndTenant(phone: string, tenantId: string) {
+    const digits = phone.replace(/\D/g, "");
+    const last10 = digits.slice(-10);
+    const candidatePhones = Array.from(
+      new Set([phone, `+91${last10}`, `91${last10}`, last10]),
+    ).filter(Boolean);
+
+    const lead = await prisma.lead.findFirst({
+      where: {
+        tenantId,
+        phone: { in: candidatePhones },
+        isDeleted: false,
+      },
+      select: { id: true },
+    });
+    return lead;
+  }
+
+  async createLead(data: {
+    tenantId: string;
+    phone: string;
+    name?: string | null;
+  }) {
+    return prisma.lead.create({
+      data: {
+        tenantId: data.tenantId,
+        phone: data.phone,
+        name: data.name ?? "Inbound Caller",
+        status: "CALLING",
+      },
+      select: { id: true },
+    });
+  }
+
+  async findInboundNumberByPhone(phone: string) {
+    const digits = phone.replace(/\D/g, "");
+    const last10 = digits.slice(-10);
+    const candidatePhones = Array.from(
+      new Set([phone, `+91${last10}`, `91${last10}`, last10]),
+    ).filter(Boolean);
+
+    const record = await prisma.inboundNumber.findFirst({
+      where: {
+        phoneNumber: { in: candidatePhones },
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        assistantId: true,
+        status: true,
+      },
+    });
+
+    if (!record || !record.tenantId || !record.assistantId) return null;
+    return {
+      id: record.id,
+      tenantId: record.tenantId,
+      assistantId: record.assistantId,
+      status: record.status,
+    };
+  }
+
+  async findInboundNumberByAgentBolnaId(agentId: string) {
+    const record = await prisma.inboundNumber.findFirst({
+      where: {
+        isDeleted: false,
+        assistant: {
+          isDeleted: false,
+          platformAgent: {
+            bolnaId: agentId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        assistantId: true,
+        status: true,
+      },
+    });
+
+    if (!record || !record.tenantId || !record.assistantId) return null;
+    return {
+      id: record.id,
+      tenantId: record.tenantId,
+      assistantId: record.assistantId,
+      status: record.status,
+    };
   }
 
   async findCallByLeadAndBatch(
@@ -135,20 +236,28 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async createCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
-    leadId: string;
-    batchId: string | null;
-    status: string;
+    campaignId?: string | null;
+    leadId?: string | null;
+    batchId?: string | null;
+    assistantId?: string | null;
+    inboundNumberId?: string | null;
+    quickDialJobId?: string | null;
+    source?: CallSource;
+    status: CallStatus;
     startedAt: Date;
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
       data: {
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
-        campaignId: data.campaignId,
-        leadId: data.leadId,
-        batchId: data.batchId,
-        status: data.status as CallStatus,
+        campaignId: data.campaignId ?? null,
+        leadId: data.leadId ?? null,
+        batchId: data.batchId ?? null,
+        assistantId: data.assistantId ?? null,
+        inboundNumberId: data.inboundNumberId ?? null,
+        quickDialJobId: data.quickDialJobId ?? null,
+        source: data.source ?? "CAMPAIGN",
+        status: data.status,
         startedAt: data.startedAt,
       },
       select: callSelectFields,
@@ -204,6 +313,20 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
+  async updateQuickDialJobStatus(
+    jobId: string,
+    status: QuickDialStatus,
+    error?: string | null,
+  ): Promise<void> {
+    await prisma.quickDialJob.updateMany({
+      where: { id: jobId },
+      data: {
+        status,
+        ...(error !== undefined && { error }),
+      },
+    });
+  }
+
   async updateLeadStatus(
     leadId: string,
     status: LeadStatus,
@@ -248,7 +371,9 @@ export class PrismaWebhookRepository implements WebhookRepository {
       });
 
       const callIds = activeCalls.map((c) => c.id);
-      const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+      const scheduledOrActiveLeadIds = activeCalls
+        .map((c) => c.leadId)
+        .filter((id): id is string => Boolean(id));
 
       // 2. Transition matching calls to STOPPED
       let stoppedCalls = 0;

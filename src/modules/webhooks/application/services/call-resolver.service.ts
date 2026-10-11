@@ -23,6 +23,59 @@ export class CallResolverService {
     const call = await this.webhookRepo.findCallByBolnaCallId(bolnaCallId);
     if (call) return call;
 
+    // ── Inbound Call Resolution Fallback ───────────────────────────
+    const dialedNumber = payload.telephony_data?.to_number;
+    const callerNumber =
+      payload.telephony_data?.from_number ??
+      payload.context_details?.recipient_phone_number;
+
+    let inboundNumber = dialedNumber
+      ? await this.webhookRepo.findInboundNumberByPhone(dialedNumber)
+      : null;
+
+    if (!inboundNumber && payload.agent_id) {
+      inboundNumber = await this.webhookRepo.findInboundNumberByAgentBolnaId(
+        payload.agent_id,
+      );
+    }
+
+    if (inboundNumber && inboundNumber.status === "ACTIVE" && callerNumber) {
+      let lead = await this.webhookRepo.findLeadByPhoneAndTenant(
+        callerNumber,
+        inboundNumber.tenantId,
+      );
+
+      if (!lead) {
+        lead = await this.webhookRepo.createLead({
+          tenantId: inboundNumber.tenantId,
+          phone: callerNumber,
+          name: "Inbound Caller",
+        });
+      }
+
+      const newInboundCall = await this.webhookRepo.createCall({
+        bolnaCallId,
+        tenantId: inboundNumber.tenantId,
+        assistantId: inboundNumber.assistantId,
+        inboundNumberId: inboundNumber.id,
+        leadId: lead.id,
+        source: "INBOUND",
+        status: "CALLING",
+        startedAt: new Date(),
+      });
+
+      this.logger?.info("Provisioned inbound call context from webhook", {
+        action: "webhook.inbound_call_resolved",
+        callId: newInboundCall.id,
+        bolnaCallId,
+        inboundNumberId: inboundNumber.id,
+        tenantId: inboundNumber.tenantId,
+      });
+
+      return newInboundCall;
+    }
+
+    // ── Outbound Batch Call Resolution ─────────────────────────────
     const bolnaBatchId = payload.batch_id;
     const phone =
       payload.telephony_data?.to_number ??

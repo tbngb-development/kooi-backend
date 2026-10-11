@@ -21,6 +21,8 @@ import type {
   BolnaCreateAgentResponse,
   BolnaDeleteAgentResponse,
   BolnaUserProfile,
+  BolnaPhoneNumber,
+  BolnaInboundSetupResponse,
 } from "../../../types/bolna.types";
 
 export interface CreateBatchParams {
@@ -80,6 +82,16 @@ export interface IBolnaClient {
       payload: Partial<BolnaDispositionCreatePayload>,
     ): Promise<BolnaDispositionCreateResponse>;
     deleteDisposition(dispositionId: string): Promise<void>;
+  };
+  phoneNumbers: {
+    list(): Promise<BolnaPhoneNumber[]>;
+    setupInbound(
+      phoneNumberId: string,
+      agentId: string,
+    ): Promise<BolnaInboundSetupResponse>;
+    unlinkInbound(
+      phoneNumberId: string,
+    ): Promise<{ success: boolean; message?: string }>;
   };
   user: {
     getProfile(): Promise<BolnaUserProfile>;
@@ -423,6 +435,51 @@ export class BolnaClient implements IBolnaClient {
       await this.http.delete(`/dispositions/${dispositionId}`);
     },
   };
+
+  phoneNumbers = {
+    list: async (): Promise<BolnaPhoneNumber[]> => {
+      this.logger?.debug("Listing all Bolna phone numbers", {
+        action: "bolna.phone_numbers.list",
+      });
+      const response = await this.http.get<BolnaPhoneNumber[]>("/phone-numbers");
+      const data = response.data as unknown;
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === "object" && "data" in data && Array.isArray((data as { data: unknown }).data)) {
+        return (data as { data: BolnaPhoneNumber[] }).data;
+      }
+      return [];
+    },
+
+    setupInbound: async (
+      phoneNumberId: string,
+      agentId: string,
+    ): Promise<BolnaInboundSetupResponse> => {
+      this.logger?.info("Setting up Bolna inbound number for agent", {
+        action: "bolna.phone_numbers.setup_inbound",
+        phoneNumberId,
+        agentId,
+      });
+      const response = await this.http.post<BolnaInboundSetupResponse>(
+        `/phone-numbers/${phoneNumberId}/inbound`,
+        { agent_id: agentId },
+      );
+      return response.data ?? { success: true };
+    },
+
+    unlinkInbound: async (
+      phoneNumberId: string,
+    ): Promise<{ success: boolean; message?: string }> => {
+      this.logger?.info("Unlinking Bolna inbound phone number", {
+        action: "bolna.phone_numbers.unlink_inbound",
+        phoneNumberId,
+      });
+      const response = await this.http.delete<{ success: boolean; message?: string }>(
+        `/phone-numbers/${phoneNumberId}/inbound`,
+      );
+      return response.data ?? { success: true };
+    },
+  };
+
   user = {
     getProfile: async (): Promise<BolnaUserProfile> => {
       this.logger?.debug("Fetching Bolna user profile", {

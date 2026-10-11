@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const listLeadsQuerySchema = z.object({
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
+  source: z.enum(["CAMPAIGN", "NON_CAMPAIGN", "ALL"]).optional(),
   status: z.string().optional(),
   search: z.string().optional(),
   dateFrom: z

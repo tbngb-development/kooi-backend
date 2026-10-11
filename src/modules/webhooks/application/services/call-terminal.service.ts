@@ -49,10 +49,20 @@ export class CallTerminalService {
       endedAt: new Date(),
     });
 
-    await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
+    if (call.leadId) {
+      await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
+    }
+
+    if (call.quickDialJobId) {
+      await this.webhookRepo.updateQuickDialJobStatus(
+        call.quickDialJobId,
+        "FAILED",
+        `Call terminated with status: ${status}`,
+      );
+    }
 
     const isAlreadyTerminal = isTerminalCallStatus(call.status);
-    if (!isAlreadyTerminal) {
+    if (!isAlreadyTerminal && call.campaignId) {
       await this.webhookRepo.incrementTerminalStats(
         call.campaignId,
         call.batchId,
@@ -83,7 +93,17 @@ export class CallTerminalService {
       endedAt: new Date(),
     });
 
-    await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
+    if (call.leadId) {
+      await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
+    }
+
+    if (call.quickDialJobId) {
+      await this.webhookRepo.updateQuickDialJobStatus(
+        call.quickDialJobId,
+        "CANCELLED",
+        "Call was cancelled or stopped",
+      );
+    }
 
     this.logger?.debug("Call canceled handled", {
       action: "webhook.call.canceled",

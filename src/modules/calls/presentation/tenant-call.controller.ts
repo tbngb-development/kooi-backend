@@ -35,8 +35,10 @@ export class TenantCallController {
         tenantId,
         campaignId: query.campaignId,
         leadId: query.leadId,
+        source: query.source as import("@prisma/client").CallSource | undefined,
         status: query.status,
         search: query.search,
+
         dateFrom: query.dateFrom,
         dateTo: query.dateTo,
         sortBy: query.sortBy,

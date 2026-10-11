@@ -209,7 +209,9 @@ export class PrismaBatchRepository implements BatchRepository {
       });
 
       const callIds = activeCalls.map((c) => c.id);
-      const scheduledOrActiveLeadIds = activeCalls.map((c) => c.leadId);
+      const scheduledOrActiveLeadIds = activeCalls
+        .map((c) => c.leadId)
+        .filter((id): id is string => Boolean(id));
 
       // 2. Transition matching calls to STOPPED
       let stoppedCalls = 0;

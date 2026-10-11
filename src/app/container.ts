@@ -75,6 +75,20 @@ import {
   buildClassifierModule,
   type ClassifierModule,
 } from "../modules/classifier/container";
+import {
+  createInboundNumbersModule,
+  type InboundNumbersModule,
+} from "../modules/inbound-numbers/container";
+import {
+  createQuickDialModule,
+  type QuickDialModule,
+} from "../modules/quick-dial/container";
+import {
+  createCallCenterModule,
+  type CallCenterModule,
+} from "../modules/call-center/container";
+import { BolnaCallProviderImpl } from "../modules/calls/infrastructure/repositories/bolna-call.provider";
+
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
@@ -109,8 +123,12 @@ export interface AppContainer {
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
   classifier: ClassifierModule;
+  inboundNumbers: InboundNumbersModule;
+  quickDial: QuickDialModule;
+  callCenter: CallCenterModule;
 
   // Backwards compatibility references
+
   assistantModule: AssistantModule;
   platformAgentModule: PlatformAgentModule;
   bolnaApiKeyModule: BolnaApiKeyModule;
@@ -229,6 +247,28 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
+  const authenticate = new AuthenticateMiddleware(tokenService, authRepository);
+  const authorize = new AuthorizeMiddleware();
+
+  const inboundNumbers = createInboundNumbersModule({
+    bolnaClientFactory,
+    walletRepo: wallet.repository,
+    authenticate,
+    authorize,
+    logger,
+  });
+
+  const bolnaCallProvider = new BolnaCallProviderImpl(bolnaClientFactory);
+  const quickDial = createQuickDialModule({
+    bolnaCallProvider,
+    authenticate,
+    logger,
+  });
+
+  const callCenter = createCallCenterModule({
+    authenticate,
+  });
+
   return {
     logger,
     auth,
@@ -256,14 +296,18 @@ export function buildContainer(): AppContainer {
     payments,
     invites,
     classifier,
+    inboundNumbers,
+    quickDial,
+    callCenter,
+
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
     platformAgentModule: platformAgents,
     bolnaApiKeyModule: bolnaApiKeys,
 
-    authenticate: new AuthenticateMiddleware(tokenService, authRepository),
-    authorize: new AuthorizeMiddleware(),
+    authenticate,
+    authorize,
     enforcePlan,
     bolnaClientFactory,
   };

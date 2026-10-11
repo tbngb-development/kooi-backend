@@ -10,6 +10,7 @@ export class ListLeadsUseCase {
   async execute(input: ListLeadsInput): Promise<PaginatedLeadsResult> {
     return this.leadRepo.list(input.tenantId, {
       campaignId: input.campaignId,
+      source: input.source,
       status: input.status,
       search: input.search,
       dateFrom: input.dateFrom,

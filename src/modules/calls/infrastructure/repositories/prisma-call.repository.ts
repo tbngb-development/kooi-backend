@@ -1,7 +1,7 @@
 // modules/calls/infrastructure/repositories/prisma-call.repository.ts
 
 import prisma from "../../../../shared/config/database/prisma";
-import { type Prisma, type CallStatus } from "@prisma/client";
+import { type Prisma, type CallStatus, type CallSource } from "@prisma/client";
 import type {
   CallRepository,
   ListCallsFilters,
@@ -10,6 +10,8 @@ import type {
   CallTranscriptResult,
   CallStatsFilters,
   CallStatsResult,
+  InboundNumberContext,
+  InboundLeadContext,
 } from "../../application/interfaces/call-repository.interface";
 import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
@@ -43,6 +45,7 @@ export class PrismaCallRepository implements CallRepository {
 
     if (campaignId) where.campaignId = campaignId;
     if (leadId) where.leadId = leadId;
+    if (filters.source) where.source = filters.source;
 
     if (status) {
       const statuses = status
@@ -60,12 +63,12 @@ export class PrismaCallRepository implements CallRepository {
     }
 
     if (search) {
-      where.lead = {
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search } },
-        ],
-      };
+      where.OR = [
+        { lead: { name: { contains: search, mode: "insensitive" } } },
+        { lead: { phone: { contains: search } } },
+        { quickDialJob: { recipientPhone: { contains: search } } },
+        { inboundNumber: { phoneNumber: { contains: search } } },
+      ];
     }
 
     const dynamicAndConditions: Prisma.CallWhereInput[] = [];
@@ -105,6 +108,11 @@ export class PrismaCallRepository implements CallRepository {
         include: {
           lead: { select: { id: true, name: true, phone: true } },
           campaign: { select: { id: true, name: true } },
+          assistant: { select: { id: true, name: true } },
+          inboundNumber: {
+            select: { id: true, phoneNumber: true, provider: true },
+          },
+          quickDialJob: { select: { id: true, recipientPhone: true } },
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -146,6 +154,10 @@ export class PrismaCallRepository implements CallRepository {
         campaignId: c.campaignId,
         leadId: c.leadId,
         batchId: c.batchId,
+        assistantId: c.assistantId,
+        inboundNumberId: c.inboundNumberId,
+        quickDialJobId: c.quickDialJobId,
+        source: c.source,
         status: c.status as CallStatus,
         duration: c.duration,
         cost: c.cost,
@@ -165,9 +177,13 @@ export class PrismaCallRepository implements CallRepository {
         deletedAt: c.deletedAt,
         lead: c.lead,
         campaign: c.campaign,
+        assistant: c.assistant,
+        inboundNumber: c.inboundNumber,
+        quickDialJob: c.quickDialJob,
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
+
       pagination: {
         total,
         page: pageNum,
@@ -543,20 +559,150 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
+  async findInboundNumber(
+    agentId: string,
+    toNumber?: string,
+  ): Promise<InboundNumberContext | null> {
+    const inboundNumberSelect = {
+      id: true,
+      phoneNumber: true,
+      tenantId: true,
+      assistantId: true,
+      status: true,
+      assistant: {
+        select: {
+          id: true,
+          name: true,
+          config: true,
+          platformAgent: {
+            select: {
+              id: true,
+              bolnaId: true,
+              welcomeMessage: true,
+              defaultConfig: true,
+            },
+          },
+        },
+      },
+    };
+
+    if (toNumber) {
+      const digits = toNumber.replace(/\D/g, "");
+      const last10 = digits.slice(-10);
+      const candidatePhones = Array.from(
+        new Set([toNumber, `+91${last10}`, `91${last10}`, last10]),
+      ).filter(Boolean);
+
+      const foundByPhone = await prisma.inboundNumber.findFirst({
+        where: {
+          phoneNumber: { in: candidatePhones },
+          isDeleted: false,
+        },
+        select: inboundNumberSelect,
+      });
+
+      if (foundByPhone && foundByPhone.tenantId && foundByPhone.assistantId) {
+        return foundByPhone as unknown as InboundNumberContext;
+      }
+    }
+
+    if (agentId) {
+      const foundByAgent = await prisma.inboundNumber.findFirst({
+        where: {
+          isDeleted: false,
+          assistant: {
+            isDeleted: false,
+            platformAgent: {
+              bolnaId: agentId,
+            },
+          },
+        },
+        select: inboundNumberSelect,
+      });
+
+      if (foundByAgent && foundByAgent.tenantId && foundByAgent.assistantId) {
+        return foundByAgent as unknown as InboundNumberContext;
+      }
+    }
+
+    return null;
+  }
+
+  async findTenantLeadByPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadContext | null> {
+    const digits = phone.replace(/\D/g, "");
+    const last10 = digits.slice(-10);
+    const candidatePhones = Array.from(
+      new Set([phone, `+91${last10}`, `91${last10}`, last10]),
+    ).filter(Boolean);
+
+    const lead = await prisma.lead.findFirst({
+      where: {
+        tenantId,
+        phone: { in: candidatePhones },
+        isDeleted: false,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        metadata: true,
+      },
+    });
+
+    if (!lead) return null;
+
+    return {
+      id: lead.id,
+      name: lead.name,
+      phone: lead.phone,
+      email: lead.email,
+      company: lead.company,
+      metadata: lead.metadata as Record<string, unknown> | null,
+    };
+  }
+
+  async createInboundLead(data: {
+    tenantId: string;
+    phone: string;
+    name: string;
+  }): Promise<{ id: string }> {
+    return prisma.lead.create({
+      data: {
+        tenantId: data.tenantId,
+        phone: data.phone,
+        name: data.name,
+        status: "CALLING",
+      },
+      select: { id: true },
+    });
+  }
+
   async createInboundCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
-    leadId: string;
+    assistantId?: string | null;
+    inboundNumberId?: string | null;
+    campaignId?: string | null;
+    leadId?: string | null;
     batchId?: string | null;
+    source?: CallSource;
   }) {
     return prisma.call.create({
       data: {
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
-        campaignId: data.campaignId,
-        leadId: data.leadId,
+        assistantId: data.assistantId ?? null,
+        inboundNumberId: data.inboundNumberId ?? null,
+        campaignId: data.campaignId ?? null,
+        leadId: data.leadId ?? null,
         batchId: data.batchId ?? null,
+        source: data.source ?? "INBOUND",
         status: "CALLING",
         startedAt: new Date(),
       },

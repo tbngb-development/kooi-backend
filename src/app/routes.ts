@@ -62,6 +62,7 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/assistants",
     buildTenantAssistantRoutes(c.assistants.tenantController, c.authenticate),
   );
+  router.use("/v1/inbound-numbers", c.inboundNumbers.tenantRouter);
   router.use(
     "/v1/campaigns",
     buildTenantCampaignRoutes(
@@ -136,7 +137,12 @@ export function buildRoutes(c: AppContainer): Router {
     ),
   );
 
+  router.use("/v1/inbound-numbers", c.inboundNumbers.tenantRouter);
+  router.use("/v1/quick-dial", c.quickDial.router);
+  router.use("/v1/call-center", c.callCenter.router);
+
   // ── Admin API v1  ──────────────────────
+
   router.use(
     "/v1/admin/auth",
     buildAdminAuthRoutes(c.auth.adminController, c.authenticate),
@@ -246,6 +252,7 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+  router.use("/v1/admin/inbound-numbers", c.inboundNumbers.adminRouter);
 
   router.use(
     "/v1/admin/wallet",

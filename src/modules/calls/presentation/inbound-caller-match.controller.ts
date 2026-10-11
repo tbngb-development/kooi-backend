@@ -15,11 +15,17 @@ export class InboundCallerMatchController {
       const contactNumber = (req.query.contact_number as string) ?? "";
       const agentId = (req.query.agent_id as string) ?? "";
       const executionId = (req.query.execution_id as string) ?? "";
+      const toNumber =
+        (req.query.to_number as string) ??
+        (req.query.inbound_number as string) ??
+        (req.query.recipient_phone_number as string) ??
+        undefined;
 
       const data = await this.inboundCallerMatchUseCase.execute({
         contactNumber,
         agentId,
         executionId,
+        toNumber,
       });
 
       // Bolna expects a flat JSON object — send directly, not wrapped

@@ -107,8 +107,8 @@ export class SyncBolnaExecutionUseCase {
       id: string;
       bolnaCallId: string | null;
       tenantId: string;
-      campaignId: string;
-      leadId: string;
+      campaignId: string | null;
+      leadId: string | null;
       batchId: string | null;
       status: CallStatus;
       callHistory: unknown;
@@ -442,11 +442,13 @@ export class SyncBolnaExecutionUseCase {
     }
 
     // 11. Update Lead Status
-    const leadStatus = mapCallStatusToLeadStatus(verifiedCallStatus, duration);
-    await prisma.lead.update({
-      where: { id: callRecord.leadId },
-      data: { status: leadStatus },
-    });
+    if (callRecord.leadId) {
+      const leadStatus = mapCallStatusToLeadStatus(verifiedCallStatus, duration);
+      await prisma.lead.update({
+        where: { id: callRecord.leadId },
+        data: { status: leadStatus },
+      });
+    }
 
     // 12. Increment campaign and batch statistics (if previously not marked terminal)
     const isPriorTerminal = [
@@ -468,10 +470,12 @@ export class SyncBolnaExecutionUseCase {
         }),
       };
 
-      await prisma.campaign.updateMany({
-        where: { id: callRecord.campaignId },
-        data: updateData,
-      });
+      if (callRecord.campaignId) {
+        await prisma.campaign.updateMany({
+          where: { id: callRecord.campaignId },
+          data: updateData,
+        });
+      }
 
       if (callRecord.batchId) {
         await prisma.leadBatch.updateMany({

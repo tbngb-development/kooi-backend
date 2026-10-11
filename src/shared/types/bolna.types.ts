@@ -433,3 +433,30 @@ export interface AvailableFiltersResponse {
 
 /** Key: disposition name, Value: actualValue to match */
 export type DynamicFilterMap = Record<string, string>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLNA PHONE NUMBERS & INBOUND
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BolnaPhoneNumber {
+  id: string;
+  phone_number: string;
+  agent_id?: string | null;
+  status?: string;
+  provider?: string;
+  purchased_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface BolnaLinkAgentPayload {
+  agent_id: string;
+}
+
+export interface BolnaInboundSetupResponse {
+  success: boolean;
+  message?: string;
+  phone_number_id?: string;
+  agent_id?: string;
+}

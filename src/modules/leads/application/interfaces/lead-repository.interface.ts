@@ -3,6 +3,7 @@ import { type LeadEntityData } from "../../domain/entities/lead.entity";
 
 export interface ListLeadsFilters {
   campaignId?: string;
+  source?: "CAMPAIGN" | "NON_CAMPAIGN" | "ALL";
   status?: string;
   dateFrom?: string;
   dateTo?: string;

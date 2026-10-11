@@ -88,7 +88,7 @@ export class ListTestCallCandidatesUseCase {
             : transcriptText;
 
         const isFromThisAgent =
-          agentCampaignIds.includes(c.campaignId) ||
+          (c.campaignId !== null && agentCampaignIds.includes(c.campaignId)) ||
           c.campaign?.assistant?.platformAgentId === params.platformAgentId;
 
         return {

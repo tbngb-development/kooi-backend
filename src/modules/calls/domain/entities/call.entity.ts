@@ -1,14 +1,18 @@
 // modules/calls/domain/entities/call.entity.ts
 
-import { type CallStatus } from "@prisma/client";
+import { type CallStatus, type CallSource } from "@prisma/client";
 
 export interface CallEntityData {
   id: string;
   bolnaCallId: string | null;
   tenantId: string;
-  campaignId: string;
-  leadId: string;
+  campaignId: string | null;
+  leadId: string | null;
   batchId: string | null;
+  assistantId?: string | null;
+  inboundNumberId?: string | null;
+  quickDialJobId?: string | null;
+  source?: CallSource;
   status: CallStatus;
   duration: number | null;
   cost: number | null;
@@ -40,11 +44,23 @@ export class CallEntity {
   get tenantId(): string {
     return this.data.tenantId;
   }
-  get campaignId(): string {
+  get campaignId(): string | null {
     return this.data.campaignId;
   }
-  get leadId(): string {
+  get leadId(): string | null {
     return this.data.leadId;
+  }
+  get source(): CallSource {
+    return this.data.source ?? "CAMPAIGN";
+  }
+  get assistantId(): string | null | undefined {
+    return this.data.assistantId;
+  }
+  get inboundNumberId(): string | null | undefined {
+    return this.data.inboundNumberId;
+  }
+  get quickDialJobId(): string | null | undefined {
+    return this.data.quickDialJobId;
   }
   get status(): CallStatus {
     return this.data.status;

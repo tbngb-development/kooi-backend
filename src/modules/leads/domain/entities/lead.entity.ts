@@ -10,7 +10,7 @@ export interface LeadEntityData {
   doNotCall: boolean;
   stoppedReason?: LeadStopReason | null;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
   batchId: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
@@ -40,7 +40,7 @@ export class LeadEntity {
   get tenantId(): string {
     return this.data.tenantId;
   }
-  get campaignId(): string {
+  get campaignId(): string | null {
     return this.data.campaignId;
   }
 

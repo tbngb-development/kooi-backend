@@ -16,6 +16,10 @@ export class CallLifecycleService {
   async checkBatchAndCampaignCompletion(
     call: ResolvedCallContext,
   ): Promise<void> {
+    if (!call.campaignId) {
+      return;
+    }
+
     if (call.batchId) {
       const activeLeads = await this.webhookRepo.countActiveLeadsInBatch(
         call.batchId,

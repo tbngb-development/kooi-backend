@@ -51,7 +51,7 @@ export class ProcessCallWebhookUseCase {
 
           const lastRetry =
             payload.retry_history?.[payload.retry_history.length - 1];
-          if (lastRetry?.status) {
+          if (lastRetry?.status && resolved.leadId) {
             const leadStatus = mapLastRetryToLeadStatus(lastRetry.status);
             await this.webhookRepo.updateLeadStatus(resolved.leadId, leadStatus);
           }
@@ -101,11 +101,13 @@ export class ProcessCallWebhookUseCase {
           }
         }
 
-        await this.webhookRepo.updateCampaignStatus(
-          resolved.campaignId,
-          "RUNNING",
-          new Date(),
-        );
+        if (resolved.campaignId) {
+          await this.webhookRepo.updateCampaignStatus(
+            resolved.campaignId,
+            "RUNNING",
+            new Date(),
+          );
+        }
 
         if (this.stopBatchesOnInsufficientBalance) {
           this.stopBatchesOnInsufficientBalance
