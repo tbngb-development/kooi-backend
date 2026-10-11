@@ -72,8 +72,6 @@ export interface BatchRepository {
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
 
-  decrementTotalLeads(batchId: string, count: number): Promise<void>;
-
   reassignCampaignLeadsToBatch(
     campaignId: string,
     batchId: string,
@@ -112,8 +110,6 @@ export interface BatchRepository {
   updateProcessingError(batchId: string, error: string): Promise<void>;
 
   updateRawFileUrl(batchId: string, url: string): Promise<void>;
-
-  updateTotalLeads(batchId: string, count: number): Promise<void>;
 
   cascadeStatusFromCampaign(
     campaignId: string,

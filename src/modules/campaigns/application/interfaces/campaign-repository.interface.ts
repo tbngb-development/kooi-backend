@@ -140,8 +140,6 @@ export interface CampaignRepository {
     extra?: { startedAt?: Date; completedAt?: Date },
   ): Promise<CampaignEntityData>;
 
-  incrementTotalLeads(campaignId: string, count: number): Promise<void>;
-
   getStats(tenantId: string, campaignId: string): Promise<CampaignStatsResult>;
 
   getExtractionOverview(

@@ -51,15 +51,6 @@ export class CallTerminalService {
 
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
 
-    const isAlreadyTerminal = isTerminalCallStatus(call.status);
-    if (!isAlreadyTerminal) {
-      await this.webhookRepo.incrementTerminalStats(
-        call.campaignId,
-        call.batchId,
-        status,
-      );
-    }
-
     this.logger?.debug("Call terminal handled", {
       action: "webhook.call.terminal",
       callId: call.id,

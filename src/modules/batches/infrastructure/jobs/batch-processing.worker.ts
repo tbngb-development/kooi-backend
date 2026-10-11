@@ -219,7 +219,6 @@ export class BatchProcessingWorker {
         return;
       }
 
-      await this.batchRepo.updateTotalLeads(batchId, totalAvailable);
       await this.batchRepo.updateProgress(batchId, "STORING", 60);
 
       // ── STAGE 3: BOLNA SYNC ─────────────────────────────────────
