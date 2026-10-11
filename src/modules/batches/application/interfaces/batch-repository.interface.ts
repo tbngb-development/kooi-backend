@@ -1,6 +1,7 @@
 import type { BatchStatus, LeadStopReason } from "@prisma/client";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import type {
+  BatchDetailDTO,
   BatchStatsResult,
   CreateBatchData,
   CreateLeadData,
@@ -38,6 +39,12 @@ export interface BatchRepository {
     campaignId: string,
     batchId: string,
   ): Promise<BatchListItem | null>;
+
+  findByIdWithDetail(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<BatchDetailDTO | null>;
 
   create(data: CreateBatchData): Promise<LeadBatchEntityData>;
 

@@ -3,6 +3,7 @@
 import prisma from "../../../../shared/config/database/prisma";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import type {
+  BatchDetailDTO,
   BatchStatsResult,
   CreateBatchData,
   CreateLeadData,
@@ -71,6 +72,95 @@ export class PrismaBatchRepository implements BatchRepository {
 
     if (!batch) return null;
     return batch as unknown as BatchListItem;
+  }
+
+  async findByIdWithDetail(
+    tenantId: string,
+    campaignId: string,
+    batchId: string,
+  ): Promise<BatchDetailDTO | null> {
+    const batch = await prisma.leadBatch.findFirst({
+      where: { id: batchId, campaignId, tenantId, isDeleted: false },
+      include: {
+        campaign: { select: { id: true, name: true } },
+        _count: { select: { leads: true, calls: true } },
+      },
+    });
+
+    if (!batch) return null;
+
+    // Parallel aggregations for status breakdowns, costs, and durations
+    const [leadStats, callStats, callAgg, completedDurationAgg] = await Promise.all([
+      prisma.lead.groupBy({
+        by: ["status"],
+        where: { batchId, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.groupBy({
+        by: ["status"],
+        where: { batchId, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.aggregate({
+        where: { batchId, isDeleted: false },
+        _sum: { chargedAmount: true, duration: true },
+        _count: true,
+      }),
+      prisma.call.aggregate({
+        where: {
+          batchId,
+          status: "COMPLETED",
+          duration: { not: null },
+          isDeleted: false,
+        },
+        _avg: { duration: true },
+      }),
+    ]);
+
+    const leadCountsByStatus: Record<string, number> = {};
+    for (const stat of leadStats) {
+      leadCountsByStatus[stat.status] = stat._count;
+    }
+
+    const callCountsByStatus: Record<string, number> = {};
+    for (const stat of callStats) {
+      callCountsByStatus[stat.status] = stat._count;
+    }
+
+    const totalCalls = callAgg._count ?? 0;
+    const totalCostPaisa = callAgg._sum.chargedAmount ?? 0;
+    const avgCostPaisa = totalCalls > 0 ? Math.round(totalCostPaisa / totalCalls) : 0;
+    const totalDurationSec = callAgg._sum.duration ?? 0;
+    const avgDurationSec = Math.round(completedDurationAgg._avg.duration ?? 0);
+
+    let executionDurationSec: number | null = null;
+    if (batch.startedAt && batch.completedAt) {
+      executionDurationSec = Math.max(
+        0,
+        Math.floor((batch.completedAt.getTime() - batch.startedAt.getTime()) / 1000),
+      );
+    } else if (batch.startedAt && batch.status === "RUNNING") {
+      executionDurationSec = Math.max(
+        0,
+        Math.floor((Date.now() - batch.startedAt.getTime()) / 1000),
+      );
+    }
+
+    return {
+      ...this.toEntityData(batch),
+      campaign: batch.campaign,
+      leadCountsByStatus,
+      callCountsByStatus,
+      metrics: {
+        totalCalls,
+        totalCostPaisa,
+        avgCostPaisa,
+        totalDurationSec,
+        avgDurationSec,
+        executionDurationSec,
+      },
+      _count: batch._count,
+    };
   }
 
   async create(data: CreateBatchData): Promise<LeadBatchEntityData> {
@@ -547,6 +637,12 @@ export class PrismaBatchRepository implements BatchRepository {
     termsAccepted: boolean;
     termsAcceptedAt: Date | null;
     termsVersion: string | null;
+    startedAt?: Date | null;
+    completedAt?: Date | null;
+    processingStage?: string | null;
+    processingProgress?: number;
+    processingError?: string | null;
+    rawFileUrl?: string | null;
     createdAt: Date;
     updatedAt: Date;
     isDeleted: boolean;
@@ -571,6 +667,12 @@ export class PrismaBatchRepository implements BatchRepository {
       termsAccepted: batch.termsAccepted,
       termsAcceptedAt: batch.termsAcceptedAt,
       termsVersion: batch.termsVersion,
+      startedAt: batch.startedAt,
+      completedAt: batch.completedAt,
+      processingStage: batch.processingStage,
+      processingProgress: batch.processingProgress,
+      processingError: batch.processingError,
+      rawFileUrl: batch.rawFileUrl,
       createdAt: batch.createdAt,
       updatedAt: batch.updatedAt,
       isDeleted: batch.isDeleted,

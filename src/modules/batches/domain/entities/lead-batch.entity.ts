@@ -28,6 +28,12 @@ export interface LeadBatchEntityData {
   termsAccepted: boolean;
   termsAcceptedAt: Date | null;
   termsVersion: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  processingStage?: string | null;
+  processingProgress?: number;
+  processingError?: string | null;
+  rawFileUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
