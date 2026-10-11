@@ -72,12 +72,18 @@ function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
     case "in-progress":
     case "ringing":
       return "CALLING";
+    case "scheduled":
+    case "re-scheduled":
+      return "SCHEDULED";
     default:
       return "COMPLETED";
   }
 }
 
-function mapCallStatusToLeadStatus(status: CallStatus, durationSec: number): LeadStatus {
+function mapCallStatusToLeadStatus(
+  status: CallStatus,
+  durationSec: number,
+): LeadStatus {
   if (status === "COMPLETED" || durationSec > 0) return "CALLED";
   if (status === "BUSY") return "BUSY";
   if (status === "NO_ANSWER") return "NO_ANSWER";
@@ -94,7 +100,9 @@ export class SyncBolnaExecutionUseCase {
     private readonly logger?: Logger,
   ) {}
 
-  async execute(input: SyncBolnaExecutionInput): Promise<SyncBolnaExecutionOutput> {
+  async execute(
+    input: SyncBolnaExecutionInput,
+  ): Promise<SyncBolnaExecutionOutput> {
     let callRecord: {
       id: string;
       bolnaCallId: string | null;
@@ -113,10 +121,7 @@ export class SyncBolnaExecutionUseCase {
     if (input.callId) {
       callRecord = await prisma.call.findFirst({
         where: {
-          OR: [
-            { id: input.callId },
-            { bolnaCallId: input.callId },
-          ],
+          OR: [{ id: input.callId }, { bolnaCallId: input.callId }],
         },
         select: {
           id: true,
@@ -131,7 +136,8 @@ export class SyncBolnaExecutionUseCase {
       });
 
       if (callRecord) {
-        resolvedBolnaId = resolvedBolnaId ?? callRecord.bolnaCallId ?? undefined;
+        resolvedBolnaId =
+          resolvedBolnaId ?? callRecord.bolnaCallId ?? undefined;
         resolvedTenantId = resolvedTenantId ?? callRecord.tenantId;
       }
     }
@@ -173,7 +179,9 @@ export class SyncBolnaExecutionUseCase {
     });
 
     // 3. Resolve Bolna client (tenant-specific key with platform default fallback)
-    const bolnaClient = await this.bolnaClientFactory.forTenant(resolvedTenantId ?? "");
+    const bolnaClient = await this.bolnaClientFactory.forTenant(
+      resolvedTenantId ?? "",
+    );
 
     // 4. Fetch execution details directly from Bolna
     const execution = await bolnaClient.executions.get(resolvedBolnaId);
@@ -244,7 +252,9 @@ export class SyncBolnaExecutionUseCase {
     }
 
     // 6. Map verified execution status (ground truth — never set to SCHEDULED!)
-    const verifiedCallStatus: CallStatus = mapBolnaStatusToCallStatus(execution.status);
+    const verifiedCallStatus: CallStatus = mapBolnaStatusToCallStatus(
+      execution.status,
+    );
 
     // 7. Extract & normalize call metrics
     const rawDuration =
@@ -262,8 +272,15 @@ export class SyncBolnaExecutionUseCase {
     const cost = execution.total_cost ?? null;
 
     // Parse transcript messages
-    let transcriptMessages: Array<{ role: string; message: string; time: string | null }> | null = null;
-    if (Array.isArray((execution as any).messages) && (execution as any).messages.length > 0) {
+    let transcriptMessages: Array<{
+      role: string;
+      message: string;
+      time: string | null;
+    }> | null = null;
+    if (
+      Array.isArray((execution as any).messages) &&
+      (execution as any).messages.length > 0
+    ) {
       transcriptMessages = (execution as any).messages.map((m: any) => ({
         role: m.role === "agent" ? "assistant" : m.role,
         message: m.content,
@@ -275,7 +292,9 @@ export class SyncBolnaExecutionUseCase {
         .map((line) => {
           const trimmed = line.trim();
           if (!trimmed) return null;
-          const match = trimmed.match(/^(assistant|user|agent|system|bot|customer):\s*(.*)$/i);
+          const match = trimmed.match(
+            /^(assistant|user|agent|system|bot|customer):\s*(.*)$/i,
+          );
           if (match) {
             const rawRole = match[1].toLowerCase();
             const role =
@@ -288,7 +307,11 @@ export class SyncBolnaExecutionUseCase {
           }
           return { role: "assistant", message: trimmed, time: null };
         })
-        .filter(Boolean) as Array<{ role: string; message: string; time: string | null }>;
+        .filter(Boolean) as Array<{
+        role: string;
+        message: string;
+        time: string | null;
+      }>;
 
       if (parsed.length > 0) {
         transcriptMessages = parsed;
@@ -301,7 +324,8 @@ export class SyncBolnaExecutionUseCase {
       : [];
 
     const existingHistoryIdx = historyList.findIndex(
-      (h) => h.bolnaCallId === execution.id || (h.attempt === 1 && !h.bolnaCallId),
+      (h) =>
+        h.bolnaCallId === execution.id || (h.attempt === 1 && !h.bolnaCallId),
     );
 
     const historyEntry: CallHistoryItem = {
@@ -334,9 +358,13 @@ export class SyncBolnaExecutionUseCase {
         cost,
         recording,
         transcript,
-        transcriptMessages: transcriptMessages ? (transcriptMessages as unknown as InputJsonValue) : undefined,
+        transcriptMessages: transcriptMessages
+          ? (transcriptMessages as unknown as InputJsonValue)
+          : undefined,
         summary,
-        extractionResult: execution.extracted_data ? (execution.extracted_data as unknown as InputJsonValue) : undefined,
+        extractionResult: execution.extracted_data
+          ? (execution.extracted_data as unknown as InputJsonValue)
+          : undefined,
         callHistory: historyList as unknown as InputJsonValue,
         endedAt: new Date(),
       },
@@ -401,11 +429,15 @@ export class SyncBolnaExecutionUseCase {
           );
         }
       } catch (err) {
-        this.logger?.error("Dynamic extraction mapping failed during sync execution", err, {
-          action: "call.sync.extraction_failed",
-          callId: callRecord.id,
-          tenantId: callRecord.tenantId,
-        });
+        this.logger?.error(
+          "Dynamic extraction mapping failed during sync execution",
+          err,
+          {
+            action: "call.sync.extraction_failed",
+            callId: callRecord.id,
+            tenantId: callRecord.tenantId,
+          },
+        );
       }
     }
 
@@ -428,8 +460,12 @@ export class SyncBolnaExecutionUseCase {
     if (!isPriorTerminal) {
       const updateData = {
         calledLeads: { increment: 1 },
-        ...(verifiedCallStatus === "COMPLETED" && { completedLeads: { increment: 1 } }),
-        ...(verifiedCallStatus === "FAILED" && { failedLeads: { increment: 1 } }),
+        ...(verifiedCallStatus === "COMPLETED" && {
+          completedLeads: { increment: 1 },
+        }),
+        ...(verifiedCallStatus === "FAILED" && {
+          failedLeads: { increment: 1 },
+        }),
       };
 
       await prisma.campaign.updateMany({
