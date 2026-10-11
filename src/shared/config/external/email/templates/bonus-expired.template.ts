@@ -14,8 +14,10 @@ export interface BonusExpiredTemplateInput {
   currency: string;
 }
 
+import { paisaToRupeesFixed } from "../../../../utils/money";
+
 export function bonusExpiredEmailHtml(p: BonusExpiredTemplateInput): string {
-  const expiredAmount = (p.expiredAmountPaisa / 100).toFixed(2);
+  const expiredAmount = paisaToRupeesFixed(p.expiredAmountPaisa);
 
   const content = sectionPadding(`
     ${heading(

@@ -10,6 +10,7 @@ import type {
   OwnerInviteResponse,
 } from "../dto/invite.dto";
 import { toOwnerInviteResponse } from "../mappers/invite.mapper";
+import { calculateInvitePricing } from "../../domain/rules/invite-pricing.rules";
 
 const DEFAULT_EXPIRY_DAYS = 1; // ← Changed from 7 to 1
 
@@ -64,11 +65,11 @@ export class CreateOwnerInviteUseCase {
     const inviteUrl = `${env.frontendUrl}/accept-invite/${token}`;
 
     // ── Compute pricing for email ────────────────────────────────
-    const originalFee = latestVersion.onboardingFee;
-    const discountAmount = skipPayment
-      ? originalFee
-      : Math.round(originalFee * (discountPercent / 100));
-    const payableAmount = originalFee - discountAmount;
+    const pricing = calculateInvitePricing(
+      latestVersion.onboardingFee,
+      discountPercent,
+      skipPayment,
+    );
 
     await this.email.send({
       to: input.email,
@@ -78,10 +79,10 @@ export class CreateOwnerInviteUseCase {
         planName: plan.name,
         inviteUrl,
         expiresAt: expiresAt.toISOString(),
-        onboardingFee: originalFee,
-        discountPercent,
-        discountAmount,
-        payableAmount,
+        onboardingFee: pricing.originalFee,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmount,
+        payableAmount: pricing.payableAmount,
         includedBalance: latestVersion.includedBalance,
         perMinuteRate: latestVersion.perMinuteRate,
         skipPayment,

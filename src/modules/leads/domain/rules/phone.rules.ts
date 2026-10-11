@@ -55,3 +55,16 @@ export function normalizePhoneNumber(
   return `+${cleaned}`;
 }
 
+/**
+ * Checks if a normalized or sanitized phone number is a valid Indian number:
+ * - 10 digits (domestic without +91)
+ * - 12 digits starting with 91 / +91
+ */
+export function isIndianPhone(phone: string): boolean {
+  if (!phone) return false;
+  const digits = phone.replace("+", "");
+  if (digits.length === 10) return true;
+  if (digits.length === 12 && digits.startsWith("91")) return true;
+  return false;
+}
+

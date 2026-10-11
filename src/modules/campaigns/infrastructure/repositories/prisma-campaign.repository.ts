@@ -150,24 +150,33 @@ export class PrismaCampaignRepository implements CampaignRepository {
     const callWhere = { campaignId };
 
     const [
+      actualLeadCount,
       totalCalls,
       completedCalls,
       failedCalls,
       noAnswerCalls,
       busyCalls,
       stoppedCalls,
+      scheduledCalls,
       costAgg,
       durationAgg,
+      completedDurationAgg,
     ] = await Promise.all([
+      prisma.lead.count({ where: { campaignId, isDeleted: false } }),
       prisma.call.count({ where: callWhere }),
       prisma.call.count({ where: { ...callWhere, status: "COMPLETED" } }),
       prisma.call.count({ where: { ...callWhere, status: "FAILED" } }),
       prisma.call.count({ where: { ...callWhere, status: "NO_ANSWER" } }),
       prisma.call.count({ where: { ...callWhere, status: "BUSY" } }),
       prisma.call.count({ where: { ...callWhere, status: "STOPPED" } }),
+      prisma.call.count({ where: { ...callWhere, status: "SCHEDULED" } }),
       prisma.call.aggregate({
         where: { ...callWhere, chargedAmount: { not: null } },
         _sum: { chargedAmount: true },
+      }),
+      prisma.call.aggregate({
+        where: { ...callWhere, duration: { not: null } },
+        _sum: { duration: true },
       }),
       prisma.call.aggregate({
         where: { ...callWhere, status: "COMPLETED", duration: { not: null } },
@@ -175,16 +184,32 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }),
     ]);
 
+    const totalLeads =
+      actualLeadCount > 0 ? actualLeadCount : campaign.totalLeads;
+    const totalCostPaisa = costAgg._sum.chargedAmount ?? 0;
+    const avgCostPaisa =
+      totalCalls > 0 ? Math.round(totalCostPaisa / totalCalls) : 0;
+    const totalDurationSec = durationAgg._sum.duration ?? 0;
+    const avgDurationSec = Math.round(completedDurationAgg._avg.duration ?? 0);
+
     return {
-      totalLeads: campaign.totalLeads,
+      totalLeads,
+      totalLead: totalLeads,
       totalCalls,
       completedCalls,
       failedCalls,
       noAnswerCalls,
       busyCalls,
       stoppedCalls,
-      totalCostPaisa: costAgg._sum.chargedAmount ?? 0,
-      avgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
+      scheduledCalls,
+      totalCostPaisa,
+      totalCost: totalCostPaisa,
+      avgCostPaisa,
+      avgCost: avgCostPaisa,
+      totalDurationSec,
+      totalDuration: totalDurationSec,
+      avgDurationSec,
+      avgDuration: avgDurationSec,
     };
   }
 
