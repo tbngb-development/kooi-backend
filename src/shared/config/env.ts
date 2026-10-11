@@ -80,7 +80,11 @@ export const env = {
       process.env.AI_GATEWAY_BASE_URL ||
       "https://ai-gateway.vercel.sh/typesafe",
 
-    model: process.env.CLASSIFIER_MODEL || "typesafe-ai/jev",
+    model:
+      process.env.CLASSIFIER_MODEL ||
+      ((process.env.CLASSIFIER_PROVIDER || "native") === "native"
+        ? "jev-latest"
+        : "typesafe-ai/jev"),
     maxTranscriptLength:
       Number(process.env.CLASSIFIER_MAX_TRANSCRIPT_LENGTH) || 8000,
   },

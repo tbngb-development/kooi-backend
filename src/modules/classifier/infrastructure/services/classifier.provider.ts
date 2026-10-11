@@ -53,12 +53,37 @@ export class ClassifierProviderImpl implements ClassifierProvider {
 
       if (typeof upstreamData === "string") {
         errorMessage = upstreamData;
+      } else if (upstreamData?.detail) {
+        if (typeof upstreamData.detail === "string") {
+          errorMessage = upstreamData.detail;
+        } else if (upstreamData.detail?.message) {
+          errorMessage = `[${upstreamData.detail.error_type || "api_error"}] ${upstreamData.detail.message}`;
+        } else if (Array.isArray(upstreamData.detail)) {
+          // FastAPI / pydantic validation errors list
+          errorMessage = upstreamData.detail
+            .map((e: any) =>
+              e?.loc
+                ? `${e.loc.filter((x: any) => x !== "body").join(".")}: ${e.msg || e.message}`
+                : e?.msg || e?.message || String(e),
+            )
+            .join("; ");
+        } else {
+          errorMessage = JSON.stringify(upstreamData.detail);
+        }
       } else if (upstreamData?.message) {
         errorMessage = upstreamData.message;
       } else if (upstreamData?.error?.message) {
         errorMessage = upstreamData.error.message;
+      } else if (typeof upstreamData?.error === "string") {
+        errorMessage = upstreamData.error;
       } else if (upstreamData?.error_type) {
         errorMessage = `[${upstreamData.error_type}] ${upstreamData.message || "Invalid request"}`;
+      } else if (
+        upstreamData &&
+        typeof upstreamData === "object" &&
+        Object.keys(upstreamData).length > 0
+      ) {
+        errorMessage = JSON.stringify(upstreamData);
       } else {
         errorMessage = err?.message || "Unknown upstream classifier error";
       }
