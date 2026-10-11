@@ -98,6 +98,14 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
+  async findBatchStatusById(batchId: string): Promise<BatchStatus | null> {
+    const batch = await prisma.leadBatch.findUnique({
+      where: { id: batchId },
+      select: { status: true },
+    });
+    return batch?.status ?? null;
+  }
+
   async findLeadByPhoneAndBatch(phone: string, batchId: string) {
     return prisma.lead.findFirst({
       where: { phone, batchId },

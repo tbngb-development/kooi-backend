@@ -8,12 +8,18 @@ import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/pr
 import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prisma-plan.repository";
 import { BolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import { PrismaBolnaApiKeyRepository } from "../bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
+import type { MaterializeCallExtractionsUseCase } from "../extractions/application/use-cases/materialize-call-extractions.use-case";
+import { CallResolverService } from "./application/services/call-resolver.service";
+import { CallLifecycleService } from "./application/services/call-lifecycle.service";
+import { CallTerminalService } from "./application/services/call-terminal.service";
+import { CallCompletionService } from "./application/services/call-completion.service";
 import type { Logger } from "../../shared/logging/logger.interface";
 import type { Queue } from "bull";
 
 export interface WebhookModuleDeps {
   debitWalletForCall?: DebitWalletForCallUseCase;
   classifierQueue?: Queue;
+  materializeCallExtractions?: MaterializeCallExtractionsUseCase;
   logger: Logger;
 }
 
@@ -40,11 +46,25 @@ export function buildWebhookModule(
       log,
     );
 
-  const processCallWebhook = new ProcessCallWebhookUseCase(
+  const callLifecycle = new CallLifecycleService(webhookRepo, log);
+  const callResolver = new CallResolverService(webhookRepo, log);
+  const callTerminal = new CallTerminalService(webhookRepo, callLifecycle, log);
+  const callCompletion = new CallCompletionService(
     webhookRepo,
+    deps.materializeCallExtractions,
     deps.debitWalletForCall,
     stopBatchesOnInsufficientBalance,
     deps.classifierQueue,
+    callLifecycle,
+    log,
+  );
+
+  const processCallWebhook = new ProcessCallWebhookUseCase(
+    webhookRepo,
+    callResolver,
+    callCompletion,
+    callTerminal,
+    stopBatchesOnInsufficientBalance,
     log,
   );
 
@@ -61,4 +81,3 @@ export function buildWebhookModule(
     processCallWebhook,
   };
 }
-

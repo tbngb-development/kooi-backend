@@ -213,10 +213,12 @@ export function buildContainer(): AppContainer {
   const assistants = buildAssistantModule({ bolnaClientFactory });
 
   const classifier = buildClassifierModule({ logger });
+  const extractions = buildExtractionModule({ logger });
 
   const webhooks = buildWebhookModule({
     debitWalletForCall: wallet.useCases.debitWalletForCall,
     classifierQueue: classifier.queue,
+    materializeCallExtractions: extractions.useCases.materializeCallExtractions,
     logger,
   });
 
@@ -245,7 +247,7 @@ export function buildContainer(): AppContainer {
     webhooks,
 
     platformAgents,
-    extractions: buildExtractionModule(),
+    extractions,
     industryPacks: buildIndustryPackModule(),
 
     plans,
