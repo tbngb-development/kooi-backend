@@ -25,15 +25,31 @@ import { DetachDispositionFromCategoryUseCase } from "./application/use-cases/de
 import { AdminExtractionController } from "./presentation/admin-extraction.controller";
 import { PrismaPlatformAgentRepository } from "../platform-agents/infrastructure/repositories/prisma-platform-agent.repository";
 
-export interface ExtractionModule {
-  adminController: AdminExtractionController;
+import { PrismaCallExtractionRepository } from "./infrastructure/repositories/prisma-call-extraction.repository";
+import { MaterializeCallExtractionsUseCase } from "./application/use-cases/materialize-call-extractions.use-case";
+import type { Logger } from "../../shared/logging/logger.interface";
+
+export interface ExtractionModuleDeps {
+  logger?: Logger;
 }
 
-export function buildExtractionModule(): ExtractionModule {
+export interface ExtractionModule {
+  adminController: AdminExtractionController;
+  useCases: {
+    materializeCallExtractions: MaterializeCallExtractionsUseCase;
+  };
+}
+
+export function buildExtractionModule(deps: ExtractionModuleDeps = {}): ExtractionModule {
   const repository = new PrismaExtractionRepository();
+  const callExtractionRepo = new PrismaCallExtractionRepository();
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
   const bolnaProvider = new BolnaExtractionProviderImpl(apiKeyRepository);
   const platformAgentRepository = new PrismaPlatformAgentRepository();
+  const materializeCallExtractions = new MaterializeCallExtractionsUseCase(
+    callExtractionRepo,
+    deps.logger?.child({ module: "extractions" }),
+  );
   return {
     adminController: new AdminExtractionController(
       new CreateCategoryUseCase(repository),
@@ -58,5 +74,8 @@ export function buildExtractionModule(): ExtractionModule {
         platformAgentRepository,
       ),
     ),
+    useCases: {
+      materializeCallExtractions,
+    },
   };
 }

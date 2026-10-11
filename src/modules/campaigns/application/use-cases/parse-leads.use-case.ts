@@ -17,6 +17,10 @@ import {
   type LeadRow,
 } from "../../../leads/infrastructure/leadParser";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
+import {
+  deduplicateInFileLeads,
+  deduplicateCrossBatchLeads,
+} from "../../../leads/domain/rules/lead-dedup.rules";
 import { env } from "../../../../shared/config/env";
 import { MaxLeadsPerBatchExceededError } from "../../../batches/domain/errors/batch.errors";
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
@@ -104,22 +108,12 @@ export class ParseLeadsUseCase {
     const totalInvalid = missingPhoneCount + malformedPhoneCount;
 
     // In-file deduplication
-    const seenInFile = new Set<string>();
-    const inFileDuplicateNumbers: string[] = [];
-    const uniqueRows: LeadRow[] = [];
-
-    for (const row of indianRows) {
-      if (seenInFile.has(row.phone)) {
-        inFileDuplicateNumbers.push(row.phone);
-      } else {
-        seenInFile.add(row.phone);
-        uniqueRows.push(row);
-      }
-    }
+    const { uniqueRows, duplicatePhones: inFileDuplicateNumbers } =
+      deduplicateInFileLeads(indianRows);
 
     // Cross-batch deduplication
-    const dbDuplicateNumbers: string[] = [];
-    let newLeads: LeadRow[] = [];
+    let dbDuplicateNumbers: string[] = [];
+    let newLeads: LeadRow[];
 
     if (env.skipCrossBatchDedup) {
       newLeads = uniqueRows;
@@ -130,13 +124,12 @@ export class ParseLeadsUseCase {
         uniquePhones,
       );
 
-      for (const row of uniqueRows) {
-        if (existingPhones.has(row.phone)) {
-          dbDuplicateNumbers.push(row.phone);
-        } else {
-          newLeads.push(row);
-        }
-      }
+      const crossBatchResult = deduplicateCrossBatchLeads(
+        uniqueRows,
+        existingPhones,
+      );
+      newLeads = crossBatchResult.newLeads;
+      dbDuplicateNumbers = crossBatchResult.duplicatePhones;
     }
 
     // 3. Enforce maxLeadsPerBatch limit (null = unlimited)

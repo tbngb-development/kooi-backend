@@ -70,6 +70,7 @@ export interface WebhookRepository {
     status: BatchStatus;
     scheduledAt?: Date | null;
   } | null>;
+  findBatchStatusById(batchId: string): Promise<BatchStatus | null>;
   findLeadByPhoneAndBatch(
     phone: string,
     batchId: string,

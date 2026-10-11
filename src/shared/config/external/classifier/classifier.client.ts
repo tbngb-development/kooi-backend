@@ -60,7 +60,22 @@ export class ClassifierClient {
     isNative?: boolean;
   }) {
     this.isNative = options?.isNative ?? env.classifier.provider === "native";
-    this.model = options?.model ?? env.classifier.model;
+
+    // Resolve model name safely based on provider
+    let resolvedModel = options?.model ?? env.classifier.model;
+    if (this.isNative) {
+      // Native TypeSafe AI uses "jev-latest" or versioned names (e.g. "jev-1.13.0"), NOT Vercel AI Gateway prefixes like "typesafe-ai/jev"
+      if (
+        !resolvedModel ||
+        resolvedModel === "typesafe-ai/jev" ||
+        resolvedModel === "typesafe-ai/jev-latest"
+      ) {
+        resolvedModel = "jev-latest";
+      } else if (resolvedModel.startsWith("typesafe-ai/")) {
+        resolvedModel = resolvedModel.replace(/^typesafe-ai\//, "");
+      }
+    }
+    this.model = resolvedModel;
 
     // Resolve API key & Base URL based on provider
     const apiKey =

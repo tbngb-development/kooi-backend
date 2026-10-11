@@ -39,7 +39,7 @@ export function buildClassifierModule(
   const log = deps.logger.child({ module: "classifier" });
 
   const repository = new PrismaClassifierRepository();
-  const provider = new ClassifierProviderImpl();
+  const provider = new ClassifierProviderImpl(undefined, log);
 
   // Use cases
   const processExtraction = new ProcessClassifierExtractionUseCase(

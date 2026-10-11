@@ -19,6 +19,7 @@ import {
 } from "../../domain/errors/invite.errors";
 import { EmailAlreadyExistsError } from "../../../auth/domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../../auth/domain/rules/password.rules";
+import { calculateInvitePricing } from "../../domain/rules/invite-pricing.rules";
 
 export class AcceptOwnerInviteUseCase {
   constructor(
@@ -84,12 +85,12 @@ export class AcceptOwnerInviteUseCase {
     const plan = await this.planRepo.findById(invite.planId);
 
     // ── 4. Compute effective pricing ─────────────────────────────
-    const originalFee = latestVersion.onboardingFee;
-    const discountPercent = invite.skipPayment ? 0 : invite.discountPercent;
-    const discountAmount = invite.skipPayment
-      ? originalFee
-      : Math.round(originalFee * (discountPercent / 100));
-    const effectiveFee = originalFee - discountAmount;
+    const pricing = calculateInvitePricing(
+      latestVersion.onboardingFee,
+      invite.discountPercent,
+      invite.skipPayment,
+    );
+    const effectiveFee = pricing.payableAmount;
 
     // If effective fee is 0 (free plan or 100% discount), treat as skip
     const actualSkipPayment = invite.skipPayment || effectiveFee === 0;
@@ -108,7 +109,7 @@ export class AcceptOwnerInviteUseCase {
       // ── BRANCH A: Skip Payment — activate immediately ──────────
 
       // Set override to 0 if original fee was non-zero
-      if (originalFee > 0) {
+      if (pricing.originalFee > 0) {
         await this.planRepo.updateOverrides(
           result.tenantId,
           { onboardingFeeOverride: 0 },
@@ -171,7 +172,10 @@ export class AcceptOwnerInviteUseCase {
     } else {
       // ── BRANCH B: Payment Required — apply discount override ───
 
-      if (discountPercent > 0 && effectiveFee !== originalFee) {
+      if (
+        pricing.discountPercent > 0 &&
+        effectiveFee !== pricing.originalFee
+      ) {
         await this.planRepo.updateOverrides(
           result.tenantId,
           { onboardingFeeOverride: effectiveFee },
@@ -230,8 +234,8 @@ export class AcceptOwnerInviteUseCase {
             name: plan.name,
             slug: plan.slug,
             onboardingFee: effectiveFee,
-            discountPercent,
-            discountAmount,
+            discountPercent: pricing.discountPercent,
+            discountAmount: pricing.discountAmount,
             payableAmount: effectiveFee,
           }
         : null,

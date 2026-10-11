@@ -107,14 +107,22 @@ export interface PaginatedCampaignsResult {
 
 export interface CampaignDetailOverview {
   totalLeads: number;
+  totalLead?: number;
   totalCalls: number;
   completedCalls: number;
   failedCalls: number;
   noAnswerCalls: number;
   busyCalls: number;
   stoppedCalls: number;
+  scheduledCalls: number;
   totalCostPaisa: number;
+  totalCost?: number;
+  avgCostPaisa: number;
+  avgCost?: number;
+  totalDurationSec: number;
+  totalDuration?: number;
   avgDurationSec: number;
+  avgDuration?: number;
 }
 
 export interface CallListOverview {
