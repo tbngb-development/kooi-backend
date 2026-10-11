@@ -53,6 +53,29 @@ export interface BatchStatsResult {
   totalCost: number;
 }
 
+export interface BatchFinancialMetrics {
+  totalCalls: number;
+  totalCostPaisa: number;
+  avgCostPaisa: number;
+  totalDurationSec: number;
+  avgDurationSec: number;
+  executionDurationSec: number | null;
+}
+
+export interface BatchDetailDTO extends LeadBatchEntityData {
+  campaign?: {
+    id: string;
+    name: string;
+  } | null;
+  leadCountsByStatus: Record<string, number>;
+  callCountsByStatus: Record<string, number>;
+  metrics: BatchFinancialMetrics;
+  _count?: {
+    leads: number;
+    calls: number;
+  };
+}
+
 export interface ScheduleBatchInput {
   tenantId: string;
   campaignId: string;

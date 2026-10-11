@@ -188,7 +188,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       actualLeadCount > 0 ? actualLeadCount : campaign.totalLeads;
     const totalCostPaisa = costAgg._sum.chargedAmount ?? 0;
     const avgCostPaisa =
-      totalCalls > 0 ? Math.round(totalCostPaisa / totalCalls) : 0;
+      completedCalls > 0 ? Math.round(totalCostPaisa / completedCalls) : 0;
     const totalDurationSec = durationAgg._sum.duration ?? 0;
     const avgDurationSec = Math.round(completedDurationAgg._avg.duration ?? 0);
 
@@ -229,9 +229,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     return this.toEntityData(campaign);
   }
 
-  async findByIdGlobal(
-    campaignId: string,
-  ): Promise<CampaignEntityData | null> {
+  async findByIdGlobal(campaignId: string): Promise<CampaignEntityData | null> {
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },
     });
@@ -322,8 +320,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
       data: {
         ...(data.name !== undefined && { name: data.name }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.assistantId !== undefined && { assistantId: data.assistantId }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
+        ...(data.assistantId !== undefined && {
+          assistantId: data.assistantId,
+        }),
         ...(data.variables !== undefined && { variables: data.variables }),
         ...(data.defaultRetryConfig !== undefined && {
           defaultRetryConfig: data.defaultRetryConfig as any,
@@ -345,7 +347,9 @@ export class PrismaCampaignRepository implements CampaignRepository {
       data: {
         status,
         ...(extra?.startedAt !== undefined && { startedAt: extra.startedAt }),
-        ...(extra?.completedAt !== undefined && { completedAt: extra.completedAt }),
+        ...(extra?.completedAt !== undefined && {
+          completedAt: extra.completedAt,
+        }),
       },
     });
 
@@ -476,16 +480,16 @@ export class PrismaCampaignRepository implements CampaignRepository {
     for (const d of visibleDispositions) {
       const optMap = new Map<string, number>();
       if (Array.isArray(d.objectiveOptions)) {
-        (d.objectiveOptions as Array<{ value: string; sortOrder?: number }>).forEach(
-          (opt, idx) => {
-            if (opt?.value) {
-              optMap.set(
-                opt.value.trim().toLowerCase(),
-                typeof opt.sortOrder === "number" ? opt.sortOrder : idx,
-              );
-            }
-          },
-        );
+        (
+          d.objectiveOptions as Array<{ value: string; sortOrder?: number }>
+        ).forEach((opt, idx) => {
+          if (opt?.value) {
+            optMap.set(
+              opt.value.trim().toLowerCase(),
+              typeof opt.sortOrder === "number" ? opt.sortOrder : idx,
+            );
+          }
+        });
       }
       dispositionSortMap.set(d.id, optMap);
     }
@@ -752,8 +756,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
           id: existing.platformAgent.id,
           bolnaId: existing.platformAgent.bolnaId,
           requiredVariables: existing.platformAgent.requiredVariables as
-            | RequiredVariable[]
-            | null,
+            RequiredVariable[] | null,
         },
       };
     }
@@ -794,8 +797,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         id: created.platformAgent.id,
         bolnaId: created.platformAgent.bolnaId,
         requiredVariables: created.platformAgent.requiredVariables as
-          | RequiredVariable[]
-          | null,
+          RequiredVariable[] | null,
       },
     };
   }
