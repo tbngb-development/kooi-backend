@@ -82,17 +82,7 @@ export class CallCompletionService {
     // 3. Mark lead as CALLED
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
 
-    // 4. Update terminal statistics counters
-    const isAlreadyCompleted = call.status === "COMPLETED";
-    if (!isAlreadyCompleted) {
-      await this.webhookRepo.incrementTerminalStats(
-        call.campaignId,
-        call.batchId,
-        "COMPLETED",
-      );
-    }
-
-    // 5. Debit wallet for call usage (deterministic billing)
+    // 4. Debit wallet for call usage (deterministic billing)
     if (this.debitWalletForCall && duration && duration > 0) {
       try {
         const debitResult = await this.debitWalletForCall.execute({

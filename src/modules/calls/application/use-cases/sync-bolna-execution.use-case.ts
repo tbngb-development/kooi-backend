@@ -448,40 +448,7 @@ export class SyncBolnaExecutionUseCase {
       data: { status: leadStatus },
     });
 
-    // 12. Increment campaign and batch statistics (if previously not marked terminal)
-    const isPriorTerminal = [
-      "COMPLETED",
-      "BUSY",
-      "NO_ANSWER",
-      "FAILED",
-      "STOPPED",
-    ].includes(callRecord.status);
-
-    if (!isPriorTerminal) {
-      const updateData = {
-        calledLeads: { increment: 1 },
-        ...(verifiedCallStatus === "COMPLETED" && {
-          completedLeads: { increment: 1 },
-        }),
-        ...(verifiedCallStatus === "FAILED" && {
-          failedLeads: { increment: 1 },
-        }),
-      };
-
-      await prisma.campaign.updateMany({
-        where: { id: callRecord.campaignId },
-        data: updateData,
-      });
-
-      if (callRecord.batchId) {
-        await prisma.leadBatch.updateMany({
-          where: { id: callRecord.batchId },
-          data: updateData,
-        });
-      }
-    }
-
-    // 13. Enqueue Post-Call JEV Classifier (if transcript exists)
+    // 12. Enqueue Post-Call JEV Classifier (if transcript exists)
     if (this.classifierQueue && transcript) {
       this.classifierQueue
         .add(

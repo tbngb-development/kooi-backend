@@ -12,7 +12,10 @@ import type {
   LeadStopReason,
 } from "@prisma/client";
 
-import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
+import type {
+  CallHistoryItem,
+  RetryConfig,
+} from "../../../../shared/types/bolna.types";
 
 const callSelectFields = {
   id: true,
@@ -70,7 +73,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
       ...raw,
       callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
       retryConfig: (raw.batch?.retryConfig as RetryConfig | null) ?? null,
-      campaignDefaultRetryConfig: (raw.campaign?.defaultRetryConfig as RetryConfig | null) ?? null,
+      campaignDefaultRetryConfig:
+        (raw.campaign?.defaultRetryConfig as RetryConfig | null) ?? null,
     };
   }
 
@@ -462,4 +466,3 @@ export class PrismaWebhookRepository implements WebhookRepository {
     };
   }
 }
-

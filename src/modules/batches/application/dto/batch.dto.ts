@@ -5,7 +5,7 @@ export interface CreateBatchData {
   campaignId: string;
   tenantId: string;
   fileName: string;
-  totalLeads: number;
+  totalLeads?: number;
   retryConfig?: RetryConfig;
   termsAccepted: boolean;
   termsAcceptedAt: Date;
