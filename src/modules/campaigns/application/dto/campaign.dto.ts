@@ -129,6 +129,9 @@ export interface CallListOverview {
   totalCalls: number;
   completedCalls: number;
   failedCalls: number;
+  scheduledCalls: number;
+  busyCalls: number;
+  noAnswerCalls: number;
   avgDurationSec: number;
   totalCostPaisa: number;
 }
