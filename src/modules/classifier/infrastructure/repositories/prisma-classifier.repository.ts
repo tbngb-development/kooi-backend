@@ -59,12 +59,10 @@ export class PrismaClassifierRepository implements ClassifierRepository {
     slug: string,
     industryPackId: string | null,
   ) {
-    return prisma.classifierDisposition.findUnique({
+    return prisma.classifierDisposition.findFirst({
       where: {
-        slug_industryPackId: {
-          slug,
-          industryPackId: industryPackId ?? "",
-        },
+        slug,
+        industryPackId: industryPackId ?? null,
       },
     });
   }
@@ -244,15 +242,16 @@ export class PrismaClassifierRepository implements ClassifierRepository {
   }
 
   async listCallResults(filters: {
-    tenantId: string;
+    tenantId?: string;
     campaignId?: string;
     batchId?: string;
     status?: ClassifierExtractionStatus;
     page: number;
     limit: number;
   }) {
-    const where: any = { tenantId: filters.tenantId };
+    const where: any = {};
 
+    if (filters.tenantId) where.tenantId = filters.tenantId;
     if (filters.campaignId) where.campaignId = filters.campaignId;
     if (filters.batchId) where.batchId = filters.batchId;
     if (filters.status) where.status = filters.status;

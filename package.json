@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --fix",
     "seed:plans": "tsx src/seeds/plans.seed.ts",
     "seed:dispositions": "tsx  src/seeds/dispositions.seed.ts",
+    "seed:classifiers": "tsx  src/seeds/classifier-dispositions.seed.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
