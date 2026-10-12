@@ -157,7 +157,7 @@ export class PrismaCallRepository implements CallRepository {
         take: limitNum,
       }),
       prisma.call.count({ where }),
-      this.getTenantCallOverview(tenantId),
+      this.getTenantCallOverview(tenantId, campaignId),
     ]);
 
     return {
@@ -200,28 +200,47 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
-  async getTenantCallOverview(tenantId: string): Promise<CallListOverview> {
-    const where = { tenantId, isDeleted: false };
+  async getTenantCallOverview(
+    tenantId: string,
+    campaignId?: string,
+  ): Promise<CallListOverview> {
+    const where: Prisma.CallWhereInput = { tenantId, isDeleted: false };
 
-    const [totalCalls, completedCalls, failedCalls, durationAgg, costAgg] =
-      await Promise.all([
-        prisma.call.count({ where }),
-        prisma.call.count({ where: { ...where, status: "COMPLETED" } }),
-        prisma.call.count({ where: { ...where, status: "FAILED" } }),
-        prisma.call.aggregate({
-          where: { ...where, status: "COMPLETED", duration: { not: null } },
-          _avg: { duration: true },
-        }),
-        prisma.call.aggregate({
-          where: { ...where, chargedAmount: { not: null } },
-          _sum: { chargedAmount: true },
-        }),
-      ]);
+    if (campaignId) where.campaignId = campaignId;
+
+    const [
+      totalCalls,
+      completedCalls,
+      failedCalls,
+      scheduledCalls,
+      busyCalls,
+      noAnswerCalls,
+      durationAgg,
+      costAgg,
+    ] = await Promise.all([
+      prisma.call.count({ where }),
+      prisma.call.count({ where: { ...where, status: "COMPLETED" } }),
+      prisma.call.count({ where: { ...where, status: "FAILED" } }),
+      prisma.call.count({ where: { ...where, status: "SCHEDULED" } }),
+      prisma.call.count({ where: { ...where, status: "BUSY" } }),
+      prisma.call.count({ where: { ...where, status: "NO_ANSWER" } }),
+      prisma.call.aggregate({
+        where: { ...where, status: "COMPLETED", duration: { not: null } },
+        _avg: { duration: true },
+      }),
+      prisma.call.aggregate({
+        where: { ...where, chargedAmount: { not: null } },
+        _sum: { chargedAmount: true },
+      }),
+    ]);
 
     return {
       totalCalls,
       completedCalls,
       failedCalls,
+      scheduledCalls,
+      busyCalls,
+      noAnswerCalls,
       avgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
       totalCostPaisa: costAgg._sum.chargedAmount ?? 0,
     };
