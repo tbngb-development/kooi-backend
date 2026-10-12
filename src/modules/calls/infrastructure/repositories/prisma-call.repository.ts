@@ -26,7 +26,7 @@ export class PrismaCallRepository implements CallRepository {
       search,
       dateFrom,
       dateTo,
-      sortBy = "startedAt",
+      sortBy = "duration",
       sortOrder = "desc",
       page = 1,
       limit = 15,
@@ -97,7 +97,30 @@ export class PrismaCallRepository implements CallRepository {
 
     const validSortFields = ["startedAt", "duration", "cost", "createdAt"];
     const orderField = validSortFields.includes(sortBy) ? sortBy : "startedAt";
-    const orderDir = sortOrder === "asc" ? "asc" : "desc";
+    const orderDir: Prisma.SortOrder = sortOrder === "asc" ? "asc" : "desc";
+
+    const orderBy: Prisma.CallOrderByWithRelationInput[] = (() => {
+      switch (orderField) {
+        case "duration":
+          return [
+            { duration: { sort: orderDir, nulls: "last" } },
+            { createdAt: "desc" },
+          ];
+        case "cost":
+          return [
+            { cost: { sort: orderDir, nulls: "last" } },
+            { createdAt: "desc" },
+          ];
+        case "startedAt":
+          return [
+            { startedAt: { sort: orderDir, nulls: "last" } },
+            { createdAt: "desc" },
+          ];
+        case "createdAt":
+        default:
+          return [{ createdAt: orderDir }];
+      }
+    })();
 
     const [calls, total, overview] = await Promise.all([
       prisma.call.findMany({
@@ -129,7 +152,7 @@ export class PrismaCallRepository implements CallRepository {
             },
           },
         },
-        orderBy: { [orderField]: orderDir },
+        orderBy,
         skip,
         take: limitNum,
       }),
@@ -455,7 +478,11 @@ export class PrismaCallRepository implements CallRepository {
   }
 
   private flattenObjectiveValues(
-    options: Array<{ value: string; sortOrder?: number; sub_options?: unknown[] }> | null,
+    options: Array<{
+      value: string;
+      sortOrder?: number;
+      sub_options?: unknown[];
+    }> | null,
   ): string[] {
     if (!options) return [];
 
