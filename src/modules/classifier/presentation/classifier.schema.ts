@@ -66,6 +66,7 @@ export const listClassifierDispositionsQuerySchema = z.object({
 });
 
 export const listClassifierResultsQuerySchema = z.object({
+  tenantId: z.string().uuid().optional(),
   campaignId: z.string().uuid().optional(),
   batchId: z.string().uuid().optional(),
   status: z

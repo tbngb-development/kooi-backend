@@ -16,17 +16,17 @@ KOOI is a multi-tenant enterprise voice automation platform designed for AI-driv
 
 ### Production Technology Stack
 
-| Layer | Technologies & Libraries |
-| :--- | :--- |
-| **Runtime & Framework** | Node.js (v20+), Express 5.2.1, TypeScript 5.8+ |
-| **Database & ORM** | PostgreSQL, Prisma ORM 6.19.3 |
-| **In-Memory Cache & Queues** | Redis 7+ via `ioredis` (6.0.0), Bull Queue (4.16.5) |
-| **AI & LLM Services** | Google Gemini (`@google/generative-ai`), TypeSafe AI SDK (`@typesafe-ai/sdk`), Vercel AI Gateway |
-| **Telephony Voice Engine** | Bolna AI REST API & Webhooks |
-| **Payments & Billing** | Razorpay Node SDK (2.9.8), Custom Integer Ledger |
-| **Storage & Media** | Cloudinary SDK (2.10.1) |
-| **Email Service** | Resend API (6.25.0) |
-| **Security & Utilities** | Helmet, Cookie-Parser, CORS, Zod, Winston, Bcryptjs, JsonWebToken, Node-Cron, PDF-Parse, XLSX, CSV-Parse |
+| Layer                        | Technologies & Libraries                                                                                 |
+| :--------------------------- | :------------------------------------------------------------------------------------------------------- |
+| **Runtime & Framework**      | Node.js (v20+), Express 5.2.1, TypeScript 5.8+                                                           |
+| **Database & ORM**           | PostgreSQL, Prisma ORM 6.19.3                                                                            |
+| **In-Memory Cache & Queues** | Redis 7+ via `ioredis` (6.0.0), Bull Queue (4.16.5)                                                      |
+| **AI & LLM Services**        | Google Gemini (`@google/generative-ai`), TypeSafe AI SDK (`@typesafe-ai/sdk`), Vercel AI Gateway         |
+| **Telephony Voice Engine**   | Bolna AI REST API & Webhooks                                                                             |
+| **Payments & Billing**       | Razorpay Node SDK (2.9.8), Custom Integer Ledger                                                         |
+| **Storage & Media**          | Cloudinary SDK (2.10.1)                                                                                  |
+| **Email Service**            | Resend API (6.25.0)                                                                                      |
+| **Security & Utilities**     | Helmet, Cookie-Parser, CORS, Zod, Winston, Bcryptjs, JsonWebToken, Node-Cron, PDF-Parse, XLSX, CSV-Parse |
 
 ---
 
@@ -137,15 +137,15 @@ sequenceDiagram
     Tenant->>API: POST /v1/campaigns/:id/batches/:batchId/run
     API->>Wallet: Check Minimum Balance
     API->>Bolna: Trigger Outbound Batch Execution
-    
+
     Bolna->>Webhook: POST /api/webhooks/bolna (Status: ringing / in-progress)
     Webhook->>API: Update Call Status: CALLING
-    
+
     Bolna->>Webhook: POST /api/webhooks/bolna (Status: completed + transcript + extractions)
     Webhook->>API: Save Transcript & Map Dynamic Extractions
     Webhook->>Wallet: Debit Call Cost (paisa) via FOR UPDATE Lock
     Webhook->>Bull: Enqueue JEV Classifier Job
-    
+
     Bull->>JEV: Run Objective Prompts on Transcript
     JEV-->>API: Store ClassifierCallResult
 ```
@@ -153,6 +153,7 @@ sequenceDiagram
 ### Detailed Flow Descriptions
 
 #### Flow 1: Authentication, Multi-Tenant Session & Token Lifecycle
+
 1. **Login (`POST /v1/auth/login`):** Validates credentials using `bcrypt`.
 2. **Tenant Evaluation:**
    - Single tenant membership: Automatically issues a `tenant` type access token and sets httpOnly cookies.
@@ -166,12 +167,14 @@ sequenceDiagram
    - **Replay Detection:** If an already-used token is presented, the entire family is immediately revoked, preventing token hijacking.
 
 #### Flow 2: Campaign Variable Extraction (Gemini AI)
+
 1. User uploads a brochure/document (`POST /v1/campaigns/extract-variables`).
 2. Backend parses text via `pdf-parse`.
 3. Calls Google Gemini (`gemini-2.5-flash` or `gemini-3.5-flash-lite`) with a structured schema prompt matching the assistant's `requiredVariables`.
 4. Returns extracted variables and confidence score directly to frontend form.
 
 #### Flow 3: Batch Ingestion & Dedup Engine
+
 1. User uploads a lead sheet (`.csv` or `.xlsx`) to `POST /v1/campaigns/:id/batches`.
 2. Fast-fails if plan caps are violated (`maxActiveCampaigns`, concurrent campaign conflicts at scheduled time).
 3. Concurrency guard prevents >2 concurrent file uploads per tenant.
@@ -187,6 +190,7 @@ sequenceDiagram
    - Sets batch status to `CREATED` (or `SCHEDULED` / `RUNNING`).
 
 #### Flow 4: Telephony Webhook Ingestion & Financial Settlement
+
 1. Bolna triggers `POST /api/webhooks/bolna` with header `x-webhook-secret`.
 2. **Intermediate States (`initiated`, `ringing`, `in-progress`):**
    - Marks Call as `CALLING`, batch and campaign as `RUNNING`.
@@ -200,6 +204,7 @@ sequenceDiagram
    - Increments campaign and batch completed/failed statistics counters.
 
 #### Flow 5: Workspace Migration & Bolna Key Switching
+
 1. Platform Admin requests workspace key assignment or switch (`POST /v1/admin/bolna-keys/:id/assign`).
 2. Checks readiness: confirms no running campaigns/batches.
 3. Sets `tenant.workspaceSwitchStatus = 'CLONING'`.
@@ -208,6 +213,7 @@ sequenceDiagram
 6. Updates `Assistant` entities with new cloned Bolna agent IDs and sets `workspaceSwitchStatus = 'IDLE'`.
 
 #### Flow 6: Real-Time Inbound Caller Matching
+
 1. Bolna agent prompt runtime calls `GET /api/v1/public/inbound/caller-match?contact_number=...&agent_id=...&execution_id=...`.
 2. Authenticated via `verifyBolnaInbound` (`Bearer BOLNA_INBOUND_AUTH_TOKEN`).
 3. Matches normalized incoming phone number against existing `Lead` records in DB.
@@ -266,53 +272,53 @@ The database schema (`prisma/schema.prisma`) comprises 24+ models structured int
 
 ### 5.1 Multi-Tenancy & Identity
 
-| Model | Fields & Purpose | Key Constraints & Relations |
-| :--- | :--- | :--- |
-| **`Tenant`** | Multi-tenant organization account (`id`, `name`, `email`, `isActive`, `termsAccepted`, `workspaceSwitchStatus`). | Unique `email`. Relations to `Wallet`, `TenantPlan`, `Campaign`, `Assistant`, `BolnaApiKey`. |
-| **`User`** | Global user identity (`id`, `email`, `password`, `name`, `isActive`). | Unique `email`. Relations to `TenantUser` (memberships), `PlatformAdmin`, `RefreshToken`. |
-| **`TenantUser`** | Junction table mapping User to Tenant with RBAC role (`OWNER`, `ADMIN`, `USER`). | Unique composite `[userId, tenantId]`. Cascade delete on User/Tenant deletion. |
-| **`PlatformAdmin`**| Superuser flag mapping to a `User`. Grants platform admin API rights. | Unique `userId`. |
-| **`RefreshToken`** | Refresh token rotation tracker (`id`, `tokenHash`, `familyId`, `expiresAt`, `revokedAt`). | Unique `tokenHash`. Indexed by `[userId]` and `[familyId]`. |
+| Model               | Fields & Purpose                                                                                                 | Key Constraints & Relations                                                                  |
+| :------------------ | :--------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
+| **`Tenant`**        | Multi-tenant organization account (`id`, `name`, `email`, `isActive`, `termsAccepted`, `workspaceSwitchStatus`). | Unique `email`. Relations to `Wallet`, `TenantPlan`, `Campaign`, `Assistant`, `BolnaApiKey`. |
+| **`User`**          | Global user identity (`id`, `email`, `password`, `name`, `isActive`).                                            | Unique `email`. Relations to `TenantUser` (memberships), `PlatformAdmin`, `RefreshToken`.    |
+| **`TenantUser`**    | Junction table mapping User to Tenant with RBAC role (`OWNER`, `ADMIN`, `USER`).                                 | Unique composite `[userId, tenantId]`. Cascade delete on User/Tenant deletion.               |
+| **`PlatformAdmin`** | Superuser flag mapping to a `User`. Grants platform admin API rights.                                            | Unique `userId`.                                                                             |
+| **`RefreshToken`**  | Refresh token rotation tracker (`id`, `tokenHash`, `familyId`, `expiresAt`, `revokedAt`).                        | Unique `tokenHash`. Indexed by `[userId]` and `[familyId]`.                                  |
 
 ### 5.2 Voice Agents & Campaigns
 
-| Model | Fields & Purpose | Key Constraints & Relations |
-| :--- | :--- | :--- |
-| **`PlatformAgent`** | Master blueprint in Bolna (`id`, `bolnaId`, `slug`, `name`, `defaultConfig`, `systemPrompt`, `gender`). | Unique `bolnaId`, `slug`. Belongs to `BolnaApiKey` and optional `IndustryPack`. |
-| **`Assistant`** | Tenant-specific clone of a PlatformAgent (`id`, `name`, `config`, `platformAgentId`, `tenantId`, `isDeleted`). | Belongs to `Tenant` and `PlatformAgent`. Soft-deleted via `isDeleted`. |
-| **`Campaign`** | Outbound campaign (`id`, `name`, `status` [DRAFT, RUNNING, COMPLETED, FAILED], `variables`, `totalLeads`, counts). | Belongs to `Tenant` and `Assistant`. Has many `LeadBatch`, `Lead`, `Call`. Soft-deleted. |
-| **`LeadBatch`** | Batch upload entity (`id`, `bolnaBatchId`, `status`, `rawFileUrl`, `processingStage`, `processingProgress`). | Unique `bolnaBatchId`. Status: `PROCESSING`, `CREATED`, `SCHEDULED`, `RUNNING`, `STOPPED`, `COMPLETED`, `FAILED`. |
-| **`Lead`** | Individual phone contact (`id`, `name`, `phone`, `email`, `status`, `doNotCall`, `stoppedReason`). | Unique `[phone, campaignId]`. Status: `PENDING`, `CALLING`, `CALLED`, `NO_ANSWER`, `FAILED`, `STOPPED`. |
+| Model               | Fields & Purpose                                                                                                   | Key Constraints & Relations                                                                                       |
+| :------------------ | :----------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| **`PlatformAgent`** | Master blueprint in Bolna (`id`, `bolnaId`, `slug`, `name`, `defaultConfig`, `systemPrompt`, `gender`).            | Unique `bolnaId`, `slug`. Belongs to `BolnaApiKey` and optional `IndustryPack`.                                   |
+| **`Assistant`**     | Tenant-specific clone of a PlatformAgent (`id`, `name`, `config`, `platformAgentId`, `tenantId`, `isDeleted`).     | Belongs to `Tenant` and `PlatformAgent`. Soft-deleted via `isDeleted`.                                            |
+| **`Campaign`**      | Outbound campaign (`id`, `name`, `status` [DRAFT, RUNNING, COMPLETED, FAILED], `variables`, `totalLeads`, counts). | Belongs to `Tenant` and `Assistant`. Has many `LeadBatch`, `Lead`, `Call`. Soft-deleted.                          |
+| **`LeadBatch`**     | Batch upload entity (`id`, `bolnaBatchId`, `status`, `rawFileUrl`, `processingStage`, `processingProgress`).       | Unique `bolnaBatchId`. Status: `PROCESSING`, `CREATED`, `SCHEDULED`, `RUNNING`, `STOPPED`, `COMPLETED`, `FAILED`. |
+| **`Lead`**          | Individual phone contact (`id`, `name`, `phone`, `email`, `status`, `doNotCall`, `stoppedReason`).                 | Unique `[phone, campaignId]`. Status: `PENDING`, `CALLING`, `CALLED`, `NO_ANSWER`, `FAILED`, `STOPPED`.           |
 
 ### 5.3 Calls & Analysis
 
-| Model | Fields & Purpose | Key Constraints & Relations |
-| :--- | :--- | :--- |
-| **`Call`** | Individual voice call session (`id`, `bolnaCallId`, `status`, `duration`, `cost`, `platformCost`, `billableSeconds`, `transcript`, `recording`). | Unique `bolnaCallId`. Status: `PENDING`, `CALLING`, `COMPLETED`, `FAILED`, `NO_ANSWER`, `BUSY`, `STOPPED`. |
-| **`CallAnalysis`** | Legacy dynamic extractions & raw outcome storage. | 1:1 relation with `Call`. |
-| **`CallExtractionOverview`** | Materialized objective outcomes extracted by Bolna agent prompt. | Indexed by `[tenantId, campaignId, dispositionId]`. |
-| **`CallExtractionInsight`** | Materialized subjective / free-text insights extracted by Bolna. | Stores `subjectiveValue` & `normalizedValue`. Indexed by normalized key. |
-| **`ClassifierCallResult`** | Independent post-call JEV LLM classification results. | Unique `callId`. Contains token metrics, gateway cost, raw response. |
+| Model                        | Fields & Purpose                                                                                                                                 | Key Constraints & Relations                                                                                |
+| :--------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| **`Call`**                   | Individual voice call session (`id`, `bolnaCallId`, `status`, `duration`, `cost`, `platformCost`, `billableSeconds`, `transcript`, `recording`). | Unique `bolnaCallId`. Status: `PENDING`, `CALLING`, `COMPLETED`, `FAILED`, `NO_ANSWER`, `BUSY`, `STOPPED`. |
+| **`CallAnalysis`**           | Legacy dynamic extractions & raw outcome storage.                                                                                                | 1:1 relation with `Call`.                                                                                  |
+| **`CallExtractionOverview`** | Materialized objective outcomes extracted by Bolna agent prompt.                                                                                 | Indexed by `[tenantId, campaignId, dispositionId]`.                                                        |
+| **`CallExtractionInsight`**  | Materialized subjective / free-text insights extracted by Bolna.                                                                                 | Stores `subjectiveValue` & `normalizedValue`. Indexed by normalized key.                                   |
+| **`ClassifierCallResult`**   | Independent post-call JEV LLM classification results.                                                                                            | Unique `callId`. Contains token metrics, gateway cost, raw response.                                       |
 
 ### 5.4 Plans, Wallet & Ledger
 
-| Model | Fields & Purpose | Key Constraints & Relations |
-| :--- | :--- | :--- |
-| **`Plan`** | Plan family definition (`id`, `name`, `slug`, `isActive`, `displayOrder`). | Unique `slug`. Has many `PlanVersion` entries. |
-| **`PlanVersion`** | Immutable plan version (`version`, `status` [DRAFT, PUBLISHED, ARCHIVED], `perMinuteRate`, `billingMinimumSec`, `billingIncrementSec`, caps). | Unique composite `[planId, version]`. PUBLISHED versions cannot be edited. |
-| **`TenantPlan`** | Tenant subscription status (`status` [PENDING_PAYMENT, ACTIVE, EXPIRED, CANCELLED], overrides). | Unique `tenantId`. Has commercial rate overrides. |
-| **`TenantPlanEvent`** | Immutable plan event audit log (`CREATED`, `ACTIVATED`, `PLAN_CHANGED`, `OVERRIDES_UPDATED`, etc.). | Indexed by `[tenantId, createdAt]`. |
-| **`Wallet`** | Tenant prepaid financial balance (`cashBalance`, `bonusBalance`, `bonusExpiresAt`, `currency`). | Unique `tenantId`. All balances stored in integer paise. |
-| **`WalletTransaction`** | Immutable financial audit ledger (`type` [CREDIT, DEBIT, BONUS, BONUS_EXPIRY, REFUND, ADJUSTMENT], deltas, balances after). | Unique composite `[walletId, idempotencyKey]`. |
-| **`Recharge`** | Payment transaction record (`amount`, `purpose` [ONBOARDING, WALLET_TOPUP], `status`, `razorpayOrderId`, `razorpayPaymentId`). | Unique `razorpayOrderId` and `razorpayPaymentId`. |
+| Model                   | Fields & Purpose                                                                                                                              | Key Constraints & Relations                                                |
+| :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- |
+| **`Plan`**              | Plan family definition (`id`, `name`, `slug`, `isActive`, `displayOrder`).                                                                    | Unique `slug`. Has many `PlanVersion` entries.                             |
+| **`PlanVersion`**       | Immutable plan version (`version`, `status` [DRAFT, PUBLISHED, ARCHIVED], `perMinuteRate`, `billingMinimumSec`, `billingIncrementSec`, caps). | Unique composite `[planId, version]`. PUBLISHED versions cannot be edited. |
+| **`TenantPlan`**        | Tenant subscription status (`status` [PENDING_PAYMENT, ACTIVE, EXPIRED, CANCELLED], overrides).                                               | Unique `tenantId`. Has commercial rate overrides.                          |
+| **`TenantPlanEvent`**   | Immutable plan event audit log (`CREATED`, `ACTIVATED`, `PLAN_CHANGED`, `OVERRIDES_UPDATED`, etc.).                                           | Indexed by `[tenantId, createdAt]`.                                        |
+| **`Wallet`**            | Tenant prepaid financial balance (`cashBalance`, `bonusBalance`, `bonusExpiresAt`, `currency`).                                               | Unique `tenantId`. All balances stored in integer paise.                   |
+| **`WalletTransaction`** | Immutable financial audit ledger (`type` [CREDIT, DEBIT, BONUS, BONUS_EXPIRY, REFUND, ADJUSTMENT], deltas, balances after).                   | Unique composite `[walletId, idempotencyKey]`.                             |
+| **`Recharge`**          | Payment transaction record (`amount`, `purpose` [ONBOARDING, WALLET_TOPUP], `status`, `razorpayOrderId`, `razorpayPaymentId`).                | Unique `razorpayOrderId` and `razorpayPaymentId`.                          |
 
 ### 5.5 Extraction Taxonomy & Classifier
 
-| Model | Fields & Purpose | Key Constraints & Relations |
-| :--- | :--- | :--- |
-| **`IndustryPack`** | Industry vertical settings (`slug`, `allowedCallingHours`, `requiresConsent`). | Unique `slug`. Has many `PlatformAgent` & `ClassifierDisposition`. |
-| **`ExtractionCategory`** | Taxonomy category for Bolna agent extractions. | Unique `slug`. Junction with `IndustryPack` and `ExtractionDisposition`. |
-| **`ExtractionDisposition`** | Question/field to extract via Bolna agent prompt (`isObjective`, `isSubjective`). | Unique `slug`. Linked to Platform Agents via `AgentBolnaExtractionBinding`. |
+| Model                       | Fields & Purpose                                                                  | Key Constraints & Relations                                                               |
+| :-------------------------- | :-------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------- |
+| **`IndustryPack`**          | Industry vertical settings (`slug`, `allowedCallingHours`, `requiresConsent`).    | Unique `slug`. Has many `PlatformAgent` & `ClassifierDisposition`.                        |
+| **`ExtractionCategory`**    | Taxonomy category for Bolna agent extractions.                                    | Unique `slug`. Junction with `IndustryPack` and `ExtractionDisposition`.                  |
+| **`ExtractionDisposition`** | Question/field to extract via Bolna agent prompt (`isObjective`, `isSubjective`). | Unique `slug`. Linked to Platform Agents via `AgentBolnaExtractionBinding`.               |
 | **`ClassifierDisposition`** | Independent LLM prompt question (`questionType` [BOOLEAN, CHOICE, MULTI_CHOICE]). | Unique `[slug, industryPackId]`. Mapped to Platform Agents via `PlatformAgentClassifier`. |
 
 ---
@@ -324,6 +330,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 ### 6.1 Standard API Response Envelope
 
 #### Success (200, 201, 202)
+
 ```json
 {
   "success": true,
@@ -333,14 +340,13 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 ```
 
 #### Error (400, 401, 403, 404, 409, 422, 429, 500)
+
 ```json
 {
   "success": false,
   "error": "Human-readable error description",
   "code": "ERROR_CODE_STRING",
-  "details": [
-    { "field": "email", "message": "Invalid email format" }
-  ]
+  "details": [{ "field": "email", "message": "Invalid email format" }]
 }
 ```
 
@@ -348,140 +354,140 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 
 ### 6.2 Public Webhooks & Health
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Public | System status, service name, version, and timestamp. |
-| `POST` | `/webhooks/razorpay` | HMAC SHA-256 | Raw body webhook for payment events (`order.paid`, `payment.captured`, `payment.failed`). |
-| `POST` | `/webhooks/bolna` | `x-webhook-secret` | Bolna call lifecycle webhook (`ringing`, `in-progress`, `completed`, `failed`, `no-answer`). |
-| `POST` | `/webhooks/bolna-batch` | `x-webhook-secret` | Bolna batch lifecycle webhook (batch state transitions). |
+| Method | Endpoint                | Auth Guard         | Description                                                                                  |
+| :----- | :---------------------- | :----------------- | :------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`               | Public             | System status, service name, version, and timestamp.                                         |
+| `POST` | `/webhooks/razorpay`    | HMAC SHA-256       | Raw body webhook for payment events (`order.paid`, `payment.captured`, `payment.failed`).    |
+| `POST` | `/webhooks/bolna`       | `x-webhook-secret` | Bolna call lifecycle webhook (`ringing`, `in-progress`, `completed`, `failed`, `no-answer`). |
+| `POST` | `/webhooks/bolna-batch` | `x-webhook-secret` | Bolna batch lifecycle webhook (batch state transitions).                                     |
 
 ---
 
 ### 6.3 Public Inbound Telephony
 
-| Method | Endpoint | Auth Guard | Query Parameters | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/v1/public/inbound/caller-match` | Bearer Token (`BOLNA_INBOUND_AUTH_TOKEN`) | `contact_number`, `agent_id`, `execution_id` | Returns flat JSON matching caller details to Bolna prompt context. |
+| Method | Endpoint                          | Auth Guard                                | Query Parameters                             | Description                                                        |
+| :----- | :-------------------------------- | :---------------------------------------- | :------------------------------------------- | :----------------------------------------------------------------- |
+| `GET`  | `/v1/public/inbound/caller-match` | Bearer Token (`BOLNA_INBOUND_AUTH_TOKEN`) | `contact_number`, `agent_id`, `execution_id` | Returns flat JSON matching caller details to Bolna prompt context. |
 
 ---
 
 ### 6.4 Tenant Authentication (`/v1/auth`)
 
-| Method | Endpoint | Auth Guard | Body Payload | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/v1/auth/register/send-otp` | Public (Rate Limited) | `{ email }` | Sends 6-digit registration verification OTP via email. |
-| `POST` | `/v1/auth/register` | Public (Rate Limited) | `{ email, password, name, tenantName, otp }` | Creates user, tenant, membership (`OWNER`), default wallet. Sets cookies. |
-| `POST` | `/v1/auth/login` | Public (Rate Limited) | `{ email, password }` | Authenticates user. Automatically selects single tenant or prompts choice. |
-| `POST` | `/v1/auth/select-tenant` | Any Authenticated | `{ tenantId }` | Selects active workspace, setting tenant-scoped `access_token` cookie. |
-| `POST` | `/v1/auth/refresh` | Public / Cookie | None | Rotates refresh token in family, renewing auth cookies. |
-| `POST` | `/v1/auth/logout` | Public / Cookie | None | Revokes refresh token family and clears httpOnly cookies. |
-| `GET` | `/v1/auth/profile` | Any Authenticated | None | Returns user profile, active tenant, and all memberships. |
-| `POST` | `/v1/auth/forgot-password` | Public (Rate Limited) | `{ email }` | Sends password reset OTP to user email. |
-| `POST` | `/v1/auth/forgot-password/verify-otp` | Public (Rate Limited) | `{ email, otp }` | Verifies reset OTP, returning a short-lived `resetToken`. |
-| `POST` | `/v1/auth/reset-password` | Public (Rate Limited) | `{ resetToken, newPassword }` | Resets password using verified token. |
-| `POST` | `/v1/auth/change-password` | Any Authenticated | `{ currentPassword, newPassword }` | Changes password for authenticated user. |
-| `POST` | `/v1/auth/revoke-all-sessions`| Any Authenticated | None | Revokes all active refresh token families for user. |
-| `POST` | `/v1/auth/invites` | Tenant (`OWNER`, `ADMIN`) | `{ email, role }` | Invites team member to current workspace via email token. |
-| `POST` | `/v1/auth/accept-invite` | Public | `{ token, name, password }` | Accepts invitation, registers profile, and joins workspace. |
+| Method | Endpoint                              | Auth Guard                | Body Payload                                 | Description                                                                |
+| :----- | :------------------------------------ | :------------------------ | :------------------------------------------- | :------------------------------------------------------------------------- |
+| `POST` | `/v1/auth/register/send-otp`          | Public (Rate Limited)     | `{ email }`                                  | Sends 6-digit registration verification OTP via email.                     |
+| `POST` | `/v1/auth/register`                   | Public (Rate Limited)     | `{ email, password, name, tenantName, otp }` | Creates user, tenant, membership (`OWNER`), default wallet. Sets cookies.  |
+| `POST` | `/v1/auth/login`                      | Public (Rate Limited)     | `{ email, password }`                        | Authenticates user. Automatically selects single tenant or prompts choice. |
+| `POST` | `/v1/auth/select-tenant`              | Any Authenticated         | `{ tenantId }`                               | Selects active workspace, setting tenant-scoped `access_token` cookie.     |
+| `POST` | `/v1/auth/refresh`                    | Public / Cookie           | None                                         | Rotates refresh token in family, renewing auth cookies.                    |
+| `POST` | `/v1/auth/logout`                     | Public / Cookie           | None                                         | Revokes refresh token family and clears httpOnly cookies.                  |
+| `GET`  | `/v1/auth/profile`                    | Any Authenticated         | None                                         | Returns user profile, active tenant, and all memberships.                  |
+| `POST` | `/v1/auth/forgot-password`            | Public (Rate Limited)     | `{ email }`                                  | Sends password reset OTP to user email.                                    |
+| `POST` | `/v1/auth/forgot-password/verify-otp` | Public (Rate Limited)     | `{ email, otp }`                             | Verifies reset OTP, returning a short-lived `resetToken`.                  |
+| `POST` | `/v1/auth/reset-password`             | Public (Rate Limited)     | `{ resetToken, newPassword }`                | Resets password using verified token.                                      |
+| `POST` | `/v1/auth/change-password`            | Any Authenticated         | `{ currentPassword, newPassword }`           | Changes password for authenticated user.                                   |
+| `POST` | `/v1/auth/revoke-all-sessions`        | Any Authenticated         | None                                         | Revokes all active refresh token families for user.                        |
+| `POST` | `/v1/auth/invites`                    | Tenant (`OWNER`, `ADMIN`) | `{ email, role }`                            | Invites team member to current workspace via email token.                  |
+| `POST` | `/v1/auth/accept-invite`              | Public                    | `{ token, name, password }`                  | Accepts invitation, registers profile, and joins workspace.                |
 
 ---
 
 ### 6.5 Public Owner Invites (`/v1/auth/owner-invites`)
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/auth/owner-invites/:token` | Public | Inspects admin-issued tenant owner invitation details (plan, discounts). |
-| `POST` | `/v1/auth/owner-invites/accept` | Public | Accepts owner invite (`{ token, name, password }`), creating tenant and owner profile. |
+| Method | Endpoint                        | Auth Guard | Description                                                                            |
+| :----- | :------------------------------ | :--------- | :------------------------------------------------------------------------------------- |
+| `GET`  | `/v1/auth/owner-invites/:token` | Public     | Inspects admin-issued tenant owner invitation details (plan, discounts).               |
+| `POST` | `/v1/auth/owner-invites/accept` | Public     | Accepts owner invite (`{ token, name, password }`), creating tenant and owner profile. |
 
 ---
 
 ### 6.6 Tenant Workspace & Team Settings
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/tenants/current` | Tenant Member | Fetches current tenant settings, terms acceptance, and switch status. |
-| `PATCH` | `/v1/tenants/current` | Tenant (`OWNER`, `ADMIN`) | Updates workspace name (`{ name }`). |
-| `GET` | `/v1/tenants/current/stats` | Tenant (`OWNER`, `ADMIN`) | High-level workspace statistics (campaigns, calls, connect rates). |
-| `GET` | `/v1/users` | Tenant (`OWNER`, `ADMIN`) | Lists team members in current workspace. |
-| `POST` | `/v1/users` | Tenant (`OWNER`, `ADMIN`) | Directly creates a tenant team user (`{ email, name, password, role }`). |
-| `PATCH` | `/v1/users/:id` | Tenant (`OWNER`, `ADMIN`) | Updates user role or details (`{ name, role }`). |
-| `DELETE` | `/v1/users/:id` | Tenant (`OWNER`, `ADMIN`) | Removes user membership from tenant. |
+| Method   | Endpoint                    | Auth Guard                | Description                                                              |
+| :------- | :-------------------------- | :------------------------ | :----------------------------------------------------------------------- |
+| `GET`    | `/v1/tenants/current`       | Tenant Member             | Fetches current tenant settings, terms acceptance, and switch status.    |
+| `PATCH`  | `/v1/tenants/current`       | Tenant (`OWNER`, `ADMIN`) | Updates workspace name (`{ name }`).                                     |
+| `GET`    | `/v1/tenants/current/stats` | Tenant (`OWNER`, `ADMIN`) | High-level workspace statistics (campaigns, calls, connect rates).       |
+| `GET`    | `/v1/users`                 | Tenant (`OWNER`, `ADMIN`) | Lists team members in current workspace.                                 |
+| `POST`   | `/v1/users`                 | Tenant (`OWNER`, `ADMIN`) | Directly creates a tenant team user (`{ email, name, password, role }`). |
+| `PATCH`  | `/v1/users/:id`             | Tenant (`OWNER`, `ADMIN`) | Updates user role or details (`{ name, role }`).                         |
+| `DELETE` | `/v1/users/:id`             | Tenant (`OWNER`, `ADMIN`) | Removes user membership from tenant.                                     |
 
 ---
 
 ### 6.7 Tenant Plans, Wallet & Payments
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/plans/available` | Any Authenticated | Lists published subscription plans, per-minute pricing, limits, and tiers. |
-| `GET` | `/v1/plans/mine` | Tenant Member | Returns tenant's active plan, effective commercials, and bonus expiry. |
-| `POST` | `/v1/plans/:planId/select` | Tenant Member | Self-selects initial plan prior to onboarding payment. |
-| `POST` | `/v1/plans/change` | Tenant Member | Changes plan tier (`{ targetPlanId, targetVersionId }`). |
-| `GET` | `/v1/wallet` | Tenant Member | Current wallet balance (`cashBalance`, `bonusBalance`, `bonusExpiresAt`). |
-| `GET` | `/v1/wallet/transactions` | Tenant Member | Paginated financial transaction ledger (`?page=&limit=`). |
-| `POST` | `/v1/payments/create-order` | Tenant Member | Creates Razorpay order (`{ purpose: "ONBOARDING" \| "WALLET_TOPUP", amount }`). |
-| `POST` | `/v1/payments/verify` | Tenant Member | Verifies Razorpay signature (`{ razorpayOrderId, razorpayPaymentId, razorpaySignature }`). |
-| `GET` | `/v1/payments/order-status/:orderId` | Tenant Member | Polls status of a payment order. |
+| Method | Endpoint                             | Auth Guard        | Description                                                                                |
+| :----- | :----------------------------------- | :---------------- | :----------------------------------------------------------------------------------------- |
+| `GET`  | `/v1/plans/available`                | Any Authenticated | Lists published subscription plans, per-minute pricing, limits, and tiers.                 |
+| `GET`  | `/v1/plans/mine`                     | Tenant Member     | Returns tenant's active plan, effective commercials, and bonus expiry.                     |
+| `POST` | `/v1/plans/:planId/select`           | Tenant Member     | Self-selects initial plan prior to onboarding payment.                                     |
+| `POST` | `/v1/plans/change`                   | Tenant Member     | Changes plan tier (`{ targetPlanId, targetVersionId }`).                                   |
+| `GET`  | `/v1/wallet`                         | Tenant Member     | Current wallet balance (`cashBalance`, `bonusBalance`, `bonusExpiresAt`).                  |
+| `GET`  | `/v1/wallet/transactions`            | Tenant Member     | Paginated financial transaction ledger (`?page=&limit=`).                                  |
+| `POST` | `/v1/payments/create-order`          | Tenant Member     | Creates Razorpay order (`{ purpose: "ONBOARDING" \| "WALLET_TOPUP", amount }`).            |
+| `POST` | `/v1/payments/verify`                | Tenant Member     | Verifies Razorpay signature (`{ razorpayOrderId, razorpayPaymentId, razorpaySignature }`). |
+| `GET`  | `/v1/payments/order-status/:orderId` | Tenant Member     | Polls status of a payment order.                                                           |
 
 ---
 
 ### 6.8 Tenant Assistants & Campaigns
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/assistants` | Tenant Member | Lists voice assistants available in tenant workspace. |
-| `GET` | `/v1/assistants/:id` | Tenant Member | Retrieves assistant configuration and required variable list. |
-| `GET` | `/v1/campaigns` | Tenant Member | Lists campaigns (`?status=&search=&page=&limit=`). |
-| `POST` | `/v1/campaigns` | Tenant Member | Creates campaign (`{ name, assistantId, variables, defaultRetryConfig }`). Enforces plan cap. |
-| `POST` | `/v1/campaigns/extract-variables` | Tenant Member | Multipart upload (`file`: PDF) parsed by Gemini AI to extract assistant variables. |
-| `GET` | `/v1/campaigns/:id` | Tenant Member | Retrieves campaign details. |
-| `GET` | `/v1/campaigns/:id/stats` | Tenant Member | Lead counts by status for campaign (`totalLeads`, `calledLeads`, `completedLeads`). |
-| `GET` | `/v1/campaigns/:id/extraction-overview` | Tenant Member | Aggregated objective extraction metrics for campaign. |
-| `GET` | `/v1/campaigns/:id/extraction-insights` | Tenant Member | Aggregated subjective extraction text insights for campaign. |
-| `POST` | `/v1/campaigns/:id/parse-leads` | Tenant Member | Multipart upload (`file`: CSV/XLSX) preview parsing without saving. |
-| `POST` | `/v1/campaigns/:campaignId/parse-manual` | Tenant Member | Validates array of manual lead rows in JSON. |
-| `PATCH` | `/v1/campaigns/:id/archive` | Tenant (`OWNER`, `ADMIN`) | Soft-deletes campaign (`isDeleted = true`). |
+| Method  | Endpoint                                 | Auth Guard                | Description                                                                                   |
+| :------ | :--------------------------------------- | :------------------------ | :-------------------------------------------------------------------------------------------- |
+| `GET`   | `/v1/assistants`                         | Tenant Member             | Lists voice assistants available in tenant workspace.                                         |
+| `GET`   | `/v1/assistants/:id`                     | Tenant Member             | Retrieves assistant configuration and required variable list.                                 |
+| `GET`   | `/v1/campaigns`                          | Tenant Member             | Lists campaigns (`?status=&search=&page=&limit=`).                                            |
+| `POST`  | `/v1/campaigns`                          | Tenant Member             | Creates campaign (`{ name, assistantId, variables, defaultRetryConfig }`). Enforces plan cap. |
+| `POST`  | `/v1/campaigns/extract-variables`        | Tenant Member             | Multipart upload (`file`: PDF) parsed by Gemini AI to extract assistant variables.            |
+| `GET`   | `/v1/campaigns/:id`                      | Tenant Member             | Retrieves campaign details.                                                                   |
+| `GET`   | `/v1/campaigns/:id/stats`                | Tenant Member             | Lead counts by status for campaign (`totalLeads`, `calledLeads`, `completedLeads`).           |
+| `GET`   | `/v1/campaigns/:id/extraction-overview`  | Tenant Member             | Aggregated objective extraction metrics for campaign.                                         |
+| `GET`   | `/v1/campaigns/:id/extraction-insights`  | Tenant Member             | Aggregated subjective extraction text insights for campaign.                                  |
+| `POST`  | `/v1/campaigns/:id/parse-leads`          | Tenant Member             | Multipart upload (`file`: CSV/XLSX) preview parsing without saving.                           |
+| `POST`  | `/v1/campaigns/:campaignId/parse-manual` | Tenant Member             | Validates array of manual lead rows in JSON.                                                  |
+| `PATCH` | `/v1/campaigns/:id/archive`              | Tenant (`OWNER`, `ADMIN`) | Soft-deletes campaign (`isDeleted = true`).                                                   |
 
 ---
 
 ### 6.9 Tenant Batches (Nested under `/v1/campaigns/:campaignId/batches`)
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/campaigns/:campaignId/batches` | Tenant Member | Lists batches under the campaign. |
-| `POST` | `/v1/campaigns/:campaignId/batches` | Tenant Member | Multipart upload (`file`: CSV/XLSX). Enqueues async processing to Bull queue. |
-| `POST` | `/v1/campaigns/:campaignId/batches/manual` | Tenant Member | Creates batch from manual JSON rows array. |
-| `GET` | `/v1/campaigns/:campaignId/batches/:batchId` | Tenant Member | Batch details, `processingStage`, `processingProgress` (0-100%). |
-| `GET` | `/v1/campaigns/:campaignId/batches/:batchId/stats` | Tenant Member | Real-time call outcomes for batch. |
-| `POST` | `/v1/campaigns/:campaignId/batches/:batchId/run` | Tenant Member | Runs batch immediately (checks wallet balance & triggers Bolna). |
-| `POST` | `/v1/campaigns/:campaignId/batches/:batchId/schedule` | Tenant Member | Schedules batch at future datetime (`{ scheduledAt }`). |
-| `POST` | `/v1/campaigns/:campaignId/batches/:batchId/stop` | Tenant Member | Pauses running batch execution. |
-| `POST` | `/v1/campaigns/:campaignId/batches/:batchId/resume` | Tenant Member | Resumes stopped batch. |
-| `DELETE`| `/v1/campaigns/:campaignId/batches/:batchId` | Tenant (`OWNER`, `ADMIN`) | Deletes batch. |
-| `PATCH` | `/v1/campaigns/:campaignId/batches/:batchId/archive` | Tenant (`OWNER`, `ADMIN`) | Soft-deletes batch. |
+| Method   | Endpoint                                              | Auth Guard                | Description                                                                   |
+| :------- | :---------------------------------------------------- | :------------------------ | :---------------------------------------------------------------------------- |
+| `GET`    | `/v1/campaigns/:campaignId/batches`                   | Tenant Member             | Lists batches under the campaign.                                             |
+| `POST`   | `/v1/campaigns/:campaignId/batches`                   | Tenant Member             | Multipart upload (`file`: CSV/XLSX). Enqueues async processing to Bull queue. |
+| `POST`   | `/v1/campaigns/:campaignId/batches/manual`            | Tenant Member             | Creates batch from manual JSON rows array.                                    |
+| `GET`    | `/v1/campaigns/:campaignId/batches/:batchId`          | Tenant Member             | Batch details, `processingStage`, `processingProgress` (0-100%).              |
+| `GET`    | `/v1/campaigns/:campaignId/batches/:batchId/stats`    | Tenant Member             | Real-time call outcomes for batch.                                            |
+| `POST`   | `/v1/campaigns/:campaignId/batches/:batchId/run`      | Tenant Member             | Runs batch immediately (checks wallet balance & triggers Bolna).              |
+| `POST`   | `/v1/campaigns/:campaignId/batches/:batchId/schedule` | Tenant Member             | Schedules batch at future datetime (`{ scheduledAt }`).                       |
+| `POST`   | `/v1/campaigns/:campaignId/batches/:batchId/stop`     | Tenant Member             | Pauses running batch execution.                                               |
+| `POST`   | `/v1/campaigns/:campaignId/batches/:batchId/resume`   | Tenant Member             | Resumes stopped batch.                                                        |
+| `DELETE` | `/v1/campaigns/:campaignId/batches/:batchId`          | Tenant (`OWNER`, `ADMIN`) | Deletes batch.                                                                |
+| `PATCH`  | `/v1/campaigns/:campaignId/batches/:batchId/archive`  | Tenant (`OWNER`, `ADMIN`) | Soft-deletes batch.                                                           |
 
 ---
 
 ### 6.10 Tenant Leads, Calls & Dashboard
 
-| Method | Endpoint | Auth Guard | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/v1/leads` | Tenant Member | Filtered lead list (`?campaignId=&batchId=&status=&search=&page=&limit=`). |
-| `GET` | `/v1/leads/stats` | Tenant Member | Lead counts grouped by status. |
-| `GET` | `/v1/leads/:id` | Tenant Member | Lead details and historical call attempts. |
-| `PATCH` | `/v1/leads/:id/archive` | Tenant (`OWNER`, `ADMIN`) | Soft-deletes lead. |
-| `GET` | `/v1/calls` | Tenant Member | Filtered call records (`?campaignId=&batchId=&status=&disposition=&page=&limit=`). |
-| `GET` | `/v1/calls/stats` | Tenant Member | Aggregated call stats (duration, cost, completion rate). |
-| `GET` | `/v1/calls/available-filters` | Tenant Member | Dynamic filter options populated from call data. |
-| `GET` | `/v1/calls/:id` | Tenant Member | Call detail with cost breakdown, recording URL, summary. |
-| `GET` | `/v1/calls/:id/transcript` | Tenant Member | Formatted transcript and chronological messages array. |
-| `PATCH` | `/v1/calls/:id/archive` | Tenant (`OWNER`, `ADMIN`) | Soft-deletes call record. |
-| `GET` | `/v1/dashboard/overview` | Tenant Member | KPI overview cards (active campaigns, calls made, balance). |
-| `GET` | `/v1/dashboard/call-trends` | Tenant Member | Time-series call volume and completion trends. |
-| `GET` | `/v1/dashboard/spend-trends` | Tenant Member | Time-series wallet debit / spend trends. |
-| `GET` | `/v1/dashboard/lead-funnel` | Tenant Member | Lead status conversion funnel. |
-| `GET` | `/v1/classifier/results` | Tenant Member | Objective evaluation results for calls. |
-| `GET` | `/v1/classifier/results/:callId` | Tenant Member | Objective evaluation result for a single call. |
+| Method  | Endpoint                         | Auth Guard                | Description                                                                        |
+| :------ | :------------------------------- | :------------------------ | :--------------------------------------------------------------------------------- |
+| `GET`   | `/v1/leads`                      | Tenant Member             | Filtered lead list (`?campaignId=&batchId=&status=&search=&page=&limit=`).         |
+| `GET`   | `/v1/leads/stats`                | Tenant Member             | Lead counts grouped by status.                                                     |
+| `GET`   | `/v1/leads/:id`                  | Tenant Member             | Lead details and historical call attempts.                                         |
+| `PATCH` | `/v1/leads/:id/archive`          | Tenant (`OWNER`, `ADMIN`) | Soft-deletes lead.                                                                 |
+| `GET`   | `/v1/calls`                      | Tenant Member             | Filtered call records (`?campaignId=&batchId=&status=&disposition=&page=&limit=`). |
+| `GET`   | `/v1/calls/stats`                | Tenant Member             | Aggregated call stats (duration, cost, completion rate).                           |
+| `GET`   | `/v1/calls/available-filters`    | Tenant Member             | Dynamic filter options populated from call data.                                   |
+| `GET`   | `/v1/calls/:id`                  | Tenant Member             | Call detail with cost breakdown, recording URL, summary.                           |
+| `GET`   | `/v1/calls/:id/transcript`       | Tenant Member             | Formatted transcript and chronological messages array.                             |
+| `PATCH` | `/v1/calls/:id/archive`          | Tenant (`OWNER`, `ADMIN`) | Soft-deletes call record.                                                          |
+| `GET`   | `/v1/dashboard/overview`         | Tenant Member             | KPI overview cards (active campaigns, calls made, balance).                        |
+| `GET`   | `/v1/dashboard/call-trends`      | Tenant Member             | Time-series call volume and completion trends.                                     |
+| `GET`   | `/v1/dashboard/spend-trends`     | Tenant Member             | Time-series wallet debit / spend trends.                                           |
+| `GET`   | `/v1/dashboard/lead-funnel`      | Tenant Member             | Lead status conversion funnel.                                                     |
+| `GET`   | `/v1/classifier/results`         | Tenant Member             | Objective evaluation results for calls.                                            |
+| `GET`   | `/v1/classifier/results/:callId` | Tenant Member             | Objective evaluation result for a single call.                                     |
 
 ---
 
@@ -492,6 +498,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 > Scoped queries require `?tenantId=<uuid>` where noted.
 
 #### Admin Auth & Invites
+
 - `POST /v1/admin/auth/login` — Admin login (sets admin httpOnly cookies)
 - `POST /v1/admin/auth/forgot-password` — Admin password reset OTP request
 - `POST /v1/admin/auth/forgot-password/verify-otp` — Verify reset OTP
@@ -504,6 +511,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `POST /v1/admin/invites/:id/revoke` — Revoke invite token
 
 #### Admin Dashboard & Tenants Management
+
 - `GET /v1/admin/dashboard/overview` — Platform-wide KPIs (tenants, calls, revenue)
 - `GET /v1/admin/dashboard/revenue-trends` — Platform revenue over time
 - `GET /v1/admin/dashboard/call-volume-trends` — Call volume over time
@@ -517,6 +525,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `PATCH /v1/admin/users/:id/active` — Toggle user active state (deactivation kicks sessions)
 
 #### Admin Plans & Subscriptions
+
 - `GET /v1/admin/plans` — List plan families
 - `GET /v1/admin/plans/:id` — Single plan family detail
 - `POST /v1/admin/plans` — Create plan family (`{ name, slug, description, displayOrder }`)
@@ -529,6 +538,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `GET /v1/admin/plans/:planId/subscribers` — Paginated subscriber list with real-time usage vs limits
 
 #### Admin Bolna Keys & Workspace Migration
+
 - `GET /v1/admin/bolna-keys` — List encrypted Bolna keys, balance & concurrency
 - `POST /v1/admin/bolna-keys` — Register encrypted Bolna key (`{ keyIdentifier, rawApiKey, type }`)
 - `PATCH /v1/admin/bolna-keys/:id` — Update key label/type
@@ -540,6 +550,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `GET /v1/admin/bolna-keys/tenants/:tenantId/switch-status` — Polling migration status (`IDLE` \| `CLONING` \| `FAILED`)
 
 #### Admin Platform Agents & Blueprint Management
+
 - `GET /v1/admin/platform-agents/discover-bolna-agents` — Discover agents in master Bolna account
 - `GET /v1/admin/platform-agents/preview-bolna-agent/:bolnaId` — Preview agent configuration
 - `POST /v1/admin/platform-agents/import-from-bolna` — Import agent as master platform agent
@@ -562,6 +573,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `PATCH /v1/admin/platform-agents/:id/extraction-config` — Update prompt variables config
 
 #### Admin Extraction Taxonomy & Industry Packs
+
 - `GET /v1/admin/extractions/bolna/categories` & `dispositions` — Read-only preview from Bolna
 - `POST /v1/admin/extractions/categories` — Create extraction category
 - `GET /v1/admin/extractions/categories` (`/:id`) — List / view categories
@@ -585,6 +597,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `DELETE /v1/admin/industry-packs/agents/:agentId` — Remove agent from industry pack
 
 #### Admin Classifier System (TypeSafe JEV LLM)
+
 - `POST /v1/admin/classifier/dispositions` — Create classifier question (`BOOLEAN`, `CHOICE`, `MULTI_CHOICE`)
 - `PATCH /v1/admin/classifier/dispositions/:id` — Update classifier question
 - `DELETE /v1/admin/classifier/dispositions/:id` — Delete classifier question
@@ -596,6 +609,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `GET /v1/admin/classifier/results` (`/:callId`) — View all call evaluation results
 
 #### Admin Wallet & Financial Operations
+
 - `GET /v1/admin/wallet/tenants/:tenantId` — Inspect tenant wallet balance
 - `GET /v1/admin/wallet/tenants/:tenantId/transactions` — Inspect tenant financial ledger
 - `POST /v1/admin/wallet/adjust` — Manual credit/debit adjustment (`{ tenantId, amount, type, description }`)
@@ -604,6 +618,7 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 - `POST /v1/admin/payments/activate-free` — Activate free onboarding for tenant (skips payment gateway)
 
 #### Admin Scoped Data Inspection (Read-Only)
+
 - `GET /v1/admin/campaigns?tenantId=<uuid>` (`/:id`, `/:id/stats`, `/:id/archive`, `/:id/restore`)
 - `GET /v1/admin/batches?tenantId=<uuid>&campaignId=<uuid>` (`/:id`, `/:id/stats`, `/:id/archive`, `/:id/restore`)
 - `GET /v1/admin/leads?tenantId=<uuid>` (`/stats`, `/:id`, `/:id/archive`, `/:id/restore`)
@@ -662,13 +677,13 @@ All requests accept and return JSON unless otherwise stated. Authentication is h
 
 The system runs five persistent background schedulers initialized in `src/server.ts`:
 
-| Scheduler | Frequency / Trigger | Worker File | Description |
-| :--- | :--- | :--- | :--- |
-| **`batchProcessing`** | Event-driven (Bull Queue `batch-processing`) | `batch-processing.worker.ts` | Asynchronously processes uploaded CSV/XLSX lead sheets, validates phones, deduplicates, uploads to Cloudinary, and registers with Bolna API. |
-| **`classifierExtraction`** | Event-driven (Bull Queue `classifier-extraction`) | `classifier-extraction.worker.ts` | Asynchronously executes JEV LLM prompt classification on call transcripts after call webhook completion. |
-| **`agentClone`** | Cron / Event-driven | `agent-clone.worker.ts` | Clones platform agents into a tenant's workspace during dedicated key assignment or workspace migration. |
-| **`bonusExpiry`** | Daily Cron (`0 0 * * *`) | `bonus-expiry.scheduler.ts` | Sweeps database for wallets whose `bonusExpiresAt` has passed, setting `bonusBalance = 0` and recording `BONUS_EXPIRY` ledger entries. |
-| **`refreshTokenCleanup`** | Daily Cron (`0 3 * * *`) | `refresh-token-cleanup.scheduler.ts` | Purges expired or revoked tokens from the `RefreshToken` table. |
+| Scheduler                  | Frequency / Trigger                               | Worker File                          | Description                                                                                                                                  |
+| :------------------------- | :------------------------------------------------ | :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`batchProcessing`**      | Event-driven (Bull Queue `batch-processing`)      | `batch-processing.worker.ts`         | Asynchronously processes uploaded CSV/XLSX lead sheets, validates phones, deduplicates, uploads to Cloudinary, and registers with Bolna API. |
+| **`classifierExtraction`** | Event-driven (Bull Queue `classifier-extraction`) | `classifier-extraction.worker.ts`    | Asynchronously executes JEV LLM prompt classification on call transcripts after call webhook completion.                                     |
+| **`agentClone`**           | Cron / Event-driven                               | `agent-clone.worker.ts`              | Clones platform agents into a tenant's workspace during dedicated key assignment or workspace migration.                                     |
+| **`bonusExpiry`**          | Daily Cron (`0 0 * * *`)                          | `bonus-expiry.scheduler.ts`          | Sweeps database for wallets whose `bonusExpiresAt` has passed, setting `bonusBalance = 0` and recording `BONUS_EXPIRY` ledger entries.       |
+| **`refreshTokenCleanup`**  | Daily Cron (`0 3 * * *`)                          | `refresh-token-cleanup.scheduler.ts` | Purges expired or revoked tokens from the `RefreshToken` table.                                                                              |
 
 ---
 
@@ -742,6 +757,7 @@ SKIP_CROSS_BATCH_DEDUP=false
 ## 10. Frontend Client Integration Guide
 
 ### Axios Instance Setup
+
 Because authentication is cookie-based, the client must enable credentials:
 
 ```typescript
@@ -771,6 +787,6 @@ api.interceptors.response.use(
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 ```
