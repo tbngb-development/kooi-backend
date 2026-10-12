@@ -18,7 +18,6 @@ import {
   listClassifierDispositionsQuerySchema,
   listClassifierResultsQuerySchema,
 } from "./classifier.schema";
-import { getTenantContext } from "../../../shared/utils/tenant-context";
 
 export class AdminClassifierController {
   constructor(
@@ -76,8 +75,11 @@ export class AdminClassifierController {
       await this.deleteDisposition.execute(dispositionId);
       sendSuccess(
         res,
-        null,
-        HttpStatus.NO_CONTENT,
+        {
+          message: "Classifier disposition deleted successfully",
+          id: dispositionId,
+        },
+        HttpStatus.OK,
         "Classifier disposition deleted",
       );
     } catch (err) {
@@ -204,13 +206,8 @@ export class AdminClassifierController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const { tenantId } = getTenantContext(req);
-      const resolvedTenantId = Array.isArray(tenantId) ? tenantId[0] : tenantId;
       const query = listClassifierResultsQuerySchema.parse(req.query);
-      const result = await this.listCallResults.execute({
-        tenantId: resolvedTenantId,
-        ...query,
-      });
+      const result = await this.listCallResults.execute(query);
       sendSuccess(res, result);
     } catch (err) {
       next(err);

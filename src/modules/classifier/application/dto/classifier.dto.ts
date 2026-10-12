@@ -89,7 +89,7 @@ export interface TestClassifierResult {
 // ── Call Results ────────────────────────────────────────────────────────────
 
 export interface ClassifierResultFilters {
-  tenantId: string;
+  tenantId?: string;
   campaignId?: string;
   batchId?: string;
   status?: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "SKIPPED";

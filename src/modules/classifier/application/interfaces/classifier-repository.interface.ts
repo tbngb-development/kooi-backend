@@ -82,7 +82,7 @@ export interface ClassifierRepository {
   getCallResult(callId: string): Promise<ClassifierCallResult | null>;
 
   listCallResults(filters: {
-    tenantId: string;
+    tenantId?: string;
     campaignId?: string;
     batchId?: string;
     status?: ClassifierExtractionStatus;
