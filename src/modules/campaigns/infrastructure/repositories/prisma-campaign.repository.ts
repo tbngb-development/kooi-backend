@@ -11,6 +11,7 @@ import type {
   AssistantWithAgentData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
+import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
 import type { Prisma, CampaignStatus } from "@prisma/client";
 import type {
   CampaignDetailOverview,
@@ -366,7 +367,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
     });
 
     if (!campaign) {
-      throw new Error("Campaign not found");
+      throw new CampaignNotFoundError();
     }
 
     const callWhere = { campaignId };

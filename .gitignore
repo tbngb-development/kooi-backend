@@ -6,4 +6,5 @@ dist
 .env.production
 .env.staging
 docs
+coverage/
 

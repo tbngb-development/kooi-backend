@@ -61,8 +61,8 @@ export function computeBonusFirstDeduction(
     fromCash,
     newCashBalance,
     newBonusBalance,
-    cashDelta: -fromCash,
-    bonusDelta: -fromBonus,
+    cashDelta: fromCash === 0 ? 0 : -fromCash,
+    bonusDelta: fromBonus === 0 ? 0 : -fromBonus,
   };
 }
 
