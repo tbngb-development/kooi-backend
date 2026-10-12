@@ -11,7 +11,13 @@
     "seed:plans": "tsx src/seeds/plans.seed.ts",
     "seed:dispositions": "tsx  src/seeds/dispositions.seed.ts",
     "seed:classifiers": "tsx  src/seeds/classifier-dispositions.seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "cross-env NODE_ENV=test vitest run",
+    "test:watch": "cross-env NODE_ENV=test vitest",
+    "test:unit": "cross-env NODE_ENV=test vitest run tests/unit",
+    "test:integration": "cross-env NODE_ENV=test vitest run tests/integration",
+    "test:api": "cross-env NODE_ENV=test vitest run tests/api",
+    "test:coverage": "cross-env NODE_ENV=test vitest run --coverage"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -56,18 +62,25 @@
     "@types/node-cron": "^3.0.11",
     "@types/pdf-parse": "^1.1.5",
     "@types/streamifier": "^0.1.2",
+    "@types/supertest": "^7.2.1",
     "@types/wav": "^1.0.4",
     "@types/xlsx": "^0.0.35",
     "@typescript-eslint/eslint-plugin": "^8.68.0",
     "@typescript-eslint/parser": "^8.68.0",
+    "@vitest/coverage-v8": "^5.0.4",
+    "cross-env": "^10.1.0",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
+    "ioredis-mock": "^8.13.1",
     "nodemon": "^3.1.14",
     "prettier": "^3.9.6",
     "shx": "^0.4.0",
+    "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
   }
 }
