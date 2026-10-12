@@ -79,7 +79,6 @@ export class ResumeBatchUseCase {
 
     // Reassign leads
     await this.batchRepo.reassignLeadsToBatch(batchId, newBatch.id);
-    await this.batchRepo.decrementTotalLeads(batchId, pendingLeads.length);
 
     // Build Bolna CSV
     const campaignVariables =

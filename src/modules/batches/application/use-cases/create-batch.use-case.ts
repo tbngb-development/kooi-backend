@@ -292,11 +292,6 @@ export class CreateBatchUseCase {
       bolnaScheduledAt,
     });
 
-    await this.campaignRepo.incrementTotalLeads(
-      input.campaignId,
-      newLeads.length,
-    );
-
     // 16. If running immediately, flip campaign status to RUNNING (DRAFT campaigns only)
     if (input.runImmediately && campaign.status === "DRAFT") {
       await this.campaignRepo.updateStatus(input.campaignId, "RUNNING", {

@@ -22,6 +22,84 @@ import {
 } from "@prisma/client";
 
 export class PrismaBatchRepository implements BatchRepository {
+  private async getBatchMetricsMap(batchIds: string[]): Promise<
+    Map<
+      string,
+      {
+        totalLeads: number;
+        calledLeads: number;
+        completedLeads: number;
+        failedLeads: number;
+      }
+    >
+  > {
+    const map = new Map<
+      string,
+      {
+        totalLeads: number;
+        calledLeads: number;
+        completedLeads: number;
+        failedLeads: number;
+      }
+    >();
+
+    if (batchIds.length === 0) return map;
+
+    for (const id of batchIds) {
+      map.set(id, {
+        totalLeads: 0,
+        calledLeads: 0,
+        completedLeads: 0,
+        failedLeads: 0,
+      });
+    }
+
+    const [leadGroups, callStatusGroups, calledLeadGroups] = await Promise.all([
+      prisma.lead.groupBy({
+        by: ["batchId"],
+        where: { batchId: { in: batchIds }, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.groupBy({
+        by: ["batchId", "status"],
+        where: { batchId: { in: batchIds }, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.groupBy({
+        by: ["batchId", "leadId"],
+        where: {
+          batchId: { in: batchIds },
+          isDeleted: false,
+        },
+      }),
+    ]);
+
+    for (const lg of leadGroups) {
+      if (lg.batchId && map.has(lg.batchId)) {
+        map.get(lg.batchId)!.totalLeads = lg._count;
+      }
+    }
+
+    for (const cg of callStatusGroups) {
+      if (cg.batchId && map.has(cg.batchId)) {
+        const item = map.get(cg.batchId)!;
+        if (cg.status === "COMPLETED") {
+          item.completedLeads += cg._count;
+        } else if (cg.status === "FAILED") {
+          item.failedLeads += cg._count;
+        }
+      }
+    }
+
+    for (const clg of calledLeadGroups) {
+      if (clg.batchId && map.has(clg.batchId)) {
+        map.get(clg.batchId)!.calledLeads += 1;
+      }
+    }
+
+    return map;
+  }
+
   async list(
     tenantId: string,
     campaignId: string,
@@ -35,7 +113,21 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
-    return batches as unknown as BatchListItem[];
+    const batchIds = batches.map((b) => b.id);
+    const metricsMap = await this.getBatchMetricsMap(batchIds);
+
+    return batches.map((batch) => {
+      const counts = metricsMap.get(batch.id) ?? {
+        totalLeads: 0,
+        calledLeads: 0,
+        completedLeads: 0,
+        failedLeads: 0,
+      };
+      return {
+        ...this.toEntityData(batch, counts),
+        _count: batch._count,
+      };
+    });
   }
 
   // Update the findById method inside the class to support explicit isDeleted
@@ -55,7 +147,11 @@ export class PrismaBatchRepository implements BatchRepository {
     });
 
     if (!batch) return null;
-    return this.toEntityData(batch);
+
+    const metricsMap = await this.getBatchMetricsMap([batch.id]);
+    const counts = metricsMap.get(batch.id);
+
+    return this.toEntityData(batch, counts);
   }
 
   async findByIdWithCounts(
@@ -71,7 +167,14 @@ export class PrismaBatchRepository implements BatchRepository {
     });
 
     if (!batch) return null;
-    return batch as unknown as BatchListItem;
+
+    const metricsMap = await this.getBatchMetricsMap([batch.id]);
+    const counts = metricsMap.get(batch.id);
+
+    return {
+      ...this.toEntityData(batch, counts),
+      _count: batch._count,
+    };
   }
 
   async findByIdWithDetail(
@@ -90,32 +193,37 @@ export class PrismaBatchRepository implements BatchRepository {
     if (!batch) return null;
 
     // Parallel aggregations for status breakdowns, costs, and durations
-    const [leadStats, callStats, callAgg, completedDurationAgg] = await Promise.all([
-      prisma.lead.groupBy({
-        by: ["status"],
-        where: { batchId, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["status"],
-        where: { batchId, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.aggregate({
-        where: { batchId, isDeleted: false },
-        _sum: { chargedAmount: true, duration: true },
-        _count: true,
-      }),
-      prisma.call.aggregate({
-        where: {
-          batchId,
-          status: "COMPLETED",
-          duration: { not: null },
-          isDeleted: false,
-        },
-        _avg: { duration: true },
-      }),
-    ]);
+    const [leadStats, callStats, callAgg, completedDurationAgg, calledLeadRows] =
+      await Promise.all([
+        prisma.lead.groupBy({
+          by: ["status"],
+          where: { batchId, isDeleted: false },
+          _count: true,
+        }),
+        prisma.call.groupBy({
+          by: ["status"],
+          where: { batchId, isDeleted: false },
+          _count: true,
+        }),
+        prisma.call.aggregate({
+          where: { batchId, isDeleted: false },
+          _sum: { chargedAmount: true, duration: true },
+          _count: true,
+        }),
+        prisma.call.aggregate({
+          where: {
+            batchId,
+            status: "COMPLETED",
+            duration: { not: null },
+            isDeleted: false,
+          },
+          _avg: { duration: true },
+        }),
+        prisma.call.groupBy({
+          by: ["leadId"],
+          where: { batchId, isDeleted: false },
+        }),
+      ]);
 
     const leadCountsByStatus: Record<string, number> = {};
     for (const stat of leadStats) {
@@ -127,9 +235,15 @@ export class PrismaBatchRepository implements BatchRepository {
       callCountsByStatus[stat.status] = stat._count;
     }
 
+    const totalLeads = leadStats.reduce((acc, s) => acc + s._count, 0);
+    const calledLeads = calledLeadRows.length;
+    const completedLeads = callCountsByStatus["COMPLETED"] ?? 0;
+    const failedLeads = callCountsByStatus["FAILED"] ?? 0;
+
     const totalCalls = callAgg._count ?? 0;
     const totalCostPaisa = callAgg._sum.chargedAmount ?? 0;
-    const avgCostPaisa = totalCalls > 0 ? Math.round(totalCostPaisa / totalCalls) : 0;
+    const avgCostPaisa =
+      totalCalls > 0 ? Math.round(totalCostPaisa / totalCalls) : 0;
     const totalDurationSec = callAgg._sum.duration ?? 0;
     const avgDurationSec = Math.round(completedDurationAgg._avg.duration ?? 0);
 
@@ -137,7 +251,9 @@ export class PrismaBatchRepository implements BatchRepository {
     if (batch.startedAt && batch.completedAt) {
       executionDurationSec = Math.max(
         0,
-        Math.floor((batch.completedAt.getTime() - batch.startedAt.getTime()) / 1000),
+        Math.floor(
+          (batch.completedAt.getTime() - batch.startedAt.getTime()) / 1000,
+        ),
       );
     } else if (batch.startedAt && batch.status === "RUNNING") {
       executionDurationSec = Math.max(
@@ -147,7 +263,12 @@ export class PrismaBatchRepository implements BatchRepository {
     }
 
     return {
-      ...this.toEntityData(batch),
+      ...this.toEntityData(batch, {
+        totalLeads,
+        calledLeads,
+        completedLeads,
+        failedLeads,
+      }),
       campaign: batch.campaign,
       leadCountsByStatus,
       callCountsByStatus,
@@ -170,7 +291,6 @@ export class PrismaBatchRepository implements BatchRepository {
         tenantId: data.tenantId,
         status: "CREATED",
         fileName: data.fileName,
-        totalLeads: data.totalLeads,
         retryConfig:
           (data.retryConfig as unknown as Prisma.InputJsonValue) ?? undefined,
         termsAccepted: data.termsAccepted,
@@ -180,7 +300,12 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
-    return this.toEntityData(batch);
+    return this.toEntityData(batch, {
+      totalLeads: data.totalLeads ?? 0,
+      calledLeads: 0,
+      completedLeads: 0,
+      failedLeads: 0,
+    });
   }
 
   async markPendingLeadsAsStopped(
@@ -391,13 +516,6 @@ export class PrismaBatchRepository implements BatchRepository {
     return result.count;
   }
 
-  async decrementTotalLeads(batchId: string, count: number): Promise<void> {
-    await prisma.leadBatch.update({
-      where: { id: batchId },
-      data: { totalLeads: { decrement: count } },
-    });
-  }
-
   async resetActiveLeadsToPending(batchId: string): Promise<number> {
     const result = await prisma.lead.updateMany({
       where: { batchId, status: "PENDING" },
@@ -426,16 +544,6 @@ export class PrismaBatchRepository implements BatchRepository {
   }
 
   async recalculateCampaignStats(campaignId: string): Promise<void> {
-    const agg = await prisma.leadBatch.aggregate({
-      where: { campaignId, isDeleted: false },
-      _sum: {
-        totalLeads: true,
-        calledLeads: true,
-        completedLeads: true,
-        failedLeads: true,
-      },
-    });
-
     const batches = await prisma.leadBatch.findMany({
       where: { campaignId, isDeleted: false },
       select: { status: true },
@@ -466,16 +574,12 @@ export class PrismaBatchRepository implements BatchRepository {
       }
     }
 
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: {
-        totalLeads: agg._sum.totalLeads ?? 0,
-        calledLeads: agg._sum.calledLeads ?? 0,
-        completedLeads: agg._sum.completedLeads ?? 0,
-        failedLeads: agg._sum.failedLeads ?? 0,
-        ...campaignStatusUpdate,
-      },
-    });
+    if (Object.keys(campaignStatusUpdate).length > 0) {
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: campaignStatusUpdate,
+      });
+    }
   }
 
   async findExistingPhones(
@@ -522,13 +626,6 @@ export class PrismaBatchRepository implements BatchRepository {
     await prisma.leadBatch.updateMany({
       where: { id: batchId },
       data: { rawFileUrl: url },
-    });
-  }
-
-  async updateTotalLeads(batchId: string, count: number): Promise<void> {
-    await prisma.leadBatch.updateMany({
-      where: { id: batchId },
-      data: { totalLeads: count },
     });
   }
 
@@ -618,36 +715,40 @@ export class PrismaBatchRepository implements BatchRepository {
     return result.count;
   }
 
-  private toEntityData(batch: {
-    id: string;
-    bolnaBatchId: string | null;
-    tenantId: string;
-    campaignId: string;
-    status: string;
-    fileName: string | null;
-    originalFileUrl: string | null;
-    transformedCsvUrl: string | null;
-    retryConfig: unknown;
-    scheduledAt: Date | null;
-    bolnaScheduledAt: Date | null;
-    totalLeads: number;
-    calledLeads: number;
-    completedLeads: number;
-    failedLeads: number;
-    termsAccepted: boolean;
-    termsAcceptedAt: Date | null;
-    termsVersion: string | null;
-    startedAt?: Date | null;
-    completedAt?: Date | null;
-    processingStage?: string | null;
-    processingProgress?: number;
-    processingError?: string | null;
-    rawFileUrl?: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    isDeleted: boolean;
-    deletedAt: Date | null;
-  }): LeadBatchEntityData {
+  private toEntityData(
+    batch: {
+      id: string;
+      bolnaBatchId: string | null;
+      tenantId: string;
+      campaignId: string;
+      status: string;
+      fileName: string | null;
+      originalFileUrl: string | null;
+      transformedCsvUrl: string | null;
+      retryConfig: unknown;
+      scheduledAt: Date | null;
+      bolnaScheduledAt: Date | null;
+      termsAccepted: boolean;
+      termsAcceptedAt: Date | null;
+      termsVersion: string | null;
+      startedAt?: Date | null;
+      completedAt?: Date | null;
+      processingStage?: string | null;
+      processingProgress?: number;
+      processingError?: string | null;
+      rawFileUrl?: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      isDeleted: boolean;
+      deletedAt: Date | null;
+    },
+    counts?: {
+      totalLeads?: number;
+      calledLeads?: number;
+      completedLeads?: number;
+      failedLeads?: number;
+    },
+  ): LeadBatchEntityData {
     return {
       id: batch.id,
       bolnaBatchId: batch.bolnaBatchId,
@@ -660,10 +761,10 @@ export class PrismaBatchRepository implements BatchRepository {
       retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined,
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
-      totalLeads: batch.totalLeads,
-      calledLeads: batch.calledLeads,
-      completedLeads: batch.completedLeads,
-      failedLeads: batch.failedLeads,
+      totalLeads: counts?.totalLeads ?? 0,
+      calledLeads: counts?.calledLeads ?? 0,
+      completedLeads: counts?.completedLeads ?? 0,
+      failedLeads: counts?.failedLeads ?? 0,
       termsAccepted: batch.termsAccepted,
       termsAcceptedAt: batch.termsAcceptedAt,
       termsVersion: batch.termsVersion,
