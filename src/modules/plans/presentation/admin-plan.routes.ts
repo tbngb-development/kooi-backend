@@ -8,7 +8,7 @@ import {
   updatePlanSchema,
   createPlanVersionSchema,
   updateTenantPlanOverridesSchema,
-  changePlanSchema,
+  adminChangePlanSchema,
 } from "./plan.schema";
 
 export function buildAdminPlanRoutes(
@@ -45,7 +45,7 @@ export function buildAdminPlanRoutes(
 
   router.post(
     "/tenants/:tenantId/change-plan",
-    validate(changePlanSchema),
+    validate(adminChangePlanSchema),
     controller.changeTenantPlan,
   );
 
