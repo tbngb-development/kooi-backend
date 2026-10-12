@@ -17,10 +17,11 @@ export class CallLifecycleService {
     call: ResolvedCallContext,
   ): Promise<void> {
     if (call.batchId) {
-      const activeLeads = await this.webhookRepo.countActiveLeadsInBatch(
-        call.batchId,
-      );
-      if (activeLeads === 0) {
+      const [activeLeads, activeCalls] = await Promise.all([
+        this.webhookRepo.countActiveLeadsInBatch(call.batchId),
+        this.webhookRepo.countActiveCallsInBatch(call.batchId),
+      ]);
+      if (activeLeads === 0 && activeCalls === 0) {
         await this.webhookRepo.updateBatchStatus(
           call.batchId,
           "COMPLETED",
@@ -61,11 +62,11 @@ export class CallLifecycleService {
         }
       }
     } else {
-      const legacyActive =
-        await this.webhookRepo.countActiveLeadsInCampaignLegacy(
-          call.campaignId,
-        );
-      if (legacyActive === 0) {
+      const [legacyActiveLeads, legacyActiveCalls] = await Promise.all([
+        this.webhookRepo.countActiveLeadsInCampaignLegacy(call.campaignId),
+        this.webhookRepo.countActiveCallsInCampaignLegacy(call.campaignId),
+      ]);
+      if (legacyActiveLeads === 0 && legacyActiveCalls === 0) {
         await this.webhookRepo.updateCampaignStatus(
           call.campaignId,
           "COMPLETED",

@@ -189,6 +189,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
       recording?: string | null;
       cost?: number | null;
       extracted_data?: unknown;
+      callHistory?: unknown[] | null;
       endedAt?: Date;
     },
   ): Promise<void> {
@@ -203,6 +204,9 @@ export class PrismaWebhookRepository implements WebhookRepository {
         recording: data.recording,
         cost: data.cost,
         extractionResult: data.extracted_data as any,
+        ...(data.callHistory !== undefined && {
+          callHistory: data.callHistory as any,
+        }),
         endedAt: data.endedAt,
       },
     });
@@ -367,11 +371,32 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
+  async countActiveCallsInBatch(batchId: string): Promise<number> {
+    return prisma.call.count({
+      where: {
+        batchId,
+        status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+        isDeleted: false,
+      },
+    });
+  }
+
   async countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number> {
     return prisma.lead.count({
       where: {
         campaignId,
         status: { in: ["PENDING", "CALLING"] },
+      },
+    });
+  }
+
+  async countActiveCallsInCampaignLegacy(campaignId: string): Promise<number> {
+    return prisma.call.count({
+      where: {
+        campaignId,
+        batchId: null,
+        status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+        isDeleted: false,
       },
     });
   }

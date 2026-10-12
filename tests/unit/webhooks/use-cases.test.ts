@@ -48,9 +48,11 @@ describe("Webhook Use Cases", () => {
       updateCallTerminalState: vi.fn(),
       updateLeadStatus: vi.fn(),
       incrementTerminalStats: vi.fn(),
-      countActiveLeadsInBatch: vi.fn(),
-      countActiveLeadsInCampaignLegacy: vi.fn(),
-      getAllBatchStatuses: vi.fn(),
+      countActiveLeadsInBatch: vi.fn().mockResolvedValue(0),
+      countActiveCallsInBatch: vi.fn().mockResolvedValue(0),
+      countActiveLeadsInCampaignLegacy: vi.fn().mockResolvedValue(0),
+      countActiveCallsInCampaignLegacy: vi.fn().mockResolvedValue(0),
+      getAllBatchStatuses: vi.fn().mockResolvedValue([]),
       updateBatchStatus: vi.fn(),
       stopBatchCallsAndLeads: vi.fn(),
       updateCampaignStatus: vi.fn(),
@@ -114,6 +116,10 @@ describe("Webhook Use Cases", () => {
         "CALLING",
         [],
       );
+      expect(mockWebhookRepo.updateLeadStatus).toHaveBeenCalledWith(
+        "lead-1",
+        "CALLING",
+      );
       expect(mockWebhookRepo.updateBatchStatus).toHaveBeenCalledWith(
         "batch-1",
         "RUNNING",
@@ -125,6 +131,43 @@ describe("Webhook Use Cases", () => {
         expect.any(Date),
       );
       expect(mockStopBatches.execute).toHaveBeenCalledWith({ tenantId: "tenant-1" });
+    });
+
+    it("preserves existing callHistory when handling in-flight events", async () => {
+      const callWithHistory = {
+        ...sampleResolvedCall,
+        callHistory: [
+          {
+            attempt: 1,
+            bolnaCallId: "bolna-call-1",
+            status: "BUSY",
+            duration: 0,
+            cost: 0,
+            timestamp: "2026-10-12T10:00:00Z",
+          },
+        ],
+      };
+      mockCallResolver.resolveCallRecord.mockResolvedValue(callWithHistory);
+
+      const useCase = new ProcessCallWebhookUseCase(
+        mockWebhookRepo,
+        mockCallResolver,
+        mockCallCompletion,
+        mockCallTerminal,
+      );
+
+      await useCase.execute({
+        id: "bolna-call-retry-1",
+        status: "ringing",
+      });
+
+      expect(mockWebhookRepo.updateCallStatusAndHistory).toHaveBeenCalledWith(
+        "call-1",
+        "bolna-call-retry-1",
+        "CALLING",
+        callWithHistory.callHistory,
+      );
+      expect(mockWebhookRepo.updateLeadStatus).toHaveBeenCalledWith("lead-1", "CALLING");
     });
 
     it("ignores out-of-order in-progress event on an already COMPLETED call", async () => {
