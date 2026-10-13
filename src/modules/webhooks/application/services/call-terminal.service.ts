@@ -133,7 +133,9 @@ export class CallTerminalService {
       retriesCompleted,
     });
 
-    await this.callLifecycle.checkBatchAndCampaignCompletion(call);
+    if (call.campaignId) {
+      await this.callLifecycle.checkBatchAndCampaignCompletion(call);
+    }
   }
 
   /**
@@ -172,6 +174,8 @@ export class CallTerminalService {
       tenantId: call.tenantId,
     });
 
-    await this.callLifecycle.checkBatchAndCampaignCompletion(call);
+    if (call.campaignId) {
+      await this.callLifecycle.checkBatchAndCampaignCompletion(call);
+    }
   }
 }

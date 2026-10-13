@@ -4,11 +4,12 @@ import { Router } from "express";
 import type { TenantCallController } from "./tenant-call.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validateQuery } from "../../../shared/middleware/validate";
+import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   listCallsQuerySchema,
   getCallStatsQuerySchema,
   availableFiltersQuerySchema,
+  quickDialSchema,
 } from "./call.schema";
 
 export function buildTenantCallRoutes(
@@ -19,6 +20,12 @@ export function buildTenantCallRoutes(
   const router = Router();
 
   router.use(authenticate.tenant());
+
+  // Initiate on-demand single call (Quick Dial)
+  router.post("/quick-dial", validate(quickDialSchema), controller.quickDial);
+
+  // Stop an active/pending call
+  router.post("/:id/stop", controller.stopCall);
 
   router.get(
     "/stats",

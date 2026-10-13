@@ -10,6 +10,8 @@ import type {
   LeadStatus,
   CampaignStatus,
   LeadStopReason,
+  CallType,
+  CallSource,
 } from "@prisma/client";
 
 import type {
@@ -22,8 +24,11 @@ const callSelectFields = {
   bolnaCallId: true,
   tenantId: true,
   campaignId: true,
+  assistantId: true,
   leadId: true,
   batchId: true,
+  type: true,
+  source: true,
   status: true,
   duration: true,
   cost: true,
@@ -50,9 +55,12 @@ export class PrismaWebhookRepository implements WebhookRepository {
     id: string;
     bolnaCallId: string | null;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
+    assistantId?: string | null;
     leadId: string;
     batchId: string | null;
+    type?: CallType;
+    source?: CallSource;
     status: CallStatus;
     duration: number | null;
     cost: number | null;
@@ -139,20 +147,26 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async createCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId?: string | null;
+    assistantId?: string | null;
     leadId: string;
-    batchId: string | null;
-    status: string;
+    batchId?: string | null;
+    type?: CallType;
+    source?: CallSource;
+    status: CallStatus;
     startedAt: Date;
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
       data: {
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
-        campaignId: data.campaignId,
+        campaignId: data.campaignId ?? null,
+        assistantId: data.assistantId ?? null,
         leadId: data.leadId,
-        batchId: data.batchId,
-        status: data.status as CallStatus,
+        batchId: data.batchId ?? null,
+        type: data.type ?? "OUTBOUND",
+        source: data.source ?? "CAMPAIGN",
+        status: data.status,
         startedAt: data.startedAt,
       },
       select: callSelectFields,

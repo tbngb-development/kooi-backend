@@ -200,14 +200,14 @@ export class CallCompletionService {
       action: "webhook.call.completed",
       callId: call.id,
       tenantId: call.tenantId,
-      campaignId: call.campaignId,
+      campaignId: call.campaignId ?? undefined,
       batchId: call.batchId ? call.batchId : undefined,
       bolnaCallId: String(bolnaCallId),
       durationSec: duration,
     });
 
     // 8. Reconcile batch and campaign completion
-    if (this.callLifecycle) {
+    if (this.callLifecycle && call.campaignId) {
       await this.callLifecycle.checkBatchAndCampaignCompletion(call);
     }
   }

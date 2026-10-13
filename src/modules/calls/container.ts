@@ -13,13 +13,17 @@ import { RestoreCallUseCase } from "./application/use-cases/restore-call.use-cas
 import { InboundCallerMatchUseCase } from "./application/use-cases/inbound-caller-match.use-case";
 import { InboundCallerMatchController } from "./presentation/inbound-caller-match.controller";
 import { SyncBolnaExecutionUseCase } from "./application/use-cases/sync-bolna-execution.use-case";
+import { QuickDialCallUseCase } from "./application/use-cases/quick-dial-call.use-case";
+import { StopCallUseCase } from "./application/use-cases/stop-call.use-case";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
+import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
 import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
+  walletRepo: WalletRepository;
   debitWalletForCall?: DebitWalletForCallUseCase;
   classifierQueue?: Queue;
   logger: Logger;
@@ -43,6 +47,13 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const archiveCall = new ArchiveCallUseCase(repo);
   const restoreCall = new RestoreCallUseCase(repo);
 
+  const quickDialCall = new QuickDialCallUseCase(
+    deps.bolnaClientFactory,
+    deps.walletRepo,
+    log,
+  );
+  const stopCall = new StopCallUseCase(deps.bolnaClientFactory, log);
+
   const inboundCallerMatch = new InboundCallerMatchUseCase(repo, log);
   const inboundCallerMatchController = new InboundCallerMatchController(
     inboundCallerMatch,
@@ -63,6 +74,8 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       getStats,
       getAvailableFilters,
       archiveCall,
+      quickDialCall,
+      stopCall,
     ),
     adminController: new AdminCallController(
       listCalls,

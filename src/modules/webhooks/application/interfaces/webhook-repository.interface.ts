@@ -4,6 +4,8 @@ import {
   type BatchStatus,
   type CampaignStatus,
   type LeadStopReason,
+  type CallType,
+  type CallSource,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
@@ -11,9 +13,12 @@ export interface ResolvedCallContext {
   id: string;
   bolnaCallId: string | null;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
+  assistantId?: string | null;
   leadId: string;
   batchId: string | null;
+  type?: CallType;
+  source?: CallSource;
   status: CallStatus;
   duration: number | null;
   cost: number | null;
@@ -83,9 +88,12 @@ export interface WebhookRepository {
   createCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId?: string | null;
+    assistantId?: string | null;
     leadId: string;
-    batchId: string | null;
+    batchId?: string | null;
+    type?: CallType;
+    source?: CallSource;
     status: CallStatus;
     startedAt: Date;
   }): Promise<ResolvedCallContext>;

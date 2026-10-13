@@ -45,100 +45,191 @@ export class InboundCallerMatchUseCase {
       normalizedPhone,
     );
 
-    if (!matchResult) {
-      this.logger?.warn("Inbound caller not found in system", {
-        action: "inbound.caller_match.unknown",
+    if (matchResult) {
+      const { lead, campaign } = matchResult;
+
+      // Create or update call record for this inbound execution
+      await this.createInboundCallRecord({
+        bolnaCallId: input.executionId,
+        tenantId: campaign.tenantId,
+        campaignId: campaign.id,
+        leadId: lead.id,
+        batchId: lead.batchId,
+      });
+
+      // Build response with campaign variables and dynamic welcome message
+      const campaignVariables = campaign.variables ?? {};
+      const leadMetadata = (lead.metadata ?? {}) as Record<string, string>;
+
+      const agentName =
+        campaignVariables.agent_name || campaignVariables.agentName || "Sara";
+
+      const builderName =
+        campaignVariables.builder_name ||
+        campaignVariables.company_name ||
+        campaignVariables.company ||
+        lead.company ||
+        "our team";
+
+      const formattedName = cleanCustomerName(lead.name);
+      const hasCustomerName = Boolean(
+        formattedName && isValidCustomerName(formattedName),
+      );
+
+      const welcomeMessage = `Hi, this is ${agentName} from ${builderName}. How may I help you?`;
+
+      const response: InboundCallerMatchOutput = {
+        is_known_lead: true,
+        contact_number: normalizePhoneNumber(lead.phone),
+        customer_name: hasCustomerName ? formattedName : "",
+        welcome_message: welcomeMessage,
+      };
+
+      for (const [key, value] of Object.entries(campaignVariables)) {
+        if (!response[key]) {
+          response[key] = value;
+        }
+      }
+
+      for (const [key, value] of Object.entries(leadMetadata)) {
+        if (
+          !response[key] &&
+          !["phone", "name", "email", "company"].includes(key.toLowerCase())
+        ) {
+          response[key] = String(value ?? "");
+        }
+      }
+
+      this.logger?.info("Inbound caller matched in campaign context", {
+        action: "inbound.caller_match.campaign_found",
+        agentId: input.agentId,
+        executionId: input.executionId,
+        leadId: lead.id,
+        campaignId: campaign.id,
+        tenantId: campaign.tenantId,
+      });
+
+      return response;
+    }
+
+    // 2. Caller not found in an active campaign -> Auto-register lead under Assistant's Tenant
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        platformAgent: { bolnaId: input.agentId },
+        isDeleted: false,
+      },
+      include: {
+        platformAgent: true,
+      },
+    });
+
+    if (!assistant) {
+      this.logger?.warn("Inbound caller agent not found in any tenant assistant", {
+        action: "inbound.caller_match.no_assistant",
         agentId: input.agentId,
         contactNumber: normalizedPhone,
       });
-
       return this.buildUnknownCallerResponse(normalizedPhone);
     }
 
-    const { lead, campaign } = matchResult;
+    // Check if lead already exists in tenant (e.g. from prior inbound or quick-dial call)
+    const digits = normalizedPhone.replace(/\D/g, "");
+    const last10 = digits.slice(-10);
+    const candidatePhones = Array.from(
+      new Set([normalizedPhone, `+91${last10}`, `91${last10}`, last10]),
+    ).filter(Boolean);
 
-    // 2. CREATE A BRAND NEW CALL RECORD for this inbound execution
-    //    Guarantees independent tracking, billing, transcript, and audio recording.
-    await this.createInboundCallRecord(
-      input.executionId,
-      campaign.tenantId,
-      campaign.id,
-      lead.id,
-      lead.batchId,
-    );
+    let lead = await prisma.lead.findFirst({
+      where: {
+        tenantId: assistant.tenantId,
+        phone: { in: candidatePhones },
+        isDeleted: false,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-    // 3. Build response with campaign variables and dynamic welcome message
-    const campaignVariables = campaign.variables ?? {};
-    const leadMetadata = (lead.metadata ?? {}) as Record<string, string>;
+    if (!lead) {
+      lead = await prisma.lead.create({
+        data: {
+          phone: normalizedPhone,
+          tenantId: assistant.tenantId,
+          assistantId: assistant.id,
+          type: "INBOUND",
+          source: "INBOUND",
+          status: "CALLING",
+        },
+      });
 
-    const agentName =
-      campaignVariables.agent_name || campaignVariables.agentName || "Sara";
+      this.logger?.info("Registered new inbound Lead record", {
+        action: "inbound.caller_match.new_lead_registered",
+        leadId: lead.id,
+        tenantId: assistant.tenantId,
+        phone: normalizedPhone,
+      });
+    } else {
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { status: "CALLING" },
+      });
+    }
 
-    const builderName =
-      campaignVariables.builder_name ||
-      campaignVariables.company_name ||
-      campaignVariables.company ||
-      lead.company ||
-      "our team";
+    // Create Inbound Call record
+    await this.createInboundCallRecord({
+      bolnaCallId: input.executionId,
+      tenantId: assistant.tenantId,
+      assistantId: assistant.id,
+      leadId: lead.id,
+    });
 
     const formattedName = cleanCustomerName(lead.name);
     const hasCustomerName = Boolean(
       formattedName && isValidCustomerName(formattedName),
     );
 
-    const welcomeMessage = `Hi, this is ${agentName} from ${builderName}. How may I help you?`;
+    const config = (assistant.config ?? {}) as Record<string, unknown>;
+    const agentName = assistant.name || "Sara";
+    const welcomeMessage =
+      (config.welcome_message as string) ||
+      (config.welcomeMessage as string) ||
+      `Hi, this is ${agentName}. Thanks for calling! How may I help you?`;
 
-    const response: InboundCallerMatchOutput = {
-      is_known_lead: true,
-      contact_number: normalizePhoneNumber(lead.phone),
-      customer_name: hasCustomerName ? formattedName : "",
-      welcome_message: welcomeMessage,
-    };
-
-    for (const [key, value] of Object.entries(campaignVariables)) {
-      if (!response[key]) {
-        response[key] = value;
-      }
-    }
-
-    for (const [key, value] of Object.entries(leadMetadata)) {
-      if (
-        !response[key] &&
-        !["phone", "name", "email", "company"].includes(key.toLowerCase())
-      ) {
-        response[key] = String(value ?? "");
-      }
-    }
-
-    this.logger?.info("Inbound caller matched and new call created", {
-      action: "inbound.caller_match.found",
+    this.logger?.info("Inbound caller processed and call record registered", {
+      action: "inbound.caller_match.registered",
       agentId: input.agentId,
       executionId: input.executionId,
       leadId: lead.id,
-      campaignId: campaign.id,
-      tenantId: campaign.tenantId,
+      tenantId: assistant.tenantId,
+      assistantId: assistant.id,
     });
 
-    return response;
+    return {
+      is_known_lead: hasCustomerName,
+      contact_number: normalizedPhone,
+      customer_name: hasCustomerName ? formattedName : "",
+      welcome_message: welcomeMessage,
+    };
   }
 
-  private async createInboundCallRecord(
-    bolnaCallId: string,
-    tenantId: string,
-    campaignId: string,
-    leadId: string,
-    batchId?: string | null,
-  ): Promise<void> {
+  private async createInboundCallRecord(params: {
+    bolnaCallId: string;
+    tenantId: string;
+    campaignId?: string | null;
+    assistantId?: string | null;
+    leadId: string;
+    batchId?: string | null;
+  }): Promise<void> {
     try {
-      // Upsert/Create safe against duplicate caller-match hits
       await prisma.call.upsert({
-        where: { bolnaCallId },
+        where: { bolnaCallId: params.bolnaCallId },
         create: {
-          bolnaCallId,
-          tenantId,
-          campaignId,
-          leadId,
-          batchId: batchId ?? null,
+          bolnaCallId: params.bolnaCallId,
+          tenantId: params.tenantId,
+          campaignId: params.campaignId ?? null,
+          assistantId: params.assistantId ?? null,
+          leadId: params.leadId,
+          batchId: params.batchId ?? null,
+          type: "INBOUND",
+          source: "INBOUND",
           status: "CALLING",
           startedAt: new Date(),
         },
@@ -146,14 +237,14 @@ export class InboundCallerMatchUseCase {
       });
 
       await prisma.lead.update({
-        where: { id: leadId },
+        where: { id: params.leadId },
         data: { status: "CALLING" },
       });
     } catch (err) {
       this.logger?.error("Failed to create new inbound call record", err, {
         action: "inbound.caller_match.create_call_failed",
-        bolnaCallId,
-        leadId,
+        bolnaCallId: params.bolnaCallId,
+        leadId: params.leadId,
       });
     }
   }

@@ -61,6 +61,17 @@ export const availableFiltersQuerySchema = z.object({
   campaignId: z.string().uuid("Campaign ID is required"),
 });
 
+export const quickDialSchema = z.object({
+  assistantId: z.string().uuid("Invalid assistant ID"),
+  phone: z.string().min(10, "Phone number must be at least 10 digits"),
+  name: z.string().trim().optional(),
+  userData: z.record(z.string(), z.string()).optional(),
+});
+
+export const stopCallParamSchema = z.object({
+  id: z.string().min(1, "Call ID is required"),
+});
+
 export const syncBolnaExecutionSchema = z
   .object({
     callId: z.string().uuid("Invalid call ID").optional(),
@@ -80,3 +91,5 @@ export type ListCallsQuery = z.infer<typeof listCallsQuerySchema>;
 export type GetCallStatsQuery = z.infer<typeof getCallStatsQuerySchema>;
 export type AvailableFiltersQuery = z.infer<typeof availableFiltersQuerySchema>;
 export type SyncBolnaExecutionInput = z.infer<typeof syncBolnaExecutionSchema>;
+export type QuickDialInput = z.infer<typeof quickDialSchema>;
+export type StopCallParam = z.infer<typeof stopCallParamSchema>;

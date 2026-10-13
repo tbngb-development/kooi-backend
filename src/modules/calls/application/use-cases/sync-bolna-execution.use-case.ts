@@ -107,7 +107,7 @@ export class SyncBolnaExecutionUseCase {
       id: string;
       bolnaCallId: string | null;
       tenantId: string;
-      campaignId: string;
+      campaignId: string | null;
       leadId: string;
       batchId: string | null;
       status: CallStatus;

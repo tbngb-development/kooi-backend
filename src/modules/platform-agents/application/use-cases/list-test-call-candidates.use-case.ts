@@ -69,6 +69,11 @@ export class ListTestCallCandidatesUseCase {
             },
           },
         },
+        assistant: {
+          select: {
+            platformAgentId: true,
+          },
+        },
         tenant: {
           select: {
             name: true,
@@ -88,8 +93,9 @@ export class ListTestCallCandidatesUseCase {
             : transcriptText;
 
         const isFromThisAgent =
-          agentCampaignIds.includes(c.campaignId) ||
-          c.campaign?.assistant?.platformAgentId === params.platformAgentId;
+          (c.campaignId !== null && agentCampaignIds.includes(c.campaignId)) ||
+          c.campaign?.assistant?.platformAgentId === params.platformAgentId ||
+          c.assistant?.platformAgentId === params.platformAgentId;
 
         return {
           id: c.id,

@@ -1,3 +1,4 @@
+import prisma from "../../../../shared/config/database/prisma";
 import type {
   WebhookRepository,
   ResolvedCallContext,
@@ -26,8 +27,61 @@ export class CallResolverService {
     const bolnaBatchId = payload.batch_id;
     const phone =
       payload.telephony_data?.to_number ??
-      payload.context_details?.recipient_phone_number;
+      payload.context_details?.recipient_phone_number ??
+      payload.user_number;
     const retried = payload.batch_run_details?.retried ?? 0;
+
+    if (!bolnaBatchId && payload.agent_id && phone) {
+      // Non-batch call fallback (Quick Dial or Inbound)
+      const assistant = await prisma.assistant.findFirst({
+        where: {
+          platformAgent: { bolnaId: payload.agent_id },
+          isDeleted: false,
+        },
+      });
+
+      if (assistant) {
+        let lead = await prisma.lead.findFirst({
+          where: {
+            tenantId: assistant.tenantId,
+            phone,
+            isDeleted: false,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        const isOutbound = payload.telephony_data?.call_type === "outbound";
+        const callType = isOutbound ? "OUTBOUND" : "INBOUND";
+        const callSource = isOutbound ? "QUICK_DIAL" : "INBOUND";
+
+        if (!lead) {
+          lead = await prisma.lead.create({
+            data: {
+              phone,
+              tenantId: assistant.tenantId,
+              assistantId: assistant.id,
+              type: callType,
+              source: callSource,
+              status: "CALLING",
+            },
+          });
+        }
+
+        const newCall = await this.webhookRepo.createCall({
+          bolnaCallId,
+          tenantId: assistant.tenantId,
+          assistantId: assistant.id,
+          leadId: lead.id,
+          type: callType,
+          source: callSource,
+          status: "CALLING",
+          startedAt: new Date(),
+        });
+
+        await this.webhookRepo.updateLeadStatus(lead.id, "CALLING");
+        return newCall;
+      }
+    }
 
     if (!bolnaBatchId || !phone) return null;
 

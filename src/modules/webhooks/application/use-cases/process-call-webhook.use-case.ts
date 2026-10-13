@@ -109,10 +109,12 @@ export class ProcessCallWebhookUseCase {
             }
           }
 
-          await this.webhookRepo.updateCampaignStatus(
-            resolved.campaignId,
-            "RUNNING",
-          );
+          if (resolved.campaignId) {
+            await this.webhookRepo.updateCampaignStatus(
+              resolved.campaignId,
+              "RUNNING",
+            );
+          }
         }
         break;
       }
@@ -163,11 +165,13 @@ export class ProcessCallWebhookUseCase {
           }
         }
 
-        await this.webhookRepo.updateCampaignStatus(
-          resolved.campaignId,
-          "RUNNING",
-          new Date(),
-        );
+        if (resolved.campaignId) {
+          await this.webhookRepo.updateCampaignStatus(
+            resolved.campaignId,
+            "RUNNING",
+            new Date(),
+          );
+        }
 
         if (this.stopBatchesOnInsufficientBalance) {
           this.stopBatchesOnInsufficientBalance

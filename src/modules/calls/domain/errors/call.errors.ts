@@ -29,3 +29,13 @@ export class CallNotDeletedError extends AppError {
     );
   }
 }
+
+export class CallCannotBeStoppedError extends AppError {
+  constructor(status: string) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Call cannot be stopped because it is in '${status}' status. Only PENDING, CALLING, or SCHEDULED calls can be stopped.`,
+      "CALL_CANNOT_BE_STOPPED",
+    );
+  }
+}
