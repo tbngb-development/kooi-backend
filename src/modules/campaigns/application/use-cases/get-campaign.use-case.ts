@@ -5,14 +5,19 @@ export class GetCampaignUseCase {
   constructor(private readonly campaignRepo: CampaignRepository) {}
 
   async execute(tenantId: string, campaignId: string) {
-    const [campaign, overview] = await Promise.all([
-      this.campaignRepo.findByIdWithRelations(tenantId, campaignId),
-      this.campaignRepo.getCampaignOverviewStats(tenantId, campaignId),
-    ]);
+    const campaign = await this.campaignRepo.findByIdWithRelations(
+      tenantId,
+      campaignId,
+    );
 
     if (!campaign) {
       throw new CampaignNotFoundError();
     }
+
+    const overview = await this.campaignRepo.getCampaignOverviewStats(
+      tenantId,
+      campaignId,
+    );
 
     return {
       ...campaign,

@@ -84,6 +84,11 @@ export const changePlanSchema = z.object({
   newPlanId: z.uuid("Invalid plan ID"),
 });
 
+export const adminChangePlanSchema = z.object({
+  newPlanId: z.uuid("Invalid plan ID"),
+  waiveFee: z.boolean().optional(),
+});
+
 export const listPlanSubscribersSchema = z.object({
   versionId: z.uuid("Invalid version ID").optional(),
   status: z

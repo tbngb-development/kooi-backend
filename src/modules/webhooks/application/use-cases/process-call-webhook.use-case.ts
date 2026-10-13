@@ -1,5 +1,6 @@
 import type { WebhookRepository } from "../interfaces/webhook-repository.interface";
 import type { WebhookCallPayload } from "../dto/webhook.dto";
+import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
 import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import type { CallResolverService } from "../services/call-resolver.service";
@@ -45,8 +46,43 @@ export class ProcessCallWebhookUseCase {
             break;
           }
 
+          const updatedHistory: CallHistoryItem[] = [
+            ...((resolved.callHistory as CallHistoryItem[]) ?? []),
+          ];
+          if (payload.retry_history && Array.isArray(payload.retry_history)) {
+            const mappedBolnaHistory: CallHistoryItem[] = payload.retry_history.map(
+              (rh, idx) => ({
+                attempt: rh.attempt ?? idx + 1,
+                bolnaCallId: callId,
+                status: (rh.status?.toUpperCase() ?? "SCHEDULED") as string,
+                duration: rh.duration ?? null,
+                cost: null,
+                timestamp:
+                  rh.created_at ??
+                  rh.at ??
+                  new Date().toISOString(),
+                errorMessage: rh.error_message ?? null,
+                hangupReason: rh.hangup_reason ?? null,
+              }),
+            );
+            for (const item of mappedBolnaHistory) {
+              const existingIdx = updatedHistory.findIndex(
+                (h) => h.attempt === item.attempt,
+              );
+              if (existingIdx >= 0) {
+                updatedHistory[existingIdx] = {
+                  ...updatedHistory[existingIdx],
+                  ...item,
+                };
+              } else {
+                updatedHistory.push(item);
+              }
+            }
+          }
+
           await this.webhookRepo.updateCallTerminalState(resolved.id, {
             status: "SCHEDULED",
+            callHistory: updatedHistory,
           });
 
           const lastRetry =
@@ -55,6 +91,28 @@ export class ProcessCallWebhookUseCase {
             const leadStatus = mapLastRetryToLeadStatus(lastRetry.status);
             await this.webhookRepo.updateLeadStatus(resolved.leadId, leadStatus);
           }
+
+          // Maintain Batch and Campaign in RUNNING state while retries are scheduled
+          if (resolved.batchId) {
+            const batchStatus = await this.webhookRepo.findBatchStatusById(
+              resolved.batchId,
+            );
+            if (
+              batchStatus &&
+              batchStatus !== "STOPPED" &&
+              batchStatus !== "FAILED"
+            ) {
+              await this.webhookRepo.updateBatchStatus(
+                resolved.batchId,
+                "RUNNING",
+              );
+            }
+          }
+
+          await this.webhookRepo.updateCampaignStatus(
+            resolved.campaignId,
+            "RUNNING",
+          );
         }
         break;
       }
@@ -76,12 +134,16 @@ export class ProcessCallWebhookUseCase {
           break;
         }
 
+        const currentHistory =
+          (resolved.callHistory as CallHistoryItem[]) ?? [];
         await this.webhookRepo.updateCallStatusAndHistory(
           resolved.id,
           callId,
           "CALLING",
-          [],
+          currentHistory,
         );
+
+        await this.webhookRepo.updateLeadStatus(resolved.leadId, "CALLING");
 
         if (resolved.batchId) {
           const batchStatus = await this.webhookRepo.findBatchStatusById(

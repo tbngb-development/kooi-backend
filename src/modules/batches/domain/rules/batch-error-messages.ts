@@ -10,11 +10,17 @@ export function toUserFriendlyError(technicalError: string): string {
     return "The uploaded file appears to be empty. Please upload a CSV file with lead data.";
   }
 
-  if (lower.includes("no valid indian phone")) {
+  if (
+    lower.includes("no valid indian phone") ||
+    lower.includes("no valid contact numbers")
+  ) {
     return "No valid Indian phone numbers were found in your file. Please check the phone number format and try again.";
   }
 
-  if (lower.includes("all leads") && lower.includes("duplicate")) {
+  if (
+    lower.includes("duplicate") &&
+    (lower.includes("all") || lower.includes("already exist"))
+  ) {
     return "All leads in your file have already been added to this campaign. Please upload a file with new leads.";
   }
 

@@ -29,6 +29,9 @@ export interface WebhookCallPayload {
   };
   recording_url?: string;
   duration?: number;
+  created_at?: string;
+  at?: string;
+  scheduled_at?: string;
   messages?: WebhookMessage[];
   retry_count?: number;
   retry_history?: Array<{
@@ -38,6 +41,7 @@ export interface WebhookCallPayload {
     hangup_reason?: string;
     error_message?: string;
     created_at?: string;
+    at?: string;
   }>;
   batch_run_details?: {
     retried: number;
