@@ -24,8 +24,11 @@ export const dynamicFiltersSchema = z
 
 export const listCallsQuerySchema = z.object({
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
+  assistantId: z.string().uuid("Invalid assistant ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
   status: z.string().optional(),
+  type: z.enum(["OUTBOUND", "INBOUND"]).optional(),
+  source: z.enum(["CAMPAIGN", "INBOUND", "QUICK_DIAL"]).optional(),
   search: z.string().optional(),
   dateFrom: z.iso.datetime({ message: "Invalid dateFrom format" }).optional(),
   dateTo: z.string().datetime({ message: "Invalid dateTo format" }).optional(),

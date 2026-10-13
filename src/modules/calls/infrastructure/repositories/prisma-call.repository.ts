@@ -42,6 +42,9 @@ export class PrismaCallRepository implements CallRepository {
     where.isDeleted = isDeleted ?? false;
 
     if (campaignId) where.campaignId = campaignId;
+    if (filters.assistantId) where.assistantId = filters.assistantId;
+    if (filters.type) where.type = filters.type;
+    if (filters.source) where.source = filters.source;
     if (leadId) where.leadId = leadId;
 
     if (status) {
@@ -128,6 +131,7 @@ export class PrismaCallRepository implements CallRepository {
         include: {
           lead: { select: { id: true, name: true, phone: true } },
           campaign: { select: { id: true, name: true } },
+          assistant: { select: { id: true, name: true } },
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -167,8 +171,11 @@ export class PrismaCallRepository implements CallRepository {
         bolnaCallId: c.bolnaCallId,
         tenantId: c.tenantId,
         campaignId: c.campaignId,
+        assistantId: c.assistantId,
         leadId: c.leadId,
         batchId: c.batchId,
+        type: c.type,
+        source: c.source,
         status: c.status as CallStatus,
         duration: c.duration,
         cost: c.cost,
@@ -188,6 +195,7 @@ export class PrismaCallRepository implements CallRepository {
         deletedAt: c.deletedAt,
         lead: c.lead,
         campaign: c.campaign,
+        assistant: c.assistant,
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
@@ -273,6 +281,12 @@ export class PrismaCallRepository implements CallRepository {
             description: true,
           },
         },
+        assistant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         callAnalysis: {
           select: {
             id: true,
@@ -290,8 +304,11 @@ export class PrismaCallRepository implements CallRepository {
       bolnaCallId: call.bolnaCallId,
       tenantId: call.tenantId,
       campaignId: call.campaignId,
+      assistantId: call.assistantId,
       leadId: call.leadId,
       batchId: call.batchId,
+      type: call.type,
+      source: call.source,
       status: call.status as CallStatus,
       duration: call.duration,
       cost: call.cost,
@@ -311,6 +328,7 @@ export class PrismaCallRepository implements CallRepository {
       deletedAt: call.deletedAt,
       lead: call.lead,
       campaign: call.campaign,
+      assistant: call.assistant,
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,

@@ -7,8 +7,11 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 
 export interface ListCallsFilters {
   campaignId?: string;
+  assistantId?: string;
   leadId?: string;
   status?: string;
+  type?: "OUTBOUND" | "INBOUND";
+  source?: "CAMPAIGN" | "INBOUND" | "QUICK_DIAL";
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -30,6 +33,10 @@ export interface PaginatedCallsResult {
         phone: string;
       } | null;
       campaign: {
+        id: string;
+        name: string;
+      } | null;
+      assistant?: {
         id: string;
         name: string;
       } | null;
@@ -70,6 +77,10 @@ export interface DetailedCallResult extends CallEntityData {
     id: string;
     name: string;
     description: string | null;
+  } | null;
+  assistant?: {
+    id: string;
+    name: string;
   } | null;
   callAnalysis: {
     id: string;
