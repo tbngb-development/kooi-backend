@@ -48,18 +48,20 @@ export class CallResolverService {
       batch.id,
     );
 
-    if (existingCall && retried > 0) {
+    if (existingCall && (retried > 0 || existingCall.status === "SCHEDULED")) {
       const history = (existingCall.callHistory as CallHistoryItem[]) ?? [];
+
+      const currentAttempt = retried > 0 ? retried : Math.max(1, history.length);
 
       // Idempotency guard: prevent duplicate history entries for repeated webhook attempts
       const alreadyRecorded = history.some(
-        (h) => h.attempt === retried || h.bolnaCallId === bolnaCallId,
+        (h) => h.attempt === currentAttempt || h.bolnaCallId === bolnaCallId,
       );
 
-      if (!alreadyRecorded) {
+      if (!alreadyRecorded && existingCall.bolnaCallId && existingCall.bolnaCallId !== bolnaCallId) {
         history.push({
-          attempt: retried,
-          bolnaCallId: existingCall.bolnaCallId ?? bolnaCallId,
+          attempt: currentAttempt,
+          bolnaCallId: existingCall.bolnaCallId,
           status: existingCall.status,
           duration: existingCall.duration,
           cost: existingCall.cost,

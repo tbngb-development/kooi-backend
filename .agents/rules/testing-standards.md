@@ -19,3 +19,8 @@
 - **Virtual Aggregations:** `Campaign` and `LeadBatch` metrics (`totalLeads`, `calledLeads`, `completedLeads`) are aggregated from child tables (`Lead`, `Call`), never stored on the parent record.
 - **Error Mapping:** Technical-to-tenant error mapping must support case-insensitive substrings and parameterized strings.
 - **Financial & Concurrency Safety:** Wallet balance debits must use pessimistic row locking (`SELECT ... FOR UPDATE`), bonus-first deduction, and ledger double-entry bookkeeping (`CALL_DEBIT`, `RECHARGE`).
+
+## 5. TypeScript & Code Quality Invariants
+- **Type-Check Pre-flight:** Always validate backend changes with `npx tsc --noEmit` alongside test suites (`npm test`) before committing or proposing completion. Ensure zero compiler diagnostics.
+- **Strict Variable Immutability:** Use `const` for all reference bindings (arrays, objects) that are mutated in place and never reassigned to adhere to `prefer-const`.
+- **Exhaustive Webhook & DTO Contracts:** Third-party webhook payloads (e.g. Bolna `WebhookCallPayload`, Razorpay webhook DTOs) must strictly type all vendor metadata fields (`created_at`, `at`, `scheduled_at`, `retry_history`) to prevent property-not-found (`TS2339`) regressions.

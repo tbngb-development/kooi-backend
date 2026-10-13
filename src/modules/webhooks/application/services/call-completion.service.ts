@@ -3,6 +3,7 @@ import type {
   ResolvedCallContext,
 } from "../interfaces/webhook-repository.interface";
 import type { WebhookCallPayload } from "../dto/webhook.dto";
+import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import type { MaterializeCallExtractionsUseCase } from "../../../extractions/application/use-cases/materialize-call-extractions.use-case";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
@@ -66,7 +67,54 @@ export class CallCompletionService {
       }
     }
 
-    // 2. Persist call terminal state
+    // 2. Build and record completed attempt in call history
+    const historyList: CallHistoryItem[] = Array.isArray(call.callHistory)
+      ? [...(call.callHistory as CallHistoryItem[])]
+      : [];
+
+    let attemptNumber = historyList.length + 1;
+    if (
+      payload?.batch_run_details?.retried !== undefined &&
+      payload.batch_run_details.retried !== null
+    ) {
+      attemptNumber = Math.max(attemptNumber, payload.batch_run_details.retried + 1);
+    } else if (
+      payload?.retry_count !== undefined &&
+      payload.retry_count !== null
+    ) {
+      attemptNumber = Math.max(attemptNumber, payload.retry_count + 1);
+    }
+
+    const existingIdx = historyList.findIndex(
+      (h) =>
+        h.attempt === attemptNumber ||
+        (bolnaCallId && h.bolnaCallId === String(bolnaCallId)),
+    );
+
+    const historyEntry: CallHistoryItem = {
+      attempt:
+        existingIdx >= 0
+          ? historyList[existingIdx].attempt
+          : attemptNumber,
+      bolnaCallId: String(bolnaCallId),
+      status: "COMPLETED",
+      duration: duration ?? 0,
+      cost: payload?.total_cost ?? null,
+      timestamp:
+        payload?.created_at ??
+        (payload as any)?.at ??
+        new Date().toISOString(),
+      errorMessage: null,
+      hangupReason: payload?.telephony_data?.hangup_reason ?? null,
+    };
+
+    if (existingIdx >= 0) {
+      historyList[existingIdx] = historyEntry;
+    } else {
+      historyList.push(historyEntry);
+    }
+
+    // 3. Persist call terminal state
     await this.webhookRepo.updateCallTerminalState(call.id, {
       status: "COMPLETED",
       transcript,
@@ -76,6 +124,7 @@ export class CallCompletionService {
         payload.telephony_data?.recording_url ?? payload.recording_url ?? null,
       cost: payload.total_cost ?? null,
       extracted_data: payload.extracted_data,
+      callHistory: historyList,
       endedAt: new Date(),
     });
 

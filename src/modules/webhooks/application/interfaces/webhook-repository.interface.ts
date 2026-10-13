@@ -108,6 +108,7 @@ export interface WebhookRepository {
       recording?: string | null;
       cost?: number | null;
       extracted_data?: Record<string, any> | null;
+      callHistory?: unknown[] | null;
       endedAt?: Date;
     },
   ): Promise<void>;
@@ -125,7 +126,9 @@ export interface WebhookRepository {
   ): Promise<void>;
 
   countActiveLeadsInBatch(batchId: string): Promise<number>;
+  countActiveCallsInBatch(batchId: string): Promise<number>;
   countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number>;
+  countActiveCallsInCampaignLegacy(campaignId: string): Promise<number>;
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;
 
   updateBatchStatus(
