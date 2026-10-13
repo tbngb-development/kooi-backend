@@ -22,7 +22,22 @@ export class CallResolverService {
     payload: WebhookCallPayload,
   ): Promise<ResolvedCallContext | null> {
     const call = await this.webhookRepo.findCallByBolnaCallId(bolnaCallId);
-    if (call) return call;
+    if (call) {
+      const payloadAgentNumber =
+        payload.agent_number ??
+        (call.type === "OUTBOUND"
+          ? payload.telephony_data?.from_number
+          : payload.telephony_data?.to_number) ??
+        null;
+      if (!call.agentNumber && payloadAgentNumber) {
+        await this.webhookRepo.updateCallTerminalState(call.id, {
+          status: call.status,
+          agentNumber: payloadAgentNumber,
+        });
+        call.agentNumber = payloadAgentNumber;
+      }
+      return call;
+    }
 
     const bolnaBatchId = payload.batch_id;
     const phone =
@@ -53,6 +68,12 @@ export class CallResolverService {
         const isOutbound = payload.telephony_data?.call_type === "outbound";
         const callType = isOutbound ? "OUTBOUND" : "INBOUND";
         const callSource = isOutbound ? "QUICK_DIAL" : "INBOUND";
+        const agentNumber =
+          payload.agent_number ??
+          (isOutbound
+            ? payload.telephony_data?.from_number
+            : payload.telephony_data?.to_number) ??
+          null;
 
         if (!lead) {
           lead = await prisma.lead.create({
@@ -76,6 +97,7 @@ export class CallResolverService {
           source: callSource,
           status: "CALLING",
           startedAt: new Date(),
+          agentNumber,
         });
 
         await this.webhookRepo.updateLeadStatus(lead.id, "CALLING");
@@ -102,38 +124,31 @@ export class CallResolverService {
       batch.id,
     );
 
-    if (existingCall && (retried > 0 || existingCall.status === "SCHEDULED")) {
-      const history = (existingCall.callHistory as CallHistoryItem[]) ?? [];
+    // If an earlier attempt exists and was left non-terminal, finalize it with previous status
+    if (
+      existingCall &&
+      (existingCall.status === "SCHEDULED" ||
+        existingCall.status === "CALLING" ||
+        existingCall.status === "PENDING")
+    ) {
+      const lastRetryStatus =
+        payload.retry_history?.[payload.retry_history.length - 1]?.status;
+      const terminalStatus = lastRetryStatus
+        ? lastRetryStatus.toLowerCase().includes("busy")
+          ? "BUSY"
+          : "NO_ANSWER"
+        : "NO_ANSWER";
 
-      const currentAttempt = retried > 0 ? retried : Math.max(1, history.length);
-
-      // Idempotency guard: prevent duplicate history entries for repeated webhook attempts
-      const alreadyRecorded = history.some(
-        (h) => h.attempt === currentAttempt || h.bolnaCallId === bolnaCallId,
-      );
-
-      if (!alreadyRecorded && existingCall.bolnaCallId && existingCall.bolnaCallId !== bolnaCallId) {
-        history.push({
-          attempt: currentAttempt,
-          bolnaCallId: existingCall.bolnaCallId,
-          status: existingCall.status,
-          duration: existingCall.duration,
-          cost: existingCall.cost,
-          timestamp: existingCall.updatedAt.toISOString(),
-        });
-      }
-
-      return this.webhookRepo.updateCallStatusAndHistory(
-        existingCall.id,
-        bolnaCallId,
-        "CALLING",
-        history,
-      );
+      await this.webhookRepo.updateCallTerminalState(existingCall.id, {
+        status: terminalStatus,
+        endedAt: new Date(),
+      });
     }
 
-    if (existingCall && retried === 0) {
-      return existingCall;
-    }
+    const agentNumber =
+      payload.agent_number ??
+      payload.telephony_data?.from_number ??
+      null;
 
     const newCall = await this.webhookRepo.createCall({
       bolnaCallId,
@@ -141,8 +156,11 @@ export class CallResolverService {
       campaignId: batch.campaignId,
       leadId: lead.id,
       batchId: batch.id,
+      type: "OUTBOUND",
+      source: "CAMPAIGN",
       status: "CALLING",
       startedAt: new Date(),
+      agentNumber,
     });
 
     await this.webhookRepo.updateLeadStatus(lead.id, "CALLING");

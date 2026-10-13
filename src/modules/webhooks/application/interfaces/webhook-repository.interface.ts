@@ -20,6 +20,7 @@ export interface ResolvedCallContext {
   type?: CallType;
   source?: CallSource;
   status: CallStatus;
+  agentNumber?: string | null;
   duration: number | null;
   cost: number | null;
   recording: string | null;
@@ -96,6 +97,7 @@ export interface WebhookRepository {
     source?: CallSource;
     status: CallStatus;
     startedAt: Date;
+    agentNumber?: string | null;
   }): Promise<ResolvedCallContext>;
 
   updateCallStatusAndHistory(
@@ -103,12 +105,14 @@ export interface WebhookRepository {
     bolnaCallId: string,
     status: CallStatus,
     history: CallHistoryItem[],
+    agentNumber?: string | null,
   ): Promise<ResolvedCallContext>;
 
   updateCallTerminalState(
     callId: string,
     data: {
       status: CallStatus;
+      agentNumber?: string | null;
       summary?: string | null;
       transcript?: string | null;
       transcriptMessages?: unknown | null;
@@ -135,6 +139,7 @@ export interface WebhookRepository {
 
   countActiveLeadsInBatch(batchId: string): Promise<number>;
   countActiveCallsInBatch(batchId: string): Promise<number>;
+  hasPendingRetriesInBatch(batchId: string): Promise<boolean>;
   countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number>;
   countActiveCallsInCampaignLegacy(campaignId: string): Promise<number>;
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;

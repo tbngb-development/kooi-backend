@@ -334,4 +334,33 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
       });
     });
   });
+
+  describe("GetCallCenterStatsUseCase", () => {
+    it("should return daily aggregated stats for tenant", async () => {
+      const { GetCallCenterStatsUseCase } = await import(
+        "../../../src/modules/calls/application/use-cases/get-call-center-stats.use-case"
+      );
+
+      const mockStatsRepo = {
+        getCallCenterStats: vi.fn().mockResolvedValue({
+          todayInboundCalls: 12,
+          todayInboundCompleted: 10,
+          todayOutboundCalls: 25,
+          todayOutboundCompleted: 20,
+          todayAvgDurationSec: 85,
+          todayTotalCostPaisa: 54000,
+          activeCallsCount: 2,
+        }),
+      };
+
+      const useCase = new GetCallCenterStatsUseCase(mockStatsRepo as any);
+      const stats = await useCase.execute("tenant-123");
+
+      expect(mockStatsRepo.getCallCenterStats).toHaveBeenCalledWith("tenant-123");
+      expect(stats.todayInboundCalls).toBe(12);
+      expect(stats.todayOutboundCalls).toBe(25);
+      expect(stats.activeCallsCount).toBe(2);
+      expect(stats.todayAvgDurationSec).toBe(85);
+    });
+  });
 });

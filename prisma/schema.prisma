@@ -306,6 +306,7 @@ model Call {
   type                CallType    @default(OUTBOUND)
   source              CallSource  @default(CAMPAIGN)
   status              CallStatus  @default(PENDING)
+  agentNumber         String?
   duration            Int?
   cost                Float?
   platformCost        Int?
@@ -348,6 +349,7 @@ model Call {
   @@index([campaignId, isDeleted, status])
   @@index([assistantId, isDeleted])
   @@index([type, source])
+  @@index([agentNumber])
   @@index([leadId])
   @@index([batchId, isDeleted])
   @@index([batchId, isDeleted, status])

@@ -27,6 +27,9 @@ export function buildTenantCallRoutes(
   // Stop an active/pending call
   router.post("/:id/stop", controller.stopCall);
 
+  // Call Center Real-time Daily Stats
+  router.get("/call-center-stats", controller.callCenterStats);
+
   router.get(
     "/stats",
     validateQuery(getCallStatsQuerySchema),

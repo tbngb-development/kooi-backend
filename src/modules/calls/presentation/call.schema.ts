@@ -29,6 +29,7 @@ export const listCallsQuerySchema = z.object({
   status: z.string().optional(),
   type: z.enum(["OUTBOUND", "INBOUND"]).optional(),
   source: z.enum(["CAMPAIGN", "INBOUND", "QUICK_DIAL"]).optional(),
+  agentNumber: z.string().optional(),
   search: z.string().optional(),
   dateFrom: z.iso.datetime({ message: "Invalid dateFrom format" }).optional(),
   dateTo: z.string().datetime({ message: "Invalid dateTo format" }).optional(),
@@ -68,6 +69,7 @@ export const quickDialSchema = z.object({
   assistantId: z.string().uuid("Invalid assistant ID"),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   name: z.string().trim().optional(),
+  fromPhoneNumber: z.string().trim().optional(),
   userData: z.record(z.string(), z.string()).optional(),
 });
 

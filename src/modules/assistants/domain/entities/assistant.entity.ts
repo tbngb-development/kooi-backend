@@ -47,4 +47,17 @@ export interface AssistantEntityData {
   updatedAt: Date;
   isDeleted: boolean;
   deletedAt: Date | null;
+  platformAgent?: {
+    id: string;
+    bolnaId: string;
+    name: string;
+    slug: string;
+    category?: string | null;
+    industryPack?: {
+      id: string;
+      name: string;
+      slug: string;
+      icon?: string | null;
+    } | null;
+  } | null;
 }

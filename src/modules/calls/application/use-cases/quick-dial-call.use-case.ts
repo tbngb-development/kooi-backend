@@ -20,6 +20,7 @@ export interface QuickDialCallInput {
   assistantId: string;
   phone: string;
   name?: string;
+  fromPhoneNumber?: string;
   userData?: Record<string, string>;
 }
 
@@ -107,11 +108,21 @@ export class QuickDialCallUseCase {
       ...(input.userData ?? {}),
     };
 
+    const assistantConfig = (assistant.config ?? {}) as Record<string, unknown>;
+    const defaultFromNumber =
+      (assistantConfig.phone_number as string) ||
+      (assistantConfig.from_phone_number as string) ||
+      (assistantConfig.agent_number as string) ||
+      undefined;
+
+    const fromPhoneNumber = input.fromPhoneNumber || defaultFromNumber;
+
     let bolnaRes;
     try {
       bolnaRes = await bolnaClient.calls.create({
         agent_id: assistant.platformAgent.bolnaId,
         recipient_phone_number: normalizedPhone,
+        ...(fromPhoneNumber ? { from_phone_number: fromPhoneNumber } : {}),
         user_data: userData,
       });
     } catch (err) {
@@ -129,6 +140,11 @@ export class QuickDialCallUseCase {
     }
 
     const executionId = bolnaRes.execution_id ?? bolnaRes.id;
+    const resolvedAgentNumber =
+      (bolnaRes as any)?.from_phone_number ??
+      (bolnaRes as any)?.agent_number ??
+      fromPhoneNumber ??
+      null;
 
     // 5. Pre-create Call record with PENDING status linked to execution ID
     const call = await prisma.call.create({
@@ -140,6 +156,9 @@ export class QuickDialCallUseCase {
         type: "OUTBOUND",
         source: "QUICK_DIAL",
         status: "PENDING",
+        agentNumber: resolvedAgentNumber
+          ? normalizePhoneNumber(resolvedAgentNumber)
+          : null,
       },
     });
 

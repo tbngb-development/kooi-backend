@@ -30,6 +30,7 @@ const callSelectFields = {
   type: true,
   source: true,
   status: true,
+  agentNumber: true,
   duration: true,
   cost: true,
   recording: true,
@@ -62,6 +63,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
     type?: CallType;
     source?: CallSource;
     status: CallStatus;
+    agentNumber?: string | null;
     duration: number | null;
     cost: number | null;
     recording: string | null;
@@ -138,6 +140,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
   ): Promise<ResolvedCallContext | null> {
     const call = await prisma.call.findFirst({
       where: { leadId, batchId },
+      orderBy: { createdAt: "desc" },
       select: callSelectFields,
     });
     if (!call) return null;
@@ -155,6 +158,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
     source?: CallSource;
     status: CallStatus;
     startedAt: Date;
+    agentNumber?: string | null;
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
       data: {
@@ -168,6 +172,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
         source: data.source ?? "CAMPAIGN",
         status: data.status,
         startedAt: data.startedAt,
+        agentNumber: data.agentNumber ?? null,
       },
       select: callSelectFields,
     });
@@ -179,6 +184,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
     bolnaCallId: string,
     status: CallStatus,
     callHistory: unknown[],
+    agentNumber?: string | null,
   ): Promise<ResolvedCallContext> {
     const call = await prisma.call.update({
       where: { id: callId },
@@ -186,6 +192,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
         bolnaCallId,
         status,
         callHistory: callHistory as any,
+        ...(agentNumber ? { agentNumber } : {}),
       },
       select: callSelectFields,
     });
@@ -196,6 +203,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
     callId: string,
     data: {
       status: string;
+      agentNumber?: string | null;
       summary?: string | null;
       transcript?: string | null;
       transcriptMessages?: unknown;
@@ -211,6 +219,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
       where: { id: callId },
       data: {
         status: data.status as CallStatus,
+        ...(data.agentNumber ? { agentNumber: data.agentNumber } : {}),
         summary: data.summary,
         transcript: data.transcript,
         transcriptMessages: data.transcriptMessages as any,
@@ -393,6 +402,45 @@ export class PrismaWebhookRepository implements WebhookRepository {
         isDeleted: false,
       },
     });
+  }
+
+  async hasPendingRetriesInBatch(batchId: string): Promise<boolean> {
+    const batch = await prisma.leadBatch.findUnique({
+      where: { id: batchId },
+      select: { retryConfig: true },
+    });
+    const config = (batch?.retryConfig as unknown as RetryConfig) ?? null;
+    if (!config?.enabled || !config?.max_retries || config.max_retries <= 0) {
+      return false;
+    }
+
+    const retryStatuses: string[] = config.retry_on_statuses ?? [
+      "no-answer",
+      "busy",
+      "failed",
+    ];
+    const leadStatusesToCheck: LeadStatus[] = [];
+    if (retryStatuses.includes("busy")) leadStatusesToCheck.push("BUSY");
+    if (retryStatuses.includes("no-answer") || retryStatuses.includes("no_answer")) {
+      leadStatusesToCheck.push("NO_ANSWER");
+    }
+    if (retryStatuses.includes("failed")) leadStatusesToCheck.push("FAILED");
+
+    if (leadStatusesToCheck.length === 0) return false;
+
+    const candidateLeads = await prisma.lead.findMany({
+      where: {
+        batchId,
+        status: { in: leadStatusesToCheck },
+      },
+      select: {
+        id: true,
+        _count: { select: { calls: true } },
+      },
+    });
+
+    const maxAttempts = 1 + config.max_retries;
+    return candidateLeads.some((l) => l._count.calls < maxAttempts);
   }
 
   async countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number> {

@@ -5,6 +5,7 @@ import { ListCallsUseCase } from "./application/use-cases/list-calls.use-case";
 import { GetCallUseCase } from "./application/use-cases/get-call.use-case";
 import { GetCallTranscriptUseCase } from "./application/use-cases/get-call-transcript.use-case";
 import { GetCallStatsUseCase } from "./application/use-cases/get-call-stats.use-case";
+import { GetCallCenterStatsUseCase } from "./application/use-cases/get-call-center-stats.use-case";
 import { TenantCallController } from "./presentation/tenant-call.controller";
 import { AdminCallController } from "./presentation/admin-call.controller";
 import { GetAvailableFiltersUseCase } from "./application/use-cases/get-available-filters.use-case";
@@ -42,6 +43,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const getCall = new GetCallUseCase(repo);
   const getTranscript = new GetCallTranscriptUseCase(repo);
   const getStats = new GetCallStatsUseCase(repo);
+  const getCallCenterStats = new GetCallCenterStatsUseCase(repo);
   const getAvailableFilters = new GetAvailableFiltersUseCase(repo);
 
   const archiveCall = new ArchiveCallUseCase(repo);
@@ -72,6 +74,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       getCall,
       getTranscript,
       getStats,
+      getCallCenterStats,
       getAvailableFilters,
       archiveCall,
       quickDialCall,

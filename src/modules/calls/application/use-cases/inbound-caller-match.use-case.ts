@@ -11,6 +11,7 @@ export interface InboundCallerMatchInput {
   contactNumber: string;
   agentId: string;
   executionId: string;
+  agentNumber?: string;
 }
 
 export interface InboundCallerMatchOutput {
@@ -37,6 +38,7 @@ export class InboundCallerMatchUseCase {
       contactNumber: normalizedPhone,
       agentId: input.agentId,
       executionId: input.executionId,
+      agentNumber: input.agentNumber,
     });
 
     // 1. Lookup lead & campaign using agent_id + caller phone
@@ -55,6 +57,7 @@ export class InboundCallerMatchUseCase {
         campaignId: campaign.id,
         leadId: lead.id,
         batchId: lead.batchId,
+        agentNumber: input.agentNumber,
       });
 
       // Build response with campaign variables and dynamic welcome message
@@ -179,6 +182,7 @@ export class InboundCallerMatchUseCase {
       tenantId: assistant.tenantId,
       assistantId: assistant.id,
       leadId: lead.id,
+      agentNumber: input.agentNumber,
     });
 
     const formattedName = cleanCustomerName(lead.name);
@@ -217,8 +221,13 @@ export class InboundCallerMatchUseCase {
     assistantId?: string | null;
     leadId: string;
     batchId?: string | null;
+    agentNumber?: string | null;
   }): Promise<void> {
     try {
+      const normalizedAgentNumber = params.agentNumber
+        ? normalizePhoneNumber(params.agentNumber)
+        : null;
+
       await prisma.call.upsert({
         where: { bolnaCallId: params.bolnaCallId },
         create: {
@@ -231,9 +240,12 @@ export class InboundCallerMatchUseCase {
           type: "INBOUND",
           source: "INBOUND",
           status: "CALLING",
+          agentNumber: normalizedAgentNumber,
           startedAt: new Date(),
         },
-        update: {},
+        update: {
+          ...(normalizedAgentNumber ? { agentNumber: normalizedAgentNumber } : {}),
+        },
       });
 
       await prisma.lead.update({

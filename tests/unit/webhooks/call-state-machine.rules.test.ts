@@ -76,10 +76,10 @@ describe("Call State Machine Rules", () => {
       expect(canTransitionCallStatus("FAILED", "PENDING")).toBe(false);
     });
 
-    it("permits NO_ANSWER, BUSY, or FAILED calls to transition to SCHEDULED when retried", () => {
-      expect(canTransitionCallStatus("NO_ANSWER", "SCHEDULED")).toBe(true);
-      expect(canTransitionCallStatus("BUSY", "SCHEDULED")).toBe(true);
-      expect(canTransitionCallStatus("FAILED", "SCHEDULED")).toBe(true);
+    it("prevents NO_ANSWER, BUSY, or FAILED calls from regressing to SCHEDULED", () => {
+      expect(canTransitionCallStatus("NO_ANSWER", "SCHEDULED")).toBe(false);
+      expect(canTransitionCallStatus("BUSY", "SCHEDULED")).toBe(false);
+      expect(canTransitionCallStatus("FAILED", "SCHEDULED")).toBe(false);
     });
   });
 });

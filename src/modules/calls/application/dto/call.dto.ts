@@ -5,8 +5,12 @@ import type { DynamicFilterMap } from "../../../../shared/types/bolna.types";
 export interface ListCallsInput {
   tenantId: string;
   campaignId?: string;
+  assistantId?: string;
   leadId?: string;
   status?: string;
+  type?: "OUTBOUND" | "INBOUND";
+  source?: "CAMPAIGN" | "INBOUND" | "QUICK_DIAL";
+  agentNumber?: string;
   disposition?: string;
   leadTemperature?: string;
   locationMatch?: string;

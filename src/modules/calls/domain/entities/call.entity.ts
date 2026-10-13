@@ -11,6 +11,7 @@ export interface CallEntityData {
   type?: CallType;
   source?: CallSource;
   status: CallStatus;
+  agentNumber?: string | null;
   duration: number | null;
   cost: number | null;
   platformCost: number | null;
@@ -52,6 +53,9 @@ export class CallEntity {
   }
   get source(): CallSource | undefined {
     return this.data.source;
+  }
+  get agentNumber(): string | null | undefined {
+    return this.data.agentNumber;
   }
   get leadId(): string {
     return this.data.leadId;

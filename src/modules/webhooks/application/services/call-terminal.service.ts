@@ -133,7 +133,7 @@ export class CallTerminalService {
       retriesCompleted,
     });
 
-    if (call.campaignId) {
+    if (call.campaignId && !willRetry) {
       await this.callLifecycle.checkBatchAndCampaignCompletion(call);
     }
   }

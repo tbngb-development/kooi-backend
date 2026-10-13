@@ -10,6 +10,7 @@ import type {
   CallTranscriptResult,
   CallStatsFilters,
   CallStatsResult,
+  CallCenterStatsResult,
 } from "../../application/interfaces/call-repository.interface";
 import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
@@ -45,6 +46,7 @@ export class PrismaCallRepository implements CallRepository {
     if (filters.assistantId) where.assistantId = filters.assistantId;
     if (filters.type) where.type = filters.type;
     if (filters.source) where.source = filters.source;
+    if (filters.agentNumber) where.agentNumber = filters.agentNumber;
     if (leadId) where.leadId = leadId;
 
     if (status) {
@@ -63,12 +65,17 @@ export class PrismaCallRepository implements CallRepository {
     }
 
     if (search) {
-      where.lead = {
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search } },
-        ],
-      };
+      where.OR = [
+        {
+          lead: {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { phone: { contains: search } },
+            ],
+          },
+        },
+        { agentNumber: { contains: search } },
+      ];
     }
 
     const dynamicAndConditions: Prisma.CallWhereInput[] = [];
@@ -177,6 +184,7 @@ export class PrismaCallRepository implements CallRepository {
         type: c.type,
         source: c.source,
         status: c.status as CallStatus,
+        agentNumber: c.agentNumber,
         duration: c.duration,
         cost: c.cost,
         platformCost: c.platformCost,
@@ -251,6 +259,89 @@ export class PrismaCallRepository implements CallRepository {
       noAnswerCalls,
       avgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
       totalCostPaisa: costAgg._sum.chargedAmount ?? 0,
+    };
+  }
+
+  async getCallCenterStats(tenantId: string): Promise<CallCenterStatsResult> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const baseWhere: Prisma.CallWhereInput = {
+      tenantId,
+      isDeleted: false,
+    };
+
+    const todayWhere: Prisma.CallWhereInput = {
+      ...baseWhere,
+      createdAt: { gte: todayStart },
+    };
+
+    const [
+      todayInboundCalls,
+      todayInboundCompleted,
+      todayOutboundCalls,
+      todayOutboundCompleted,
+      durationAgg,
+      costAgg,
+      activeCallsCount,
+    ] = await Promise.all([
+      prisma.call.count({
+        where: {
+          ...todayWhere,
+          OR: [{ source: "INBOUND" }, { type: "INBOUND" }],
+        },
+      }),
+      prisma.call.count({
+        where: {
+          ...todayWhere,
+          status: "COMPLETED",
+          OR: [{ source: "INBOUND" }, { type: "INBOUND" }],
+        },
+      }),
+      prisma.call.count({
+        where: {
+          ...todayWhere,
+          source: "QUICK_DIAL",
+        },
+      }),
+      prisma.call.count({
+        where: {
+          ...todayWhere,
+          source: "QUICK_DIAL",
+          status: "COMPLETED",
+        },
+      }),
+      prisma.call.aggregate({
+        where: {
+          ...todayWhere,
+          status: "COMPLETED",
+          duration: { not: null },
+        },
+        _avg: { duration: true },
+      }),
+      prisma.call.aggregate({
+        where: {
+          ...todayWhere,
+          platformCost: { not: null },
+        },
+        _sum: { platformCost: true },
+      }),
+      prisma.call.count({
+        where: {
+          ...baseWhere,
+          status: { in: ["CALLING", "PENDING"] },
+        },
+      }),
+    ]);
+
+    return {
+      todayInboundCalls,
+      todayInboundCompleted,
+      todayOutboundCalls,
+      todayOutboundCompleted,
+      todayAvgDurationSec: Math.round(durationAgg._avg.duration ?? 0),
+      todayTotalCostPaisa: costAgg._sum.platformCost ?? 0,
+      activeCallsCount,
     };
   }
 
