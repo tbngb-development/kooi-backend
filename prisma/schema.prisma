@@ -335,6 +335,7 @@ model Call {
   classifierResult   ClassifierCallResult?
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
+  callMetrics        CallMetric[]
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   campaign    Campaign?    @relation(fields: [campaignId], references: [id])
@@ -1051,16 +1052,19 @@ model ClassifierDisposition {
   objectiveOptions Json
   industryPackId   String?
   isActive         Boolean                @default(true)
+  isMetric         Boolean                @default(false)
 
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
   industryPack     IndustryPack?          @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
   agentLinks       PlatformAgentClassifier[]
+  callMetrics      CallMetric[]
 
   @@unique([slug, industryPackId])
   @@index([industryPackId])
   @@index([isActive])
+  @@index([isMetric])
 }
 
 model PlatformAgentClassifier {
@@ -1105,6 +1109,32 @@ model ClassifierCallResult {
 
   @@index([tenantId, campaignId])
   @@index([tenantId, status])
+  @@index([callId])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL METRIC (Materialized classifier outcomes flagged for call metrics)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallMetric {
+  id                      String                @id @default(uuid())
+  callId                  String
+  tenantId                String
+  campaignId              String?
+  batchId                 String?
+  classifierDispositionId String
+  classifierSlug          String
+  classifierName          String
+  metricValue             String
+  confidence              Float?
+  createdAt               DateTime              @default(now())
+
+  call                  Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  classifierDisposition ClassifierDisposition @relation(fields: [classifierDispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, classifierDispositionId])
+  @@index([tenantId, campaignId, classifierDispositionId, metricValue])
   @@index([callId])
   @@index([batchId])
 }

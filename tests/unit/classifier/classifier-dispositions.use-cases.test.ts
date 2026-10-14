@@ -31,6 +31,7 @@ describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module
     objectiveOptions: [{ value: "YES", condition: "Budget >= 50k" }],
     industryPackId: "pack-1",
     isActive: true,
+    isMetric: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -52,6 +53,7 @@ describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module
       getCallResult: vi.fn(),
       listCallResults: vi.fn(),
       getCallTranscript: vi.fn(),
+      replaceCallMetrics: vi.fn(),
     };
   });
 

@@ -17,6 +17,7 @@ export const createClassifierDispositionSchema = z.object({
   questionType: z.enum(["BOOLEAN", "CHOICE", "MULTI_CHOICE"]),
   objectiveOptions: z.array(objectiveOptionSchema).min(1),
   industryPackId: z.string().uuid().nullable().optional(),
+  isMetric: z.boolean().default(false),
 });
 
 export const updateClassifierDispositionSchema = z.object({
@@ -27,6 +28,7 @@ export const updateClassifierDispositionSchema = z.object({
   objectiveOptions: z.array(objectiveOptionSchema).min(1).optional(),
   industryPackId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
+  isMetric: z.boolean().optional(),
 });
 
 export const assignClassifierToAgentSchema = z.object({
@@ -57,6 +59,15 @@ export const listClassifierDispositionsQuerySchema = z.object({
   industryPackId: z.string().uuid().optional(),
   questionType: z.enum(["BOOLEAN", "CHOICE", "MULTI_CHOICE"]).optional(),
   isActive: z.preprocess(
+    (val) =>
+      val === "true" || val === true
+        ? true
+        : val === "false" || val === false
+        ? false
+        : undefined,
+    z.boolean().optional(),
+  ),
+  isMetric: z.preprocess(
     (val) =>
       val === "true" || val === true
         ? true

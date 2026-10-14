@@ -26,6 +26,7 @@ describe("Classifier Extraction & Test Lab Use Cases (Module 11)", () => {
     objectiveOptions: [{ value: "YES", condition: "Caller said yes" }],
     industryPackId: "pack-1",
     isActive: true,
+    isMetric: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -47,6 +48,7 @@ describe("Classifier Extraction & Test Lab Use Cases (Module 11)", () => {
       getCallResult: vi.fn(),
       listCallResults: vi.fn(),
       getCallTranscript: vi.fn(),
+      replaceCallMetrics: vi.fn().mockResolvedValue(undefined),
     };
 
     mockProvider = {
@@ -245,6 +247,178 @@ describe("Classifier Extraction & Test Lab Use Cases (Module 11)", () => {
         "Classifier extraction completed",
         expect.objectContaining({ callId: "call-1", tenantId: "tenant-1" }),
       );
+
+      // 5. Metric persistence called with empty items when disposition has isMetric: false
+      expect(mockRepo.replaceCallMetrics).toHaveBeenCalledWith({
+        callId: "call-1",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        items: [],
+      });
+    });
+
+    it("materializes metric when isMetric is true and evaluation outcome is valid", async () => {
+      const metricDisp: ClassifierDisposition = {
+        ...sampleDisposition,
+        id: "disp-metric-1",
+        slug: "interested",
+        displayName: "Interested Lead",
+        isMetric: true,
+      };
+
+      mockRepo.getCallTranscript.mockResolvedValue({
+        transcript: "Yes I am interested",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        platformAgentId: "agent-1",
+        industryPackId: "pack-1",
+      });
+      mockRepo.resolveForAgent.mockResolvedValue([metricDisp]);
+      mockProvider.evaluate.mockResolvedValue({
+        answers: {
+          interested: { type: "noul", noul: 0.95 },
+        },
+        inputTokens: 100,
+        outputTokens: 20,
+        gatewayCost: "0.0001",
+        rawResponse: {},
+      });
+
+      await useCase.execute("call-1", "tenant-1");
+
+      expect(mockRepo.replaceCallMetrics).toHaveBeenCalledWith({
+        callId: "call-1",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        items: [
+          {
+            classifierDispositionId: "disp-metric-1",
+            classifierSlug: "interested",
+            classifierName: "Interested Lead",
+            metricValue: "YES",
+            confidence: 0.95,
+          },
+        ],
+      });
+    });
+
+    it("flattens MULTI_CHOICE items into individual CallMetric rows when isMetric is true", async () => {
+      const multiMetricDisp: ClassifierDisposition = {
+        id: "disp-multi-1",
+        slug: "channels",
+        name: "channels",
+        displayName: "Preferred Channels",
+        question: "Preferred channels?",
+        questionType: "MULTI_CHOICE",
+        objectiveOptions: [
+          { value: "WHATSAPP", condition: "WhatsApp requested" },
+          { value: "EMAIL", condition: "Email requested" },
+          { value: "SMS", condition: "SMS requested" },
+        ],
+        industryPackId: "pack-1",
+        isActive: true,
+        isMetric: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepo.getCallTranscript.mockResolvedValue({
+        transcript: "WhatsApp and Email please",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        platformAgentId: "agent-1",
+        industryPackId: "pack-1",
+      });
+      mockRepo.resolveForAgent.mockResolvedValue([multiMetricDisp]);
+      mockProvider.evaluate.mockResolvedValue({
+        answers: {
+          channels__whatsapp: { type: "noul", noul: 0.9 },
+          channels__email: { type: "noul", noul: 0.8 },
+          channels__sms: { type: "noul", noul: 0.1 },
+        },
+        inputTokens: 150,
+        outputTokens: 30,
+        gatewayCost: "0.0002",
+        rawResponse: {},
+      });
+
+      await useCase.execute("call-1", "tenant-1");
+
+      expect(mockRepo.replaceCallMetrics).toHaveBeenCalledWith({
+        callId: "call-1",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        items: [
+          {
+            classifierDispositionId: "disp-multi-1",
+            classifierSlug: "channels",
+            classifierName: "Preferred Channels",
+            metricValue: "WHATSAPP",
+            confidence: 0.9,
+          },
+          {
+            classifierDispositionId: "disp-multi-1",
+            classifierSlug: "channels",
+            classifierName: "Preferred Channels",
+            metricValue: "EMAIL",
+            confidence: 0.8,
+          },
+        ],
+      });
+    });
+
+    it("skips null, empty, and placeholder values (e.g. NO_DATA, NONE) for isMetric dispositions", async () => {
+      const choiceMetricDisp: ClassifierDisposition = {
+        id: "disp-choice-1",
+        slug: "timeline",
+        name: "timeline",
+        displayName: "Purchase Timeline",
+        question: "What is timeline?",
+        questionType: "CHOICE",
+        objectiveOptions: [
+          { value: "IMMEDIATE", condition: "Immediate" },
+          { value: "NO_DATA", condition: "No data shared" },
+        ],
+        industryPackId: "pack-1",
+        isActive: true,
+        isMetric: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockRepo.getCallTranscript.mockResolvedValue({
+        transcript: "Not sure about anything",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        platformAgentId: "agent-1",
+        industryPackId: "pack-1",
+      });
+      mockRepo.resolveForAgent.mockResolvedValue([choiceMetricDisp]);
+      mockProvider.evaluate.mockResolvedValue({
+        answers: {
+          timeline: { type: "choice", choice: "NO_DATA", confidence: 0.7 },
+        },
+        inputTokens: 100,
+        outputTokens: 20,
+        gatewayCost: "0.0001",
+        rawResponse: {},
+      });
+
+      await useCase.execute("call-1", "tenant-1");
+
+      expect(mockRepo.replaceCallMetrics).toHaveBeenCalledWith({
+        callId: "call-1",
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        items: [],
+      });
     });
 
     it("marks result FAILED and rethrows error when provider evaluation fails upstream", async () => {

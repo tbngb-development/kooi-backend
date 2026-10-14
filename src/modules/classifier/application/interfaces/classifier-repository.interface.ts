@@ -7,6 +7,7 @@ import type {
   CreateClassifierDispositionDTO,
   UpdateClassifierDispositionDTO,
   ListClassifierDispositionsFilters,
+  CallMetricPersistenceItem,
 } from "../dto/classifier.dto";
 
 export interface ClassifierRepository {
@@ -99,4 +100,13 @@ export interface ClassifierRepository {
     platformAgentId: string | null;
     industryPackId: string | null;
   } | null>;
+
+  // ── Call Metrics ────────────────────────────────────────────────
+  replaceCallMetrics(params: {
+    callId: string;
+    tenantId: string;
+    campaignId: string | null;
+    batchId: string | null;
+    items: CallMetricPersistenceItem[];
+  }): Promise<void>;
 }
