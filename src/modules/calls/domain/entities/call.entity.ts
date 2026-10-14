@@ -1,15 +1,17 @@
-// modules/calls/domain/entities/call.entity.ts
-
-import { type CallStatus } from "@prisma/client";
+import { type CallStatus, type CallType, type CallSource } from "@prisma/client";
 
 export interface CallEntityData {
   id: string;
   bolnaCallId: string | null;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
+  assistantId?: string | null;
   leadId: string;
   batchId: string | null;
+  type?: CallType;
+  source?: CallSource;
   status: CallStatus;
+  agentNumber?: string | null;
   duration: number | null;
   cost: number | null;
   platformCost: number | null;
@@ -40,8 +42,20 @@ export class CallEntity {
   get tenantId(): string {
     return this.data.tenantId;
   }
-  get campaignId(): string {
+  get campaignId(): string | null {
     return this.data.campaignId;
+  }
+  get assistantId(): string | null | undefined {
+    return this.data.assistantId;
+  }
+  get type(): CallType | undefined {
+    return this.data.type;
+  }
+  get source(): CallSource | undefined {
+    return this.data.source;
+  }
+  get agentNumber(): string | null | undefined {
+    return this.data.agentNumber;
   }
   get leadId(): string {
     return this.data.leadId;

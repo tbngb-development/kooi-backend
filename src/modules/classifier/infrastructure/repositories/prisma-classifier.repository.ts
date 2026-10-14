@@ -4,6 +4,7 @@ import type {
   CreateClassifierDispositionDTO,
   UpdateClassifierDispositionDTO,
   ListClassifierDispositionsFilters,
+  CallMetricPersistenceItem,
 } from "../../application/dto/classifier.dto";
 import type { ClassifierExtractionStatus } from "@prisma/client";
 
@@ -20,6 +21,7 @@ export class PrismaClassifierRepository implements ClassifierRepository {
         questionType: data.questionType,
         objectiveOptions: data.objectiveOptions as any,
         industryPackId: data.industryPackId ?? null,
+        isMetric: data.isMetric ?? false,
       },
     });
   }
@@ -43,6 +45,7 @@ export class PrismaClassifierRepository implements ClassifierRepository {
           industryPackId: data.industryPackId,
         }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.isMetric !== undefined && { isMetric: data.isMetric }),
       },
     });
   }
@@ -78,6 +81,9 @@ export class PrismaClassifierRepository implements ClassifierRepository {
     }
     if (filters.isActive !== undefined) {
       where.isActive = filters.isActive;
+    }
+    if (filters.isMetric !== undefined) {
+      where.isMetric = filters.isMetric;
     }
     if (filters.search) {
       where.OR = [
@@ -307,5 +313,37 @@ export class PrismaClassifierRepository implements ClassifierRepository {
       industryPackId:
         call.campaign?.assistant?.platformAgent?.industryPackId ?? null,
     };
+  }
+
+  // ── Call Metrics ──────────────────────────────────────────────────────────
+
+  async replaceCallMetrics(params: {
+    callId: string;
+    tenantId: string;
+    campaignId: string | null;
+    batchId: string | null;
+    items: CallMetricPersistenceItem[];
+  }) {
+    await prisma.$transaction(async (tx) => {
+      await tx.callMetric.deleteMany({
+        where: { callId: params.callId },
+      });
+
+      if (params.items.length > 0) {
+        await tx.callMetric.createMany({
+          data: params.items.map((item) => ({
+            callId: params.callId,
+            tenantId: params.tenantId,
+            campaignId: params.campaignId,
+            batchId: params.batchId,
+            classifierDispositionId: item.classifierDispositionId,
+            classifierSlug: item.classifierSlug,
+            classifierName: item.classifierName,
+            metricValue: item.metricValue,
+            confidence: item.confidence ?? null,
+          })),
+        });
+      }
+    });
   }
 }

@@ -35,6 +35,9 @@ export interface CreateBatchParams {
 export interface IBolnaClient {
   calls: {
     create(payload: BolnaCallPayload): Promise<BolnaCallResponse>;
+    stop(
+      executionId: string,
+    ): Promise<{ message: string; status: string; execution_id: string }>;
   };
   agents: {
     verify(agentId: string): Promise<BolnaAgentResponse>;
@@ -122,6 +125,21 @@ export class BolnaClient implements IBolnaClient {
         ...payload,
         recipient_phone_number: normalizedPhone,
       });
+      return response.data;
+    },
+
+    stop: async (
+      executionId: string,
+    ): Promise<{ message: string; status: string; execution_id: string }> => {
+      this.logger?.debug("Stopping Bolna call", {
+        action: "bolna.calls.stop",
+        executionId,
+      });
+      const response = await this.http.post<{
+        message: string;
+        status: string;
+        execution_id: string;
+      }>(`/call/${executionId}/stop`);
       return response.data;
     },
   };

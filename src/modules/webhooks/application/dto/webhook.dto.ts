@@ -16,12 +16,15 @@ export interface WebhookCallPayload {
   conversation_duration?: number;
   total_cost?: number;
   error_message?: string | null;
+  user_number?: string;
+  agent_number?: string;
   extracted_data?: Record<string, any> | null;
   telephony_data?: {
     duration: number | string;
     recording_url: string;
     to_number: string;
     from_number: string;
+    call_type?: string;
     hangup_reason?: string | null;
   };
   context_details?: {

@@ -127,6 +127,8 @@ model Assistant {
   platformAgent PlatformAgent @relation(fields: [platformAgentId], references: [id], onDelete: Restrict)
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
   campaigns     Campaign[]
+  leads         Lead[]
+  calls         Call[]
   @@index([tenantId, isDeleted])
 }
 
@@ -227,34 +229,51 @@ enum BatchStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Lead {
-  id         String     @id @default(uuid())
-  name       String?
-  phone      String
-  email      String?
-  company    String?
-  status     LeadStatus @default(PENDING)
-  doNotCall  Boolean    @default(false)
+  id            String          @id @default(uuid())
+  name          String?
+  phone         String
+  email         String?
+  company       String?
+  status        LeadStatus      @default(PENDING)
+  doNotCall     Boolean         @default(false)
   stoppedReason LeadStopReason?
-  tenantId   String
-  campaignId String
-  batchId    String?
-  metadata   Json?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  tenantId      String
+  campaignId    String?
+  batchId       String?
+  assistantId   String?
+  type          LeadType        @default(OUTBOUND)
+  source        LeadSource      @default(CAMPAIGN)
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   isDeleted   Boolean   @default(false)
   deletedAt   DateTime?
 
-  tenant   Tenant     @relation(fields: [tenantId], references: [id])
-  campaign Campaign   @relation(fields: [campaignId], references: [id])
-  batch    LeadBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  calls    Call[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  campaign  Campaign?  @relation(fields: [campaignId], references: [id])
+  batch     LeadBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  assistant Assistant? @relation(fields: [assistantId], references: [id])
+  calls     Call[]
 
   @@unique([phone, campaignId])
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
+  @@index([assistantId, isDeleted])
+  @@index([type, source])
   @@index([batchId, isDeleted])
   @@index([batchId])
+}
+
+enum LeadType {
+  OUTBOUND
+  INBOUND
+}
+
+enum LeadSource {
+  CAMPAIGN
+  INBOUND
+  QUICK_DIAL
 }
 
 enum LeadStatus {
@@ -277,13 +296,17 @@ enum LeadStopReason {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Call {
-  id                  String     @id @default(uuid())
-  bolnaCallId         String?    @unique
+  id                  String      @id @default(uuid())
+  bolnaCallId         String?     @unique
   tenantId            String
-  campaignId          String
+  campaignId          String?
   leadId              String
   batchId             String?
-  status              CallStatus @default(PENDING)
+  assistantId         String?
+  type                CallType    @default(OUTBOUND)
+  source              CallSource  @default(CAMPAIGN)
+  status              CallStatus  @default(PENDING)
+  agentNumber         String?
   duration            Int?
   cost                Float?
   platformCost        Int?
@@ -308,25 +331,41 @@ model Call {
   isDeleted   Boolean   @default(false)
   deletedAt   DateTime?
 
-  callAnalysis CallAnalysis?
-  classifierResult ClassifierCallResult?
+  callAnalysis       CallAnalysis?
+  classifierResult   ClassifierCallResult?
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
+  callMetrics        CallMetric[]
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  campaign     Campaign      @relation(fields: [campaignId], references: [id])
-  lead         Lead          @relation(fields: [leadId], references: [id])
-  batch        LeadBatch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  planVersion  PlanVersion?  @relation(fields: [planVersionId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id])
+  lead        Lead         @relation(fields: [leadId], references: [id])
+  batch       LeadBatch?   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  assistant   Assistant?   @relation(fields: [assistantId], references: [id])
+  planVersion PlanVersion? @relation(fields: [planVersionId], references: [id])
 
 
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
   @@index([campaignId, isDeleted, status])
+  @@index([assistantId, isDeleted])
+  @@index([type, source])
+  @@index([agentNumber])
   @@index([leadId])
   @@index([batchId, isDeleted])
   @@index([batchId, isDeleted, status])
   @@index([batchId])
+}
+
+enum CallType {
+  OUTBOUND
+  INBOUND
+}
+
+enum CallSource {
+  CAMPAIGN
+  INBOUND
+  QUICK_DIAL
 }
 
 enum CallStatus {
@@ -733,6 +772,7 @@ model PlatformAgent {
   welcomeMessage      String?
   requiredVariables   Json?
   gender              AgentGender?
+  type                PlatformAgentType @default(OUTBOUND)
   isActive   Boolean @default(true)
   isFeatured Boolean @default(false)
   sortOrder  Int     @default(0)
@@ -749,9 +789,16 @@ model PlatformAgent {
   bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
   industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
+  @@index([type])
   @@index([industryPackId])
   @@index([category])
   @@index([bolnaApiKeyId])
+}
+
+enum PlatformAgentType {
+  OUTBOUND
+  INBOUND
+  BOTH
 }
 
 enum AgentGender {
@@ -928,7 +975,7 @@ model CallExtractionOverview {
   id               String   @id @default(uuid())
   callId           String
   tenantId         String
-  campaignId       String
+  campaignId       String?
   batchId          String?
   dispositionId    String
   dispositionSlug  String
@@ -957,7 +1004,7 @@ model CallExtractionInsight {
   id               String   @id @default(uuid())
   callId           String
   tenantId         String
-  campaignId       String
+  campaignId       String?
   batchId          String?
   dispositionId    String
   dispositionSlug  String
@@ -1005,16 +1052,19 @@ model ClassifierDisposition {
   objectiveOptions Json
   industryPackId   String?
   isActive         Boolean                @default(true)
+  isMetric         Boolean                @default(false)
 
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
   industryPack     IndustryPack?          @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
   agentLinks       PlatformAgentClassifier[]
+  callMetrics      CallMetric[]
 
   @@unique([slug, industryPackId])
   @@index([industryPackId])
   @@index([isActive])
+  @@index([isMetric])
 }
 
 model PlatformAgentClassifier {
@@ -1032,7 +1082,7 @@ model ClassifierCallResult {
   id               String                     @id @default(uuid())
   callId           String                     @unique
   tenantId         String
-  campaignId       String
+  campaignId       String?
   batchId          String?
   status           ClassifierExtractionStatus @default(PENDING)
 
@@ -1059,6 +1109,32 @@ model ClassifierCallResult {
 
   @@index([tenantId, campaignId])
   @@index([tenantId, status])
+  @@index([callId])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL METRIC (Materialized classifier outcomes flagged for call metrics)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CallMetric {
+  id                      String                @id @default(uuid())
+  callId                  String
+  tenantId                String
+  campaignId              String?
+  batchId                 String?
+  classifierDispositionId String
+  classifierSlug          String
+  classifierName          String
+  metricValue             String
+  confidence              Float?
+  createdAt               DateTime              @default(now())
+
+  call                  Call                  @relation(fields: [callId], references: [id], onDelete: Cascade)
+  classifierDisposition ClassifierDisposition @relation(fields: [classifierDispositionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, classifierDispositionId])
+  @@index([tenantId, campaignId, classifierDispositionId, metricValue])
   @@index([callId])
   @@index([batchId])
 }

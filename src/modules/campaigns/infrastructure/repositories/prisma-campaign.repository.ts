@@ -20,6 +20,8 @@ import type {
   ExtractionInsightResult,
   ExtractionOverviewDisposition,
   ExtractionOverviewResult,
+  CampaignCallMetricsResult,
+  CampaignCallMetricItem,
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../../application/dto/campaign.dto";
@@ -939,6 +941,197 @@ export class PrismaCampaignRepository implements CampaignRepository {
     }
 
     return { campaignId, totalCalls, insights };
+  }
+
+  async getCampaignCallMetrics(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignCallMetricsResult> {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId, isDeleted: false },
+      select: {
+        id: true,
+        assistant: {
+          select: {
+            platformAgent: {
+              select: {
+                id: true,
+                industryPackId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!campaign) {
+      throw new CampaignNotFoundError();
+    }
+
+    const rows = await prisma.callMetric.groupBy({
+      by: [
+        "classifierDispositionId",
+        "classifierSlug",
+        "classifierName",
+        "metricValue",
+      ],
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      _count: { _all: true },
+      orderBy: [
+        { classifierSlug: "asc" },
+        { _count: { metricValue: "desc" } },
+      ],
+    });
+
+    const totalCallsResult = await prisma.callMetric.findMany({
+      where: {
+        tenantId,
+        campaignId,
+        ...(batchId && { batchId }),
+      },
+      select: { callId: true },
+      distinct: ["callId"],
+    });
+    const totalCalls = totalCallsResult.length;
+
+    // Get any dispositions assigned to the campaign's agent that are marked isMetric
+    const platformAgentId = campaign.assistant?.platformAgent?.id;
+    let agentMetricDispositions: Array<{
+      id: string;
+      slug: string;
+      displayName: string;
+      questionType: string;
+    }> = [];
+
+    if (platformAgentId) {
+      const links = await prisma.platformAgentClassifier.findMany({
+        where: {
+          platformAgentId,
+          classifierDisposition: {
+            isActive: true,
+            isMetric: true,
+          },
+        },
+        select: {
+          classifierDisposition: {
+            select: {
+              id: true,
+              slug: true,
+              displayName: true,
+              questionType: true,
+            },
+          },
+        },
+      });
+      agentMetricDispositions = links.map((l) => l.classifierDisposition);
+    }
+
+    // Also get details for all recorded metric dispositions
+    const recordedIds = [...new Set(rows.map((r) => r.classifierDispositionId))];
+    const recordedDetails = await prisma.classifierDisposition.findMany({
+      where: { id: { in: recordedIds } },
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        questionType: true,
+      },
+    });
+
+    // Merge into map
+    const dispMap = new Map<
+      string,
+      {
+        id: string;
+        slug: string;
+        displayName: string;
+        questionType: string;
+      }
+    >();
+
+    for (const d of agentMetricDispositions) {
+      dispMap.set(d.id, d);
+    }
+    for (const d of recordedDetails) {
+      dispMap.set(d.id, d);
+    }
+
+    const metricsMap = new Map<
+      string,
+      {
+        classifierDispositionId: string;
+        classifierSlug: string;
+        classifierName: string;
+        questionType: string;
+        totalCount: number;
+        values: Array<{
+          value: string;
+          count: number;
+          percentage: number;
+        }>;
+      }
+    >();
+
+    // Initialize map with known metric dispositions (even if 0 counts)
+    for (const d of dispMap.values()) {
+      metricsMap.set(d.id, {
+        classifierDispositionId: d.id,
+        classifierSlug: d.slug,
+        classifierName: d.displayName,
+        questionType: d.questionType,
+        totalCount: 0,
+        values: [],
+      });
+    }
+
+    for (const row of rows) {
+      let item = metricsMap.get(row.classifierDispositionId);
+      if (!item) {
+        item = {
+          classifierDispositionId: row.classifierDispositionId,
+          classifierSlug: row.classifierSlug,
+          classifierName: row.classifierName,
+          questionType: "CHOICE",
+          totalCount: 0,
+          values: [],
+        };
+        metricsMap.set(row.classifierDispositionId, item);
+      }
+
+      const count = row._count._all;
+      item.totalCount += count;
+      item.values.push({
+        value: row.metricValue,
+        count,
+        percentage: 0,
+      });
+    }
+
+    const metrics: CampaignCallMetricItem[] = [];
+    for (const item of metricsMap.values()) {
+      for (const v of item.values) {
+        v.percentage =
+          item.totalCount > 0
+            ? parseFloat(((v.count / item.totalCount) * 100).toFixed(1))
+            : 0;
+      }
+      item.values.sort((a, b) => b.count - a.count);
+      metrics.push(item);
+    }
+
+    // Sort metrics by total responses desc, then name asc
+    metrics.sort(
+      (a, b) =>
+        b.totalCount - a.totalCount ||
+        a.classifierName.localeCompare(b.classifierName),
+    );
+
+    return { campaignId, totalCalls, metrics };
   }
 
   async findAssistantWithAgent(

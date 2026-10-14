@@ -16,12 +16,17 @@ export class CallLifecycleService {
   async checkBatchAndCampaignCompletion(
     call: ResolvedCallContext,
   ): Promise<void> {
+    if (!call.campaignId) {
+      return;
+    }
+
     if (call.batchId) {
-      const [activeLeads, activeCalls] = await Promise.all([
+      const [activeLeads, activeCalls, hasPendingRetries] = await Promise.all([
         this.webhookRepo.countActiveLeadsInBatch(call.batchId),
         this.webhookRepo.countActiveCallsInBatch(call.batchId),
+        this.webhookRepo.hasPendingRetriesInBatch(call.batchId),
       ]);
-      if (activeLeads === 0 && activeCalls === 0) {
+      if (activeLeads === 0 && activeCalls === 0 && !hasPendingRetries) {
         await this.webhookRepo.updateBatchStatus(
           call.batchId,
           "COMPLETED",

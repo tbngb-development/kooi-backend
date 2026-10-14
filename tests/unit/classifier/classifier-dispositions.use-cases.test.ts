@@ -16,6 +16,7 @@ import {
   ClassifierDispositionNotFoundError,
 } from "../../../src/modules/classifier/domain/errors/classifier.errors";
 import { NotFoundError } from "../../../src/shared/errors/not-found.error";
+import { listClassifierDispositionsQuerySchema } from "../../../src/modules/classifier/presentation/classifier.schema";
 
 describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module 11)", () => {
   let mockRepo: { [K in keyof ClassifierRepository]: ReturnType<typeof vi.fn> };
@@ -30,6 +31,7 @@ describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module
     objectiveOptions: [{ value: "YES", condition: "Budget >= 50k" }],
     industryPackId: "pack-1",
     isActive: true,
+    isMetric: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -51,6 +53,7 @@ describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module
       getCallResult: vi.fn(),
       listCallResults: vi.fn(),
       getCallTranscript: vi.fn(),
+      replaceCallMetrics: vi.fn(),
     };
   });
 
@@ -251,4 +254,34 @@ describe("Classifier Dispositions, Agent Assignments & Results Use Cases (Module
       });
     });
   });
+
+  describe("listClassifierDispositionsQuerySchema Validation", () => {
+    it("successfully parses query parameters with limit=1000 and isActive='true'", () => {
+      const parsed = listClassifierDispositionsQuerySchema.parse({
+        limit: "1000",
+        isActive: "true",
+      });
+
+      expect(parsed.limit).toBe(1000);
+      expect(parsed.isActive).toBe(true);
+      expect(parsed.page).toBe(1);
+    });
+
+    it("successfully parses query parameters with boolean isActive=true", () => {
+      const parsed = listClassifierDispositionsQuerySchema.parse({
+        limit: 500,
+        isActive: true,
+      });
+
+      expect(parsed.limit).toBe(500);
+      expect(parsed.isActive).toBe(true);
+    });
+
+    it("rejects limits exceeding 1000", () => {
+      expect(() =>
+        listClassifierDispositionsQuerySchema.parse({ limit: "1001" }),
+      ).toThrow();
+    });
+  });
 });
+

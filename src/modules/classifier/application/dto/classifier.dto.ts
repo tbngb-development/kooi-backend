@@ -15,6 +15,7 @@ export interface CreateClassifierDispositionDTO {
   questionType: ClassifierQuestionType;
   objectiveOptions: ObjectiveOption[];
   industryPackId?: string | null;
+  isMetric?: boolean;
 }
 
 export interface UpdateClassifierDispositionDTO {
@@ -25,15 +26,25 @@ export interface UpdateClassifierDispositionDTO {
   objectiveOptions?: ObjectiveOption[];
   industryPackId?: string | null;
   isActive?: boolean;
+  isMetric?: boolean;
 }
 
 export interface ListClassifierDispositionsFilters {
   industryPackId?: string;
   questionType?: ClassifierQuestionType;
   isActive?: boolean;
+  isMetric?: boolean;
   search?: string;
   page?: number;
   limit?: number;
+}
+
+export interface CallMetricPersistenceItem {
+  classifierDispositionId: string;
+  classifierSlug: string;
+  classifierName: string;
+  metricValue: string;
+  confidence?: number | null;
 }
 
 // ── Agent Assignment ────────────────────────────────────────────────────────

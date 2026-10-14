@@ -9,8 +9,12 @@ import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-c
 import type { GetCallUseCase } from "../application/use-cases/get-call.use-case";
 import type { GetCallTranscriptUseCase } from "../application/use-cases/get-call-transcript.use-case";
 import type { GetCallStatsUseCase } from "../application/use-cases/get-call-stats.use-case";
+import type { GetCallCenterStatsUseCase } from "../application/use-cases/get-call-center-stats.use-case";
 import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-available-filters.use-case";
 import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.use-case";
+import type { QuickDialCallUseCase } from "../application/use-cases/quick-dial-call.use-case";
+import type { StopCallUseCase } from "../application/use-cases/stop-call.use-case";
+import type { QuickDialInput } from "./call.schema";
 
 export class TenantCallController {
   constructor(
@@ -18,8 +22,11 @@ export class TenantCallController {
     private readonly getCallDetailsUseCase: GetCallUseCase,
     private readonly getCallTranscriptUseCase: GetCallTranscriptUseCase,
     private readonly getCallStatsUseCase: GetCallStatsUseCase,
+    private readonly getCallCenterStatsUseCase: GetCallCenterStatsUseCase,
     private readonly getAvailableFiltersUseCase: GetAvailableFiltersUseCase,
     private readonly archiveCallUseCase: ArchiveCallUseCase,
+    private readonly quickDialCallUseCase: QuickDialCallUseCase,
+    private readonly stopCallUseCase: StopCallUseCase,
   ) {}
 
   list = async (
@@ -34,8 +41,12 @@ export class TenantCallController {
       const data = await this.listCallsUseCase.execute({
         tenantId,
         campaignId: query.campaignId,
+        assistantId: query.assistantId,
         leadId: query.leadId,
         status: query.status,
+        type: query.type,
+        source: query.source,
+        agentNumber: query.agentNumber,
         search: query.search,
         dateFrom: query.dateFrom,
         dateTo: query.dateTo,
@@ -136,6 +147,60 @@ export class TenantCallController {
       const callId = param(req, "id");
       await this.archiveCallUseCase.execute(tenantId, callId);
       sendSuccess(res, { id: callId }, 200, "Call archived successfully");
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  quickDial = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const body = req.body as QuickDialInput;
+      const data = await this.quickDialCallUseCase.execute({
+        tenantId,
+        assistantId: body.assistantId,
+        phone: body.phone,
+        name: body.name,
+        fromPhoneNumber: body.fromPhoneNumber,
+        userData: body.userData,
+      });
+      sendSuccess(res, data, 201, "Quick dial call initiated successfully");
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  callCenterStats = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const data = await this.getCallCenterStatsUseCase.execute(tenantId);
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  stopCall = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const callId = param(req, "id");
+      const data = await this.stopCallUseCase.execute({
+        tenantId,
+        callId,
+      });
+      sendSuccess(res, data, 200, "Call stopped successfully");
     } catch (err) {
       next(err);
     }

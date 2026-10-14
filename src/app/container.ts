@@ -224,6 +224,7 @@ export function buildContainer(): AppContainer {
 
   const calls = buildCallModule({
     bolnaClientFactory,
+    walletRepo: wallet.repository,
     debitWalletForCall: wallet.useCases.debitWalletForCall,
     classifierQueue: classifier.queue,
     logger,

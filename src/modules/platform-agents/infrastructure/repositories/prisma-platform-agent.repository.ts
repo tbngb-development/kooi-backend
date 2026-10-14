@@ -36,6 +36,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       isFeatured: data.isFeatured ?? false,
       sortOrder: data.sortOrder ?? 0,
       isActive: true,
+      type: data.type ?? "OUTBOUND",
       bolnaApiKey: { connect: { id: data.bolnaApiKeyId } },
       welcomeMessage: data.welcomeMessage ?? undefined,
       requiredVariables:
@@ -72,6 +73,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
     if (data.category !== undefined) updateData.category = data.category;
     if (data.description !== undefined)
       updateData.description = data.description;
+    if (data.type !== undefined) updateData.type = data.type;
     if (data.defaultConfig !== undefined) {
       updateData.defaultConfig = data.defaultConfig as Prisma.InputJsonValue;
     }
@@ -143,6 +145,7 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
         welcomeMessage: source.welcomeMessage,
         requiredVariables: source.requiredVariables as Prisma.InputJsonValue,
         gender: source.gender,
+        type: source.type,
         isActive: source.isActive,
         isFeatured: source.isFeatured,
         sortOrder: source.sortOrder,
@@ -201,6 +204,9 @@ export class PrismaPlatformAgentRepository implements PlatformAgentRepository {
       where: {
         ...(filters.industryPackId !== undefined && {
           industryPackId: filters.industryPackId,
+        }),
+        ...(filters.type !== undefined && {
+          type: filters.type,
         }),
         ...(filters.isActive !== undefined && {
           isActive: filters.isActive,

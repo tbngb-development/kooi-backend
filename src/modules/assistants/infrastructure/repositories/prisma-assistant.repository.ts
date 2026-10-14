@@ -12,9 +12,40 @@ export class PrismaAssistantRepository implements AssistantRepository {
   async list(tenantId: string): Promise<AssistantEntityData[]> {
     const assistants = await prisma.assistant.findMany({
       where: { tenantId, isDeleted: false },
+      include: {
+        platformAgent: {
+          select: {
+            id: true,
+            bolnaId: true,
+            name: true,
+            slug: true,
+            category: true,
+            type: true,
+            industryPack: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                icon: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
-    return assistants.map((a) => this.toEntityData(a));
+    return assistants.map((a) => ({
+      id: a.id,
+      name: a.name,
+      tenantId: a.tenantId,
+      platformAgentId: a.platformAgentId,
+      config: a.config as Record<string, unknown>,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      isDeleted: a.isDeleted,
+      deletedAt: a.deletedAt,
+      platformAgent: a.platformAgent,
+    }));
   }
 
   async findById(
@@ -55,6 +86,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         bolnaId: assistant.platformAgent.bolnaId,
         name: assistant.platformAgent.name,
         slug: assistant.platformAgent.slug,
+        type: assistant.platformAgent.type,
         systemPrompt: assistant.platformAgent.systemPrompt,
         welcomeMessage: assistant.platformAgent.welcomeMessage,
         requiredVariables: assistant.platformAgent.requiredVariables as

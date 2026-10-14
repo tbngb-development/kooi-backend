@@ -294,6 +294,39 @@ describe("Webhook Use Cases", () => {
 
       expect(mockCallTerminal.handleCallCanceled).toHaveBeenCalledWith(sampleResolvedCall);
     });
+
+    it("handles scheduled/rescheduled events and finalizes call with previous disposition from retry_history", async () => {
+      vi.mocked(mockWebhookRepo.findBatchStatusById).mockResolvedValue("RUNNING");
+
+      const useCase = new ProcessCallWebhookUseCase(
+        mockWebhookRepo,
+        mockCallResolver,
+        mockCallCompletion,
+        mockCallTerminal,
+      );
+
+      const payload: WebhookCallPayload = {
+        id: "bolna-call-1",
+        status: "scheduled",
+        retry_history: [
+          { attempt: 1, status: "busy", duration: 0 },
+        ],
+      };
+
+      await useCase.execute(payload);
+
+      expect(mockCallResolver.resolveCallRecord).toHaveBeenCalledWith("bolna-call-1", payload);
+      expect(mockWebhookRepo.updateCallTerminalState).toHaveBeenCalledWith(
+        "call-1",
+        expect.objectContaining({
+          status: "BUSY",
+          endedAt: expect.any(Date),
+        }),
+      );
+      expect(mockWebhookRepo.updateLeadStatus).toHaveBeenCalledWith("lead-1", "BUSY");
+      expect(mockWebhookRepo.updateBatchStatus).toHaveBeenCalledWith("batch-1", "RUNNING");
+      expect(mockWebhookRepo.updateCampaignStatus).toHaveBeenCalledWith("campaign-1", "RUNNING");
+    });
   });
 
   describe("ProcessBatchWebhookUseCase", () => {

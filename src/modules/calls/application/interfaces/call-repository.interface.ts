@@ -7,8 +7,12 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 
 export interface ListCallsFilters {
   campaignId?: string;
+  assistantId?: string;
   leadId?: string;
   status?: string;
+  type?: "OUTBOUND" | "INBOUND";
+  source?: "CAMPAIGN" | "INBOUND" | "QUICK_DIAL";
+  agentNumber?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -30,6 +34,10 @@ export interface PaginatedCallsResult {
         phone: string;
       } | null;
       campaign: {
+        id: string;
+        name: string;
+      } | null;
+      assistant?: {
         id: string;
         name: string;
       } | null;
@@ -71,6 +79,10 @@ export interface DetailedCallResult extends CallEntityData {
     name: string;
     description: string | null;
   } | null;
+  assistant?: {
+    id: string;
+    name: string;
+  } | null;
   callAnalysis: {
     id: string;
     dynamicExtractions: string | null;
@@ -103,6 +115,16 @@ export interface CallStatsResult {
   avgDuration: number;
 }
 
+export interface CallCenterStatsResult {
+  todayInboundCalls: number;
+  todayInboundCompleted: number;
+  todayOutboundCalls: number;
+  todayOutboundCompleted: number;
+  todayAvgDurationSec: number;
+  todayTotalCostPaisa: number;
+  activeCallsCount: number;
+}
+
 export interface CallRepository {
   list(
     tenantId: string,
@@ -120,6 +142,8 @@ export interface CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult>;
+
+  getCallCenterStats(tenantId: string): Promise<CallCenterStatsResult>;
 
   getTenantCallOverview(tenantId: string): Promise<CallListOverview>;
 

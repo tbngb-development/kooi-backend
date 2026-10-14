@@ -49,6 +49,7 @@ describe("Webhook Internal Services", () => {
       incrementTerminalStats: vi.fn(),
       countActiveLeadsInBatch: vi.fn().mockResolvedValue(0),
       countActiveCallsInBatch: vi.fn().mockResolvedValue(0),
+      hasPendingRetriesInBatch: vi.fn().mockResolvedValue(false),
       countActiveLeadsInCampaignLegacy: vi.fn().mockResolvedValue(0),
       countActiveCallsInCampaignLegacy: vi.fn().mockResolvedValue(0),
       getAllBatchStatuses: vi.fn().mockResolvedValue([]),
@@ -99,30 +100,7 @@ describe("Webhook Internal Services", () => {
       expect(result).toBeNull();
     });
 
-    it("returns existing call directly if retried === 0", async () => {
-      vi.mocked(mockWebhookRepo.findCallByBolnaCallId).mockResolvedValue(null);
-      vi.mocked(mockWebhookRepo.findBatchIdByBolnaBatchId).mockResolvedValue({
-        id: "batch-1",
-        tenantId: "tenant-1",
-        campaignId: "campaign-1",
-        status: "RUNNING",
-      });
-      vi.mocked(mockWebhookRepo.findLeadByPhoneAndBatch).mockResolvedValue({ id: "lead-1" });
-      vi.mocked(mockWebhookRepo.findCallByLeadAndBatch).mockResolvedValue(sampleResolvedCall);
-
-      const resolver = new CallResolverService(mockWebhookRepo);
-      const result = await resolver.resolveCallRecord("bolna-call-2", {
-        status: "ringing",
-        batch_id: "bolna-batch-1",
-        telephony_data: { to_number: "+919876543210" },
-        batch_run_details: { retried: 0 },
-      } as WebhookCallPayload);
-
-      expect(result).toBe(sampleResolvedCall);
-      expect(mockWebhookRepo.createCall).not.toHaveBeenCalled();
-    });
-
-    it("updates status to CALLING and appends history when retried > 0", async () => {
+    it("provisions a new call when bolnaCallId is not yet in DB even if an earlier call exists", async () => {
       vi.mocked(mockWebhookRepo.findCallByBolnaCallId).mockResolvedValue(null);
       vi.mocked(mockWebhookRepo.findBatchIdByBolnaBatchId).mockResolvedValue({
         id: "batch-1",
@@ -133,32 +111,77 @@ describe("Webhook Internal Services", () => {
       vi.mocked(mockWebhookRepo.findLeadByPhoneAndBatch).mockResolvedValue({ id: "lead-1" });
       vi.mocked(mockWebhookRepo.findCallByLeadAndBatch).mockResolvedValue({
         ...sampleResolvedCall,
-        callHistory: [],
+        status: "NO_ANSWER",
       });
-      vi.mocked(mockWebhookRepo.updateCallStatusAndHistory).mockResolvedValue({
-        ...sampleResolvedCall,
-        status: "CALLING",
-      });
+      const newCallContext = { ...sampleResolvedCall, id: "call-2", bolnaCallId: "bolna-call-2" };
+      vi.mocked(mockWebhookRepo.createCall).mockResolvedValue(newCallContext);
 
       const resolver = new CallResolverService(mockWebhookRepo);
-      await resolver.resolveCallRecord("bolna-call-retry-1", {
+      const result = await resolver.resolveCallRecord("bolna-call-2", {
+        status: "ringing",
+        batch_id: "bolna-batch-1",
+        telephony_data: { to_number: "+919876543210" },
+        batch_run_details: { retried: 0 },
+      } as WebhookCallPayload);
+
+      expect(result).toBe(newCallContext);
+      expect(mockWebhookRepo.createCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bolnaCallId: "bolna-call-2",
+          status: "CALLING",
+          leadId: "lead-1",
+          batchId: "batch-1",
+        }),
+      );
+    });
+
+    it("finalizes previous attempt and provisions a brand-new call record for retry executions", async () => {
+      vi.mocked(mockWebhookRepo.findCallByBolnaCallId).mockResolvedValue(null);
+      vi.mocked(mockWebhookRepo.findBatchIdByBolnaBatchId).mockResolvedValue({
+        id: "batch-1",
+        tenantId: "tenant-1",
+        campaignId: "campaign-1",
+        status: "RUNNING",
+      });
+      vi.mocked(mockWebhookRepo.findLeadByPhoneAndBatch).mockResolvedValue({ id: "lead-1" });
+      vi.mocked(mockWebhookRepo.findCallByLeadAndBatch).mockResolvedValue({
+        ...sampleResolvedCall,
+        status: "SCHEDULED",
+      });
+      const retryCallContext = { ...sampleResolvedCall, id: "call-retry-1", bolnaCallId: "bolna-call-retry-1" };
+      vi.mocked(mockWebhookRepo.createCall).mockResolvedValue(retryCallContext);
+
+      const resolver = new CallResolverService(mockWebhookRepo);
+      const result = await resolver.resolveCallRecord("bolna-call-retry-1", {
         status: "in-progress",
         batch_id: "bolna-batch-1",
         telephony_data: { to_number: "+919876543210" },
         batch_run_details: { retried: 1 },
+        retry_history: [
+          { attempt: 1, status: "busy" },
+        ],
       } as WebhookCallPayload);
 
-      expect(mockWebhookRepo.updateCallStatusAndHistory).toHaveBeenCalledWith(
+      // Verify earlier attempt was finalized with true previous disposition (BUSY), not kept as SCHEDULED
+      expect(mockWebhookRepo.updateCallTerminalState).toHaveBeenCalledWith(
         "call-1",
-        "bolna-call-retry-1",
-        "CALLING",
-        expect.arrayContaining([
-          expect.objectContaining({
-            attempt: 1,
-            bolnaCallId: "bolna-call-1",
-          }),
-        ]),
+        expect.objectContaining({
+          status: "BUSY",
+          endedAt: expect.any(Date),
+        }),
       );
+
+      // Verify a new distinct Call was created
+      expect(mockWebhookRepo.createCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bolnaCallId: "bolna-call-retry-1",
+          status: "CALLING",
+          leadId: "lead-1",
+          batchId: "batch-1",
+        }),
+      );
+      expect(mockWebhookRepo.updateCallStatusAndHistory).not.toHaveBeenCalled();
+      expect(result).toBe(retryCallContext);
     });
 
     it("provisions a new call when no existing call record is found", async () => {
@@ -294,12 +317,12 @@ describe("Webhook Internal Services", () => {
       expect(mockWebhookRepo.updateCallTerminalState).toHaveBeenCalledWith(
         "call-1",
         expect.objectContaining({
-          status: "SCHEDULED",
+          status: "NO_ANSWER",
           endedAt: expect.any(Date),
         }),
       );
       expect(mockWebhookRepo.updateLeadStatus).toHaveBeenCalledWith("lead-1", "NO_ANSWER");
-      expect(mockLifecycle.checkBatchAndCampaignCompletion).toHaveBeenCalledWith(sampleResolvedCall);
+      expect(mockLifecycle.checkBatchAndCampaignCompletion).not.toHaveBeenCalled();
     });
 
     it("transitions call to terminal state when batch was stopped", async () => {
@@ -347,7 +370,7 @@ describe("Webhook Internal Services", () => {
 
       const terminal = new CallTerminalService(mockWebhookRepo, mockLifecycle);
 
-      // Attempt 1: Callee is busy -> Will retry, call status SCHEDULED, history contains attempt 1
+      // Attempt 1: Callee is busy -> Will retry, call status BUSY, history contains attempt 1
       const call1 = { ...sampleResolvedCall, callHistory: [] };
       await terminal.handleCallTerminal(call1, "BUSY", {
         id: "bolna-call-1",
@@ -359,7 +382,7 @@ describe("Webhook Internal Services", () => {
       expect(mockWebhookRepo.updateCallTerminalState).toHaveBeenCalledWith(
         "call-1",
         expect.objectContaining({
-          status: "SCHEDULED",
+          status: "BUSY",
           callHistory: [
             expect.objectContaining({
               attempt: 1,
@@ -369,8 +392,9 @@ describe("Webhook Internal Services", () => {
           ],
         }),
       );
+      expect(mockLifecycle.checkBatchAndCampaignCompletion).not.toHaveBeenCalled();
 
-      // Attempt 2: Callee is busy again -> Will retry, call status SCHEDULED, history contains attempt 1 & 2
+      // Attempt 2: Callee is busy again -> Will retry, call status BUSY, history contains attempt 1 & 2
       const call2 = {
         ...sampleResolvedCall,
         callHistory: [
@@ -394,13 +418,14 @@ describe("Webhook Internal Services", () => {
       expect(mockWebhookRepo.updateCallTerminalState).toHaveBeenCalledWith(
         "call-1",
         expect.objectContaining({
-          status: "SCHEDULED",
+          status: "BUSY",
           callHistory: expect.arrayContaining([
             expect.objectContaining({ attempt: 1, status: "BUSY" }),
             expect.objectContaining({ attempt: 2, status: "BUSY", bolnaCallId: "bolna-call-2" }),
           ]),
         }),
       );
+      expect(mockLifecycle.checkBatchAndCampaignCompletion).not.toHaveBeenCalled();
 
       // Attempt 3: Callee is busy for 3rd time (max_retries = 2) -> Retries exhausted!
       // Call status must become terminal BUSY and callHistory has all 3 attempts
@@ -444,6 +469,7 @@ describe("Webhook Internal Services", () => {
         }),
       );
       expect(mockWebhookRepo.updateLeadStatus).toHaveBeenCalledWith("lead-1", "BUSY");
+      expect(mockLifecycle.checkBatchAndCampaignCompletion).toHaveBeenCalledWith(call3);
     });
   });
 

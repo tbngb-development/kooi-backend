@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   evaluateCallRetry,
   mapLastRetryToLeadStatus,
+  mapRetryStatusToCallStatus,
 } from "../../../src/modules/webhooks/domain/rules/call-retry.rules";
 import type { RetryConfig } from "../../../src/shared/types/bolna.types";
 
@@ -62,7 +63,7 @@ describe("Call Retry Rules", () => {
       });
 
       expect(result.willRetry).toBe(true);
-      expect(result.finalCallStatus).toBe("SCHEDULED");
+      expect(result.finalCallStatus).toBe("NO_ANSWER");
       expect(result.leadStatus).toBe("NO_ANSWER");
     });
 
@@ -75,7 +76,7 @@ describe("Call Retry Rules", () => {
       });
 
       expect(result.willRetry).toBe(true);
-      expect(result.finalCallStatus).toBe("SCHEDULED");
+      expect(result.finalCallStatus).toBe("BUSY");
       expect(result.leadStatus).toBe("BUSY");
     });
 
@@ -88,7 +89,7 @@ describe("Call Retry Rules", () => {
       });
 
       expect(result.willRetry).toBe(true);
-      expect(result.finalCallStatus).toBe("SCHEDULED");
+      expect(result.finalCallStatus).toBe("FAILED");
       expect(result.leadStatus).toBe("FAILED");
     });
 
@@ -149,6 +150,35 @@ describe("Call Retry Rules", () => {
       expect(mapLastRetryToLeadStatus("failed")).toBe("FAILED");
       expect(mapLastRetryToLeadStatus("error")).toBe("FAILED");
       expect(mapLastRetryToLeadStatus("unknown_event")).toBe("FAILED");
+    });
+  });
+
+  describe("mapRetryStatusToCallStatus", () => {
+    it("maps null or undefined raw status to FAILED", () => {
+      expect(mapRetryStatusToCallStatus(null)).toBe("FAILED");
+      expect(mapRetryStatusToCallStatus(undefined)).toBe("FAILED");
+      expect(mapRetryStatusToCallStatus("")).toBe("FAILED");
+    });
+
+    it("maps busy variations to BUSY", () => {
+      expect(mapRetryStatusToCallStatus("busy")).toBe("BUSY");
+      expect(mapRetryStatusToCallStatus("BUSY")).toBe("BUSY");
+    });
+
+    it("maps no-answer variations to NO_ANSWER", () => {
+      expect(mapRetryStatusToCallStatus("no-answer")).toBe("NO_ANSWER");
+      expect(mapRetryStatusToCallStatus("no_answer")).toBe("NO_ANSWER");
+      expect(mapRetryStatusToCallStatus("NO-ANSWER")).toBe("NO_ANSWER");
+    });
+
+    it("maps completed variations to COMPLETED", () => {
+      expect(mapRetryStatusToCallStatus("completed")).toBe("COMPLETED");
+      expect(mapRetryStatusToCallStatus("call-completed")).toBe("COMPLETED");
+    });
+
+    it("maps other failure states or unknown strings to FAILED", () => {
+      expect(mapRetryStatusToCallStatus("failed")).toBe("FAILED");
+      expect(mapRetryStatusToCallStatus("error")).toBe("FAILED");
     });
   });
 });
