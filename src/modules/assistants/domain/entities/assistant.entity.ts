@@ -1,3 +1,5 @@
+import type { PlatformAgentType } from "@prisma/client";
+
 export interface RegisterAssistantInput {
   tenantId: string;
   name: string;
@@ -24,6 +26,7 @@ export interface GetAssistantOutput {
       bolnaId: string;
       name: string;
       slug: string;
+      type?: PlatformAgentType;
       description: string | null;
       category: string | null;
       isFeatured: boolean;
@@ -52,6 +55,7 @@ export interface AssistantEntityData {
     bolnaId: string;
     name: string;
     slug: string;
+    type?: PlatformAgentType;
     category?: string | null;
     industryPack?: {
       id: string;

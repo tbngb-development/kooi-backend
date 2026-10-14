@@ -771,6 +771,7 @@ model PlatformAgent {
   welcomeMessage      String?
   requiredVariables   Json?
   gender              AgentGender?
+  type                PlatformAgentType @default(OUTBOUND)
   isActive   Boolean @default(true)
   isFeatured Boolean @default(false)
   sortOrder  Int     @default(0)
@@ -787,9 +788,16 @@ model PlatformAgent {
   bolnaApiKey   BolnaApiKey @relation(fields: [bolnaApiKeyId], references: [id])
   industryPack   IndustryPack? @relation(fields: [industryPackId], references: [id], onDelete: SetNull)
 
+  @@index([type])
   @@index([industryPackId])
   @@index([category])
   @@index([bolnaApiKeyId])
+}
+
+enum PlatformAgentType {
+  OUTBOUND
+  INBOUND
+  BOTH
 }
 
 enum AgentGender {

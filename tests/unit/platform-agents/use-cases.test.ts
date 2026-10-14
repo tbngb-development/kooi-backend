@@ -3,6 +3,7 @@ import { CloneAgentToWorkspaceUseCase } from "../../../src/modules/platform-agen
 import { ClonePlatformAgentUseCase } from "../../../src/modules/platform-agents/application/use-cases/clone-platform-agent.use-case";
 import { RegisterPlatformAgentUseCase } from "../../../src/modules/platform-agents/application/use-cases/register-platform-agent.use-case";
 import { SyncPlatformAgentUseCase } from "../../../src/modules/platform-agents/application/use-cases/sync-platform-agent.use-case";
+import { UpdatePlatformAgentUseCase } from "../../../src/modules/platform-agents/application/use-cases/update-platform-agent.use-case";
 import type { PlatformAgentRepository } from "../../../src/modules/platform-agents/application/interfaces/platform-agent-repository.interface";
 import type { BolnaTemplateProvider } from "../../../src/modules/platform-agents/application/interfaces/bolna-template-provider.interface";
 import {
@@ -50,6 +51,7 @@ const mockSourceAgent: PlatformAgent = {
   name: "Solar Inbound Agent",
   slug: "solar-inbound",
   gender: "MALE",
+  type: "OUTBOUND",
   welcomeMessage: "Hello {customer_name}, interested in solar?",
   systemPrompt: "CAMPAIGN VARIABLES: {customer_name}, {monthly_bill}",
   requiredVariables: [
@@ -301,6 +303,50 @@ describe("Platform Agents Use Cases (Module 6 - Master Templates & Cloning)", ()
         systemPrompt: "Updated prompt content",
       });
       expect(result.systemPrompt).toBe("Updated prompt content");
+    });
+  });
+
+  describe("UpdatePlatformAgentUseCase", () => {
+    it("updates platform agent type to INBOUND successfully", async () => {
+      vi.mocked(repository.findById).mockResolvedValue(mockSourceAgent);
+      vi.mocked(repository.update).mockResolvedValue({
+        ...mockSourceAgent,
+        type: "INBOUND",
+      });
+
+      const useCase = new UpdatePlatformAgentUseCase(repository);
+      const result = await useCase.execute("pa-source-1", { type: "INBOUND" });
+
+      expect(repository.findById).toHaveBeenCalledWith("pa-source-1");
+      expect(repository.update).toHaveBeenCalledWith("pa-source-1", {
+        type: "INBOUND",
+      });
+      expect(result.type).toBe("INBOUND");
+    });
+
+    it("updates platform agent type to BOTH successfully", async () => {
+      vi.mocked(repository.findById).mockResolvedValue(mockSourceAgent);
+      vi.mocked(repository.update).mockResolvedValue({
+        ...mockSourceAgent,
+        type: "BOTH",
+      });
+
+      const useCase = new UpdatePlatformAgentUseCase(repository);
+      const result = await useCase.execute("pa-source-1", { type: "BOTH" });
+
+      expect(repository.update).toHaveBeenCalledWith("pa-source-1", {
+        type: "BOTH",
+      });
+      expect(result.type).toBe("BOTH");
+    });
+
+    it("throws PlatformAgentNotFoundError if agent to update is not found", async () => {
+      vi.mocked(repository.findById).mockResolvedValue(null);
+
+      const useCase = new UpdatePlatformAgentUseCase(repository);
+      await expect(
+        useCase.execute("missing-id", { type: "INBOUND" }),
+      ).rejects.toThrow(PlatformAgentNotFoundError);
     });
   });
 });

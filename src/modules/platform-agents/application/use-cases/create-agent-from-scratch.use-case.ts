@@ -5,7 +5,7 @@ import { generateSlug } from "../../../extractions/domain/rules/slug-generator";
 import { extractPromptInputFields } from "../../../assistants/infrastructure/promptVariableExtractor";
 import { DuplicatePlatformAgentSlugError } from "../../domain/errors/platform-agent.errors";
 import type { Logger } from "../../../../shared/logging/logger.interface";
-import type { PlatformAgent } from "@prisma/client";
+import type { PlatformAgent, PlatformAgentType } from "@prisma/client";
 
 export interface CreateAgentFromScratchInput {
   bolnaApiKeyId: string;
@@ -15,6 +15,7 @@ export interface CreateAgentFromScratchInput {
   industryPackId?: string;
   category?: string;
   description?: string;
+  type?: PlatformAgentType;
 }
 
 export class CreateAgentFromScratchUseCase {
@@ -125,6 +126,7 @@ export class CreateAgentFromScratchUseCase {
       category: input.category,
       description: input.description,
       industryPackId: input.industryPackId,
+      type: input.type ?? "OUTBOUND",
       defaultConfig: defaultConfig as any,
       systemPrompt: input.systemPrompt,
       welcomeMessage: input.welcomeMessage ?? null,

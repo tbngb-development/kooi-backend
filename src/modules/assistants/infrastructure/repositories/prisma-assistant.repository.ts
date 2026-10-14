@@ -20,6 +20,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
             name: true,
             slug: true,
             category: true,
+            type: true,
             industryPack: {
               select: {
                 id: true,
@@ -85,6 +86,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         bolnaId: assistant.platformAgent.bolnaId,
         name: assistant.platformAgent.name,
         slug: assistant.platformAgent.slug,
+        type: assistant.platformAgent.type,
         systemPrompt: assistant.platformAgent.systemPrompt,
         welcomeMessage: assistant.platformAgent.welcomeMessage,
         requiredVariables: assistant.platformAgent.requiredVariables as

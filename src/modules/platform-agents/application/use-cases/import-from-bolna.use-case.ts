@@ -11,6 +11,8 @@ import { generateSlug } from "../../../extractions/domain/rules/slug-generator";
 import { extractPromptInputFields } from "../../../assistants/infrastructure/promptVariableExtractor";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
+import type { PlatformAgentType } from "@prisma/client";
+
 export interface ImportFromBolnaDTO {
   bolnaId: string;
   bolnaApiKeyId: string;
@@ -19,6 +21,7 @@ export interface ImportFromBolnaDTO {
   industryPackId?: string;
   category?: string;
   description?: string;
+  type?: PlatformAgentType;
   isFeatured?: boolean;
   sortOrder?: number;
   includeExtractions?: boolean;
@@ -81,6 +84,7 @@ export class ImportFromBolnaUseCase {
       industryPackId: dto.industryPackId,
       category: dto.category,
       description: dto.description,
+      type: dto.type ?? "OUTBOUND",
       isFeatured: dto.isFeatured ?? false,
       sortOrder: dto.sortOrder ?? 0,
       defaultConfig: template.defaultConfig,

@@ -1,4 +1,4 @@
-import type { AgentGender } from "@prisma/client";
+import type { AgentGender, PlatformAgentType } from "@prisma/client";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
 export interface RegisterPlatformAgentDTO {
@@ -9,6 +9,7 @@ export interface RegisterPlatformAgentDTO {
   industryPackId?: string;
   category?: string;
   description?: string;
+  type?: PlatformAgentType;
   isFeatured?: boolean;
   sortOrder?: number;
   welcomeMessage?: string | null;
@@ -23,6 +24,7 @@ export interface UpdatePlatformAgentDTO {
   industryPackId?: string | null;
   category?: string;
   description?: string;
+  type?: PlatformAgentType;
   isActive?: boolean;
   isFeatured?: boolean;
   sortOrder?: number;
@@ -37,6 +39,7 @@ export interface UpdatePlatformAgentVariablesDto {
 
 export interface ListPlatformAgentsFilters {
   industryPackId?: string;
+  type?: PlatformAgentType;
   isActive?: boolean;
 }
 
