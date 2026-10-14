@@ -653,6 +653,7 @@ export class PrismaCallRepository implements CallRepository {
             isDeleted: false,
             platformAgent: {
               bolnaId: agentId,
+              type: { in: ["INBOUND", "BOTH"] },
             },
           },
         },

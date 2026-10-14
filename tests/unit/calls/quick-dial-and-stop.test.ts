@@ -266,7 +266,7 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
   });
 
   describe("InboundCallerMatchUseCase", () => {
-    it("should auto-register unknown inbound caller as new Lead and Call", async () => {
+    it("should auto-register unknown inbound caller as new Lead and Call when type is INBOUND", async () => {
       mockCallRepo.findInboundLeadContext.mockResolvedValue(null);
 
       vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
@@ -275,6 +275,9 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
         tenantId: "tenant-1",
         config: {
           welcome_message: "Hello! Thank you for calling our office.",
+        },
+        platformAgent: {
+          type: "INBOUND",
         },
       } as any);
 
@@ -304,10 +307,8 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
         executionId: "inbound-exec-999",
       });
 
-      expect(result.welcome_message).toBe(
-        "Hello! Thank you for calling our office.",
-      );
-      expect(result.contact_number).toBe("+919876543210");
+      expect(result).toHaveProperty("welcome_message", "Hello! Thank you for calling our office.");
+      expect(result).toHaveProperty("contact_number", "+919876543210");
 
       expect(prisma.lead.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -332,6 +333,89 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
         }),
         update: {},
       });
+    });
+
+    it("should return empty object {} and not create call/lead when platform agent type is OUTBOUND", async () => {
+      vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
+        id: "asst-outbound-1",
+        name: "Outbound Only Assistant",
+        tenantId: "tenant-1",
+        platformAgent: {
+          type: "OUTBOUND",
+        },
+      } as any);
+
+      const useCase = new InboundCallerMatchUseCase(mockCallRepo as any);
+
+      const result = await useCase.execute({
+        agentId: "bolna-agent-outbound",
+        contactNumber: "+919876543210",
+        executionId: "inbound-exec-outbound",
+      });
+
+      expect(result).toEqual({});
+      expect(mockCallRepo.findInboundLeadContext).not.toHaveBeenCalled();
+      expect(prisma.lead.create).not.toHaveBeenCalled();
+      expect(prisma.call.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should return empty object {} when no assistant is found for agentId", async () => {
+      vi.mocked(prisma.assistant.findFirst).mockResolvedValue(null);
+
+      const useCase = new InboundCallerMatchUseCase(mockCallRepo as any);
+
+      const result = await useCase.execute({
+        agentId: "bolna-agent-unassigned",
+        contactNumber: "+919876543210",
+        executionId: "inbound-exec-unassigned",
+      });
+
+      expect(result).toEqual({});
+      expect(mockCallRepo.findInboundLeadContext).not.toHaveBeenCalled();
+      expect(prisma.lead.create).not.toHaveBeenCalled();
+      expect(prisma.call.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should allow caller when platform agent type is BOTH", async () => {
+      mockCallRepo.findInboundLeadContext.mockResolvedValue(null);
+
+      vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
+        id: "asst-both-1",
+        name: "Dual Capability Assistant",
+        tenantId: "tenant-1",
+        config: {
+          welcome_message: "Welcome to both inbound and outbound support!",
+        },
+        platformAgent: {
+          type: "BOTH",
+        },
+      } as any);
+
+      vi.mocked(prisma.lead.findFirst).mockResolvedValue(null);
+      vi.mocked(prisma.lead.create).mockResolvedValue({
+        id: "lead-both-new",
+        phone: "+919876543210",
+        tenantId: "tenant-1",
+        assistantId: "asst-both-1",
+        type: "INBOUND",
+        source: "INBOUND",
+        status: "CALLING",
+      } as any);
+
+      const useCase = new InboundCallerMatchUseCase(mockCallRepo as any);
+
+      const result = await useCase.execute({
+        agentId: "bolna-agent-both",
+        contactNumber: "+919876543210",
+        executionId: "inbound-exec-both",
+      });
+
+      expect(result).toHaveProperty(
+        "welcome_message",
+        "Welcome to both inbound and outbound support!",
+      );
+      expect(prisma.lead.create).toHaveBeenCalled();
+      expect(prisma.call.upsert).toHaveBeenCalled();
     });
   });
 

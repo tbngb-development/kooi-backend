@@ -22,6 +22,10 @@ export interface InboundCallerMatchOutput {
   [key: string]: string | boolean;
 }
 
+export type InboundCallerMatchResult =
+  | InboundCallerMatchOutput
+  | Record<string, never>;
+
 export class InboundCallerMatchUseCase {
   constructor(
     private readonly callRepo: CallRepository,
@@ -30,7 +34,7 @@ export class InboundCallerMatchUseCase {
 
   async execute(
     input: InboundCallerMatchInput,
-  ): Promise<InboundCallerMatchOutput> {
+  ): Promise<InboundCallerMatchResult> {
     const normalizedPhone = normalizePhoneNumber(input.contactNumber);
 
     this.logger?.info("Inbound caller match request", {
@@ -40,6 +44,34 @@ export class InboundCallerMatchUseCase {
       executionId: input.executionId,
       agentNumber: input.agentNumber,
     });
+
+    // 0. Verify that an active assistant exists for this agent and its platform type supports inbound calls (INBOUND or BOTH)
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        platformAgent: { bolnaId: input.agentId },
+        isDeleted: false,
+      },
+      include: {
+        platformAgent: true,
+      },
+    });
+
+    const isSupported =
+      assistant?.platformAgent?.type === "INBOUND" ||
+      assistant?.platformAgent?.type === "BOTH";
+
+    if (!assistant || !isSupported) {
+      this.logger?.info(
+        "Inbound call rejected: assistant not found or platform agent does not support inbound calls",
+        {
+          action: "inbound.caller_match.rejected_not_inbound",
+          agentId: input.agentId,
+          platformAgentType: assistant?.platformAgent?.type ?? "NOT_FOUND",
+          contactNumber: normalizedPhone,
+        },
+      );
+      return {};
+    }
 
     // 1. Lookup lead & campaign using agent_id + caller phone
     const matchResult = await this.callRepo.findInboundLeadContext(
@@ -116,25 +148,6 @@ export class InboundCallerMatchUseCase {
     }
 
     // 2. Caller not found in an active campaign -> Auto-register lead under Assistant's Tenant
-    const assistant = await prisma.assistant.findFirst({
-      where: {
-        platformAgent: { bolnaId: input.agentId },
-        isDeleted: false,
-      },
-      include: {
-        platformAgent: true,
-      },
-    });
-
-    if (!assistant) {
-      this.logger?.warn("Inbound caller agent not found in any tenant assistant", {
-        action: "inbound.caller_match.no_assistant",
-        agentId: input.agentId,
-        contactNumber: normalizedPhone,
-      });
-      return this.buildUnknownCallerResponse(normalizedPhone);
-    }
-
     // Check if lead already exists in tenant (e.g. from prior inbound or quick-dial call)
     const digits = normalizedPhone.replace(/\D/g, "");
     const last10 = digits.slice(-10);
