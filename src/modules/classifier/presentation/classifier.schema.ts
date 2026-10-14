@@ -56,13 +56,18 @@ export const testClassifierSchema = z
 export const listClassifierDispositionsQuerySchema = z.object({
   industryPackId: z.string().uuid().optional(),
   questionType: z.enum(["BOOLEAN", "CHOICE", "MULTI_CHOICE"]).optional(),
-  isActive: z
-    .string()
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
+  isActive: z.preprocess(
+    (val) =>
+      val === "true" || val === true
+        ? true
+        : val === "false" || val === false
+        ? false
+        : undefined,
+    z.boolean().optional(),
+  ),
   search: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(1000).default(20),
 });
 
 export const listClassifierResultsQuerySchema = z.object({
