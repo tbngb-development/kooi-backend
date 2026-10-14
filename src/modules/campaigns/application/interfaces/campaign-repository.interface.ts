@@ -7,6 +7,7 @@ import type {
   CampaignDetailOverview,
   ExtractionInsightResult,
   ExtractionOverviewResult,
+  CampaignCallMetricsResult,
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../dto/campaign.dto";
@@ -154,6 +155,12 @@ export interface CampaignRepository {
     batchId?: string,
     topN?: number,
   ): Promise<ExtractionInsightResult>;
+
+  getCampaignCallMetrics(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignCallMetricsResult>;
 
   findAssistantWithAgent(
     tenantId: string,

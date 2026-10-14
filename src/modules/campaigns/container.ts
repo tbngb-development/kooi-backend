@@ -14,6 +14,7 @@ import { PrismaPlanRepository } from "../plans/infrastructure/repositories/prism
 import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/prisma-wallet.repository";
 import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/get-campaign-extraction-overview.use-case";
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
+import { GetCampaignCallMetricsUseCase } from "./application/use-cases/get-campaign-call-metrics.use-case";
 import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
 import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
@@ -61,6 +62,9 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const getExtractionInsights = new GetCampaignExtractionInsightsUseCase(
     campaignRepo,
   );
+  const getCampaignCallMetrics = new GetCampaignCallMetricsUseCase(
+    campaignRepo,
+  );
 
   const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
 
@@ -87,6 +91,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       extractVariables,
       getExtractionOverview,
       getExtractionInsights,
+      getCampaignCallMetrics,
       archiveCampaign,
       parseManualLeads,
     ),

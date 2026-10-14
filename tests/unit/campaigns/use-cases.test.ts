@@ -10,6 +10,7 @@ import { UpdateDraftCampaignUseCase } from "../../../src/modules/campaigns/appli
 import { GetCampaignStatsUseCase } from "../../../src/modules/campaigns/application/use-cases/get-campaign-stats.use-case";
 import { GetCampaignExtractionOverviewUseCase } from "../../../src/modules/campaigns/application/use-cases/get-campaign-extraction-overview.use-case";
 import { GetCampaignExtractionInsightsUseCase } from "../../../src/modules/campaigns/application/use-cases/get-campaign-extraction-insights.use-case";
+import { GetCampaignCallMetricsUseCase } from "../../../src/modules/campaigns/application/use-cases/get-campaign-call-metrics.use-case";
 
 import type {
   CampaignRepository,
@@ -56,6 +57,7 @@ function createMockCampaignRepo(): CampaignRepository {
     getStats: vi.fn(),
     getExtractionOverview: vi.fn(),
     getExtractionInsights: vi.fn(),
+    getCampaignCallMetrics: vi.fn(),
     findAssistantWithAgent: vi.fn(),
     resolveAssistantForPlatformAgent: vi.fn(),
     softDelete: vi.fn(),
@@ -948,6 +950,25 @@ describe("Campaign Application Use Cases (Module 7)", () => {
         "camp-123",
         "batch-1",
         5,
+      );
+    });
+
+    it("GetCampaignCallMetricsUseCase delegates to campaignRepo.getCampaignCallMetrics", async () => {
+      const useCase = new GetCampaignCallMetricsUseCase(campaignRepo);
+      const mockMetrics = { campaignId: "camp-123", totalCalls: 10, metrics: [] } as any;
+      vi.mocked(campaignRepo.getCampaignCallMetrics).mockResolvedValue(mockMetrics);
+
+      const result = await useCase.execute({
+        tenantId: "tenant-123",
+        campaignId: "camp-123",
+        batchId: "batch-1",
+      });
+
+      expect(result).toEqual(mockMetrics);
+      expect(campaignRepo.getCampaignCallMetrics).toHaveBeenCalledWith(
+        "tenant-123",
+        "camp-123",
+        "batch-1",
       );
     });
   });

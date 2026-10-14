@@ -191,3 +191,33 @@ export interface ExtractionInsightResult {
   totalCalls: number;
   insights: ExtractionInsightDisposition[];
 }
+
+// ── Call Metrics ─────────────────────────────────────────────────────────────
+
+export interface CampaignCallMetricsInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+}
+
+export interface CampaignCallMetricValue {
+  value: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CampaignCallMetricItem {
+  classifierDispositionId: string;
+  classifierSlug: string;
+  classifierName: string;
+  questionType: string;
+  totalCount: number;
+  values: CampaignCallMetricValue[];
+}
+
+export interface CampaignCallMetricsResult {
+  campaignId: string;
+  totalCalls: number;
+  metrics: CampaignCallMetricItem[];
+}
+

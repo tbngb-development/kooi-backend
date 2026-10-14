@@ -54,6 +54,7 @@ export function buildTenantCampaignRoutes(
   router.get("/:id/stats", controller.stats);
   router.get("/:id/extraction-overview", controller.extractionOverview);
   router.get("/:id/extraction-insights", controller.extractionInsights);
+  router.get("/:id/call-metrics", controller.callMetrics);
   router.post(
     "/:id/parse-leads",
     leadsUploadMemory.single("file"),

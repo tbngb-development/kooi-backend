@@ -15,6 +15,7 @@ import type { GetCampaignStatsUseCase } from "../application/use-cases/get-campa
 import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/extract-campaign-variables.use-case";
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
+import type { GetCampaignCallMetricsUseCase } from "../application/use-cases/get-campaign-call-metrics.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
 import type { ListCampaignsQuery } from "./campaign.schema";
@@ -29,6 +30,7 @@ export class TenantCampaignController {
     private readonly extractVariablesUseCase: ExtractCampaignVariablesUseCase,
     private readonly getExtractionOverviewUseCase: GetCampaignExtractionOverviewUseCase,
     private readonly getExtractionInsightsUseCase: GetCampaignExtractionInsightsUseCase,
+    private readonly getCampaignCallMetricsUseCase: GetCampaignCallMetricsUseCase,
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
   ) {}
@@ -243,6 +245,28 @@ export class TenantCampaignController {
         campaignId,
         batchId,
         topN,
+      });
+
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  callMetrics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      const batchId = req.query.batchId as string | undefined;
+
+      const data = await this.getCampaignCallMetricsUseCase.execute({
+        tenantId,
+        campaignId,
+        batchId,
       });
 
       sendSuccess(res, data);
