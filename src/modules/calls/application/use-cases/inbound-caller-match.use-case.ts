@@ -45,27 +45,91 @@ export class InboundCallerMatchUseCase {
       agentNumber: input.agentNumber,
     });
 
-    // 0. Verify that an active assistant exists for this agent and its platform type supports inbound calls (INBOUND or BOTH)
-    const assistant = await prisma.assistant.findFirst({
-      where: {
-        platformAgent: { bolnaId: input.agentId },
-        isDeleted: false,
-      },
-      include: {
-        platformAgent: true,
-      },
-    });
+    let assistant: any = null;
+    let targetTenantId: string | null = null;
+    const normalizedAgentNumber = input.agentNumber
+      ? normalizePhoneNumber(input.agentNumber)
+      : null;
+
+    // 0. Resolve Tenant & Assistant via assigned PhoneNumber (Strict Isolation)
+    if (normalizedAgentNumber) {
+      const assignedPhone = await prisma.phoneNumber.findUnique({
+        where: { phoneNumber: normalizedAgentNumber },
+        include: {
+          tenant: true,
+          assistant: {
+            include: {
+              platformAgent: true,
+            },
+          },
+        },
+      });
+
+      if (
+        !assignedPhone ||
+        !assignedPhone.tenantId ||
+        assignedPhone.status !== "ACTIVE"
+      ) {
+        this.logger?.warn(
+          "Inbound call rejected: dialed phone number is not assigned to an active tenant",
+          {
+            action: "inbound.caller_match.rejected_unassigned_number",
+            agentNumber: normalizedAgentNumber,
+            agentId: input.agentId,
+            contactNumber: normalizedPhone,
+          },
+        );
+        return {};
+      }
+
+      targetTenantId = assignedPhone.tenantId;
+
+      // If the phone number is explicitly linked to an inbound assistant, prefer it
+      if (
+        assignedPhone.assistant &&
+        !assignedPhone.assistant.isDeleted &&
+        (assignedPhone.assistant.platformAgent?.type === "INBOUND" ||
+          assignedPhone.assistant.platformAgent?.type === "BOTH")
+      ) {
+        assistant = assignedPhone.assistant;
+      } else {
+        // Fallback: match assistant within this specific tenant's workspace
+        assistant = await prisma.assistant.findFirst({
+          where: {
+            tenantId: assignedPhone.tenantId,
+            platformAgent: { bolnaId: input.agentId },
+            isDeleted: false,
+          },
+          include: {
+            platformAgent: true,
+          },
+        });
+      }
+    } else {
+      // Legacy fallback when agentNumber is not provided (e.g. testing)
+      assistant = await prisma.assistant.findFirst({
+        where: {
+          platformAgent: { bolnaId: input.agentId },
+          isDeleted: false,
+        },
+        include: {
+          platformAgent: true,
+        },
+      });
+      targetTenantId = assistant?.tenantId ?? null;
+    }
 
     const isSupported =
       assistant?.platformAgent?.type === "INBOUND" ||
       assistant?.platformAgent?.type === "BOTH";
 
-    if (!assistant || !isSupported) {
+    if (!assistant || !targetTenantId || !isSupported) {
       this.logger?.info(
-        "Inbound call rejected: assistant not found or platform agent does not support inbound calls",
+        "Inbound call rejected: assistant not found or does not support inbound calls",
         {
           action: "inbound.caller_match.rejected_not_inbound",
           agentId: input.agentId,
+          agentNumber: normalizedAgentNumber,
           platformAgentType: assistant?.platformAgent?.type ?? "NOT_FOUND",
           contactNumber: normalizedPhone,
         },
@@ -74,10 +138,16 @@ export class InboundCallerMatchUseCase {
     }
 
     // 1. Lookup lead & campaign using agent_id + caller phone
-    const matchResult = await this.callRepo.findInboundLeadContext(
+    const rawMatchResult = await this.callRepo.findInboundLeadContext(
       input.agentId,
       normalizedPhone,
     );
+
+    // Verify campaign belongs to the same isolated tenant
+    const matchResult =
+      rawMatchResult && rawMatchResult.campaign.tenantId === targetTenantId
+        ? rawMatchResult
+        : null;
 
     if (matchResult) {
       const { lead, campaign } = matchResult;

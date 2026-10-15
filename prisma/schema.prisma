@@ -41,6 +41,7 @@ model Tenant {
   calls         Call[]
   assistants    Assistant[]
   callAnalyses  CallAnalysis[]
+  phoneNumbers  PhoneNumber[]
 
   @@index([email])
 }
@@ -129,6 +130,7 @@ model Assistant {
   campaigns     Campaign[]
   leads         Lead[]
   calls         Call[]
+  phoneNumbers  PhoneNumber[]
   @@index([tenantId, isDeleted])
 }
 
@@ -1138,3 +1140,51 @@ model CallMetric {
   @@index([callId])
   @@index([batchId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHONE NUMBERS (Inbound / Outbound Telephony Inventory)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PhoneNumber {
+  id           String            @id @default(uuid())
+  phoneNumber  String            @unique
+  friendlyName String?
+  provider     TelephonyProvider @default(BOLNA)
+  status       PhoneStatus       @default(ACTIVE)
+  capabilities PhoneCapability   @default(BOTH)
+
+  tenantId    String?
+  assistantId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  assistant Assistant? @relation(fields: [assistantId], references: [id], onDelete: SetNull)
+
+  @@index([phoneNumber])
+  @@index([tenantId])
+  @@index([assistantId])
+  @@index([status])
+}
+
+enum TelephonyProvider {
+  BOLNA
+  TWILIO
+  PLIVO
+  EXOTEL
+  VONAGE
+  OTHER
+}
+
+enum PhoneStatus {
+  ACTIVE
+  INACTIVE
+  RELEASED
+}
+
+enum PhoneCapability {
+  INBOUND
+  OUTBOUND
+  BOTH
+}

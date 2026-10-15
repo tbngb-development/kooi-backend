@@ -34,6 +34,8 @@ import { buildAdminIndustryPackRoutes } from "../modules/industry-packs/presenta
 import { buildInboundCallerMatchRoutes } from "../modules/calls/presentation/inbound-caller-match.routes";
 import { buildAdminClassifierRoutes } from "../modules/classifier/presentation/admin-classifier.routes";
 import { buildTenantClassifierRoutes } from "../modules/classifier/presentation/tenant-classifier.routes";
+import { buildAdminPhoneNumberRoutes } from "../modules/phone-numbers/presentation/admin-phone-number.routes";
+import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentation/tenant-phone-number.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -132,6 +134,14 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/classifier",
     buildTenantClassifierRoutes(
       c.classifier.tenantController,
+      c.authenticate,
+    ),
+  );
+
+  router.use(
+    "/v1/phone-numbers",
+    buildTenantPhoneNumberRoutes(
+      c.phoneNumbers.tenantController,
       c.authenticate,
     ),
   );
@@ -268,6 +278,15 @@ export function buildRoutes(c: AppContainer): Router {
   router.use(
     "/v1/admin/users",
     buildAdminUserRoutes(c.users.adminController, c.authenticate, c.authorize),
+  );
+
+  router.use(
+    "/v1/admin/phone-numbers",
+    buildAdminPhoneNumberRoutes(
+      c.phoneNumbers.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
   );
 
   return router;
