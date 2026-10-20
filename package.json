@@ -11,13 +11,7 @@
     "seed:plans": "tsx src/seeds/plans.seed.ts",
     "seed:dispositions": "tsx  src/seeds/dispositions.seed.ts",
     "seed:classifiers": "tsx  src/seeds/classifier-dispositions.seed.ts",
-    "postinstall": "prisma generate",
-    "test": "cross-env NODE_ENV=test vitest run",
-    "test:watch": "cross-env NODE_ENV=test vitest",
-    "test:unit": "cross-env NODE_ENV=test vitest run tests/unit",
-    "test:integration": "cross-env NODE_ENV=test vitest run tests/integration",
-    "test:api": "cross-env NODE_ENV=test vitest run tests/api",
-    "test:coverage": "cross-env NODE_ENV=test vitest run --coverage"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
