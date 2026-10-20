@@ -92,10 +92,3 @@ export const PaymentMessages = {
   INVALID_SLAB: "Invalid recharge amount",
 } as const;
 
-export const RECHARGE_SLABS_PAISA = [
-  100_000, // ₹1,000
-  500_000, // ₹5,000
-  1_000_000, // ₹10,000
-  2_500_000, // ₹25,000
-  10_000_000, // ₹1,00,000
-] as const;

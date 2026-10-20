@@ -48,17 +48,58 @@ export class CallResolverService {
 
     if (!bolnaBatchId && payload.agent_id && phone) {
       // Non-batch call fallback (Quick Dial or Inbound)
-      const assistant = await prisma.assistant.findFirst({
-        where: {
-          platformAgent: { bolnaId: payload.agent_id },
-          isDeleted: false,
-        },
-      });
+      const isOutbound = payload.telephony_data?.call_type === "outbound";
+      const callType = isOutbound ? "OUTBOUND" : "INBOUND";
+      const callSource = isOutbound ? "QUICK_DIAL" : "INBOUND";
+      const agentNumber =
+        payload.agent_number ??
+        (isOutbound
+          ? payload.telephony_data?.from_number
+          : payload.telephony_data?.to_number) ??
+        null;
 
-      if (assistant) {
+      let assistant: any = null;
+      let targetTenantId: string | null = null;
+
+      if (agentNumber) {
+        const phoneRecord = await prisma.phoneNumber.findUnique({
+          where: { phoneNumber: agentNumber },
+          include: { assistant: true },
+        });
+
+        if (phoneRecord?.tenantId) {
+          targetTenantId = phoneRecord.tenantId;
+          assistant =
+            phoneRecord.assistant ??
+            (await prisma.assistant.findFirst({
+              where: {
+                tenantId: phoneRecord.tenantId,
+                platformAgent: { bolnaId: payload.agent_id },
+                isDeleted: false,
+              },
+            }));
+        }
+      }
+
+      // Fail-secure: never fall back to an unscoped global assistant search
+      if (!assistant || !targetTenantId) {
+        this.logger?.warn(
+          "Call resolution rejected: cannot establish tenant ownership without trusted batch, pre-created call, or mapped phone number",
+          {
+            action: "webhook.call_resolver.unresolvable_tenant",
+            bolnaCallId,
+            agentId: payload.agent_id,
+            agentNumber,
+            isOutbound,
+          },
+        );
+        return null;
+      }
+
+      if (assistant && targetTenantId) {
         let lead = await prisma.lead.findFirst({
           where: {
-            tenantId: assistant.tenantId,
+            tenantId: targetTenantId,
             phone,
             isDeleted: false,
           },
@@ -79,7 +120,7 @@ export class CallResolverService {
           lead = await prisma.lead.create({
             data: {
               phone,
-              tenantId: assistant.tenantId,
+              tenantId: targetTenantId,
               assistantId: assistant.id,
               type: callType,
               source: callSource,
@@ -90,7 +131,7 @@ export class CallResolverService {
 
         const newCall = await this.webhookRepo.createCall({
           bolnaCallId,
-          tenantId: assistant.tenantId,
+          tenantId: targetTenantId,
           assistantId: assistant.id,
           leadId: lead.id,
           type: callType,

@@ -6,7 +6,7 @@ export const createOrderSchema = z
     amountPaisa: z
       .number()
       .int()
-      .min(10000, "Minimum top-up is ₹100.00")
+      .min(100, "Minimum top-up is ₹1.00")
       .optional(),
     newPlanId: z.string().uuid("Invalid plan ID").optional(),
   })

@@ -24,3 +24,27 @@ export class SelfDeletionError extends AppError {
     );
   }
 }
+
+export class InsufficientRoleHierarchyError extends AppError {
+  constructor(
+    message = "Admins cannot modify, promote, or delete an organization owner",
+  ) {
+    super(HttpStatus.FORBIDDEN, message, "INSUFFICIENT_ROLE_PERMISSIONS");
+  }
+}
+
+export class CannotGrantOwnerRoleError extends AppError {
+  constructor(
+    message = "Only an organization owner can grant owner privileges",
+  ) {
+    super(HttpStatus.FORBIDDEN, message, "OWNER_GRANT_FORBIDDEN");
+  }
+}
+
+export class LastOwnerCannotBeRemovedError extends AppError {
+  constructor(
+    message = "Cannot remove or demote the final owner of the organization",
+  ) {
+    super(HttpStatus.BAD_REQUEST, message, "LAST_OWNER_REMOVAL_FORBIDDEN");
+  }
+}

@@ -24,4 +24,5 @@ export interface UserRepository {
     data: UpdateUserData,
   ): Promise<TenantMemberData>;
   delete(tenantId: string, userId: string): Promise<void>;
+  countOwners(tenantId: string): Promise<number>;
 }

@@ -37,8 +37,13 @@ export class TenantUserController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
-      const member = await this.createUserUseCase.execute(tenantId, req.body);
+      const { tenantId, tenantRole: actorRole } = (req as AuthRequest)
+        .user as TenantAuthContext;
+      const member = await this.createUserUseCase.execute(
+        tenantId,
+        req.body,
+        actorRole,
+      );
       sendSuccess(res, member, HttpStatus.CREATED);
     } catch (err) {
       next(err);
@@ -51,12 +56,14 @@ export class TenantUserController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const { tenantId, tenantRole: actorRole } = (req as AuthRequest)
+        .user as TenantAuthContext;
       const targetUserId = param(req, "id");
       const updated = await this.updateUserUseCase.execute(
         tenantId,
         targetUserId,
         req.body,
+        actorRole,
       );
       sendSuccess(res, updated);
     } catch (err) {
@@ -70,13 +77,17 @@ export class TenantUserController {
     next: NextFunction,
   ): Promise<void> => {
     try {
-      const { tenantId, userId: activeUserId } = (req as AuthRequest)
-        .user as TenantAuthContext;
+      const {
+        tenantId,
+        userId: activeUserId,
+        tenantRole: actorRole,
+      } = (req as AuthRequest).user as TenantAuthContext;
       const targetUserId = param(req, "id");
       await this.deleteUserUseCase.execute(
         tenantId,
         activeUserId,
         targetUserId,
+        actorRole,
       );
       sendSuccess(res, { message: "User deleted successfully" });
     } catch (err) {

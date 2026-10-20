@@ -121,4 +121,13 @@ export class PrismaUserRepository implements UserRepository {
       where: { userId_tenantId: { userId, tenantId } },
     });
   }
+
+  async countOwners(tenantId: string): Promise<number> {
+    return prisma.tenantUser.count({
+      where: {
+        tenantId,
+        role: "OWNER",
+      },
+    });
+  }
 }
