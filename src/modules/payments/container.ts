@@ -104,6 +104,7 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
     provider,
     completePayment,
     log,
+    rechargeRepo,
   );
 
   const getPaymentSummary = new GetPaymentSummaryUseCase(rechargeRepo);
