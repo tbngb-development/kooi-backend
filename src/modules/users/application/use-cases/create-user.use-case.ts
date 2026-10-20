@@ -5,7 +5,11 @@ import { ValidationError } from "../../../../shared/errors/validation.error";
 import crypto from "crypto";
 import { type UserRepository } from "../interfaces/user-repository.interface";
 import { type TenantMemberData } from "../../domain/entities/tenant-member.entity";
-import { EmailAlreadyRegisteredError } from "../../domain/errors/user.errors";
+import {
+  EmailAlreadyRegisteredError,
+  CannotGrantOwnerRoleError,
+} from "../../domain/errors/user.errors";
+import { type TenantRole } from "@prisma/client";
 
 export class CreateUserUseCase {
   constructor(
@@ -16,7 +20,13 @@ export class CreateUserUseCase {
   async execute(
     tenantId: string,
     input: CreateUserInput,
+    actorRole?: TenantRole,
   ): Promise<TenantMemberData> {
+    // Role Hierarchy Guard: An ADMIN cannot create a user with OWNER role
+    if (actorRole && actorRole !== "OWNER" && input.role === "OWNER") {
+      throw new CannotGrantOwnerRoleError();
+    }
+
     const existing = await this.userRepo.findByEmail(input.email);
     if (existing) {
       throw new EmailAlreadyRegisteredError();

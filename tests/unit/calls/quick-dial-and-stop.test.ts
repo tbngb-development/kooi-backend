@@ -13,6 +13,9 @@ import { InsufficientBalanceError } from "../../../src/modules/wallet/domain/err
 // Mock prisma
 vi.mock("../../../src/shared/config/database/prisma", () => ({
   default: {
+    phoneNumber: {
+      findUnique: vi.fn(),
+    },
     assistant: {
       findFirst: vi.fn(),
     },
@@ -269,15 +272,22 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
     it("should auto-register unknown inbound caller as new Lead and Call when type is INBOUND", async () => {
       mockCallRepo.findInboundLeadContext.mockResolvedValue(null);
 
-      vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
-        id: "asst-inbound-1",
-        name: "Test Inbound Assistant",
+      vi.mocked(prisma.phoneNumber.findUnique).mockResolvedValue({
+        id: "phone-inbound-1",
+        phoneNumber: "+15551234567",
         tenantId: "tenant-1",
-        config: {
-          welcome_message: "Hello! Thank you for calling our office.",
-        },
-        platformAgent: {
-          type: "INBOUND",
+        status: "ACTIVE",
+        assistant: {
+          id: "asst-inbound-1",
+          name: "Test Inbound Assistant",
+          tenantId: "tenant-1",
+          isDeleted: false,
+          config: {
+            welcome_message: "Hello! Thank you for calling our office.",
+          },
+          platformAgent: {
+            type: "INBOUND",
+          },
         },
       } as any);
 
@@ -303,6 +313,7 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
 
       const result = await useCase.execute({
         agentId: "bolna-agent-inbound",
+        agentNumber: "+15551234567",
         contactNumber: "+919876543210",
         executionId: "inbound-exec-999",
       });
@@ -331,17 +342,24 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
           source: "INBOUND",
           status: "CALLING",
         }),
-        update: {},
+        update: expect.anything(),
       });
     });
 
     it("should return empty object {} and not create call/lead when platform agent type is OUTBOUND", async () => {
-      vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
-        id: "asst-outbound-1",
-        name: "Outbound Only Assistant",
+      vi.mocked(prisma.phoneNumber.findUnique).mockResolvedValue({
+        id: "phone-outbound-1",
+        phoneNumber: "+15551234567",
         tenantId: "tenant-1",
-        platformAgent: {
-          type: "OUTBOUND",
+        status: "ACTIVE",
+        assistant: {
+          id: "asst-outbound-1",
+          name: "Outbound Only Assistant",
+          tenantId: "tenant-1",
+          isDeleted: false,
+          platformAgent: {
+            type: "OUTBOUND",
+          },
         },
       } as any);
 
@@ -349,6 +367,7 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
 
       const result = await useCase.execute({
         agentId: "bolna-agent-outbound",
+        agentNumber: "+15551234567",
         contactNumber: "+919876543210",
         executionId: "inbound-exec-outbound",
       });
@@ -360,12 +379,13 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
     });
 
     it("should return empty object {} when no assistant is found for agentId", async () => {
-      vi.mocked(prisma.assistant.findFirst).mockResolvedValue(null);
+      vi.mocked(prisma.phoneNumber.findUnique).mockResolvedValue(null);
 
       const useCase = new InboundCallerMatchUseCase(mockCallRepo as any);
 
       const result = await useCase.execute({
         agentId: "bolna-agent-unassigned",
+        agentNumber: "+15551234567",
         contactNumber: "+919876543210",
         executionId: "inbound-exec-unassigned",
       });
@@ -379,15 +399,22 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
     it("should allow caller when platform agent type is BOTH", async () => {
       mockCallRepo.findInboundLeadContext.mockResolvedValue(null);
 
-      vi.mocked(prisma.assistant.findFirst).mockResolvedValue({
-        id: "asst-both-1",
-        name: "Dual Capability Assistant",
+      vi.mocked(prisma.phoneNumber.findUnique).mockResolvedValue({
+        id: "phone-both-1",
+        phoneNumber: "+15551234567",
         tenantId: "tenant-1",
-        config: {
-          welcome_message: "Welcome to both inbound and outbound support!",
-        },
-        platformAgent: {
-          type: "BOTH",
+        status: "ACTIVE",
+        assistant: {
+          id: "asst-both-1",
+          name: "Dual Capability Assistant",
+          tenantId: "tenant-1",
+          isDeleted: false,
+          config: {
+            welcome_message: "Welcome to both inbound and outbound support!",
+          },
+          platformAgent: {
+            type: "BOTH",
+          },
         },
       } as any);
 
@@ -406,6 +433,7 @@ describe("Quick Dial, Stop Call & Inbound Auto-Register", () => {
 
       const result = await useCase.execute({
         agentId: "bolna-agent-both",
+        agentNumber: "+15551234567",
         contactNumber: "+919876543210",
         executionId: "inbound-exec-both",
       });

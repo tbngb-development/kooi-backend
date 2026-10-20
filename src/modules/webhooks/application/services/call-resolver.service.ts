@@ -61,7 +61,7 @@ export class CallResolverService {
       let assistant: any = null;
       let targetTenantId: string | null = null;
 
-      if (!isOutbound && agentNumber) {
+      if (agentNumber) {
         const phoneRecord = await prisma.phoneNumber.findUnique({
           where: { phoneNumber: agentNumber },
           include: { assistant: true },
@@ -81,14 +81,19 @@ export class CallResolverService {
         }
       }
 
-      if (!assistant) {
-        assistant = await prisma.assistant.findFirst({
-          where: {
-            platformAgent: { bolnaId: payload.agent_id },
-            isDeleted: false,
+      // Fail-secure: never fall back to an unscoped global assistant search
+      if (!assistant || !targetTenantId) {
+        this.logger?.warn(
+          "Call resolution rejected: cannot establish tenant ownership without trusted batch, pre-created call, or mapped phone number",
+          {
+            action: "webhook.call_resolver.unresolvable_tenant",
+            bolnaCallId,
+            agentId: payload.agent_id,
+            agentNumber,
+            isOutbound,
           },
-        });
-        targetTenantId = assistant?.tenantId ?? null;
+        );
+        return null;
       }
 
       if (assistant && targetTenantId) {

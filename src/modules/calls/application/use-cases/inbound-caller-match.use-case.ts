@@ -105,18 +105,6 @@ export class InboundCallerMatchUseCase {
           },
         });
       }
-    } else {
-      // Legacy fallback when agentNumber is not provided (e.g. testing)
-      assistant = await prisma.assistant.findFirst({
-        where: {
-          platformAgent: { bolnaId: input.agentId },
-          isDeleted: false,
-        },
-        include: {
-          platformAgent: true,
-        },
-      });
-      targetTenantId = assistant?.tenantId ?? null;
     }
 
     const isSupported =
