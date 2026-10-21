@@ -1,11 +1,10 @@
 export interface RegisterTenantOwnerInput {
+  verificationToken: string;
   name: string;
-  email: string;
   tenantName: string;
   password: string;
   termsAccepted: boolean;
   termsVersion: string;
-  otp: string;
 }
 
 export interface RegisterTenantOwnerOutput {

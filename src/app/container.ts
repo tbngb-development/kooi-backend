@@ -1,6 +1,7 @@
 import { PrismaAuthRepository } from "../modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { JwtTokenService } from "../modules/auth/infrastructure/services/jwt-token.service";
 import { JwtPasswordResetTokenService } from "../modules/auth/infrastructure/services/jwt-password-reset-token.service";
+import { JwtEmailVerificationTokenService } from "../modules/auth/infrastructure/services/jwt-email-verification-token.service";
 import { BcryptPasswordService } from "../modules/auth/infrastructure/services/bcrypt-password.service";
 import { AuthenticateMiddleware } from "../shared/middleware/authenticate";
 import { AuthorizeMiddleware } from "../shared/middleware/authorize";
@@ -137,6 +138,7 @@ export function buildContainer(): AppContainer {
   const email = new ResendEmailService(logger.child({ module: "email" }));
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
+  const emailVerificationTokenService = new JwtEmailVerificationTokenService(redis);
 
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
   const bolnaClientFactory = new BolnaClientFactory(
@@ -160,6 +162,7 @@ export function buildContainer(): AppContainer {
     passwordService,
     otpService,
     passwordResetTokenService,
+    emailVerificationTokenService,
     emailService: email,
     logger,
   });

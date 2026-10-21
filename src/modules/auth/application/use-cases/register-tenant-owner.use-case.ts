@@ -6,52 +6,28 @@ import type {
 import { type AuthRepository } from "../interfaces/auth-repository.interface";
 import { type PasswordService } from "../interfaces/password-service.interface";
 import { type TokenService } from "../interfaces/token-service.interface";
-import { type OtpService } from "../interfaces/otp-service.interface";
-import {
-  EmailAlreadyExistsError,
-  InvalidOtpError,
-  OtpMaxAttemptsError,
-} from "../../domain/errors/auth.errors";
+import { type EmailVerificationTokenService } from "../interfaces/email-verification-token.service.interface";
+import { EmailAlreadyExistsError } from "../../domain/errors/auth.errors";
 import { validatePasswordStrength } from "../../domain/rules/password.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
-
-const OTP_PURPOSE = "register";
 
 export class RegisterTenantOwnerUseCase {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
-    private readonly otpService: OtpService,
+    private readonly emailVerificationTokenService: EmailVerificationTokenService,
     private readonly logger: Logger,
   ) {}
 
   async execute(
     input: RegisterTenantOwnerInput,
   ): Promise<RegisterTenantOwnerOutput> {
-    const normalizedEmail = input.email.trim().toLowerCase();
-
-    // 1. Verify OTP first (prevents resource consumption on incorrect codes)
-    const verification = await this.otpService.verify(
-      OTP_PURPOSE,
-      normalizedEmail,
-      input.otp,
+    // 1. Verify verification token and extract the verified email
+    const payload = await this.emailVerificationTokenService.verify(
+      input.verificationToken,
     );
-
-    if (verification.maxAttemptsExceeded) {
-      this.logger.warn("Registration OTP max attempts exceeded", {
-        action: "register.tenant_owner",
-        email: normalizedEmail,
-      });
-      throw new OtpMaxAttemptsError();
-    }
-    if (!verification.valid) {
-      this.logger.warn("Registration OTP invalid", {
-        action: "register.tenant_owner",
-        email: normalizedEmail,
-      });
-      throw new InvalidOtpError();
-    }
+    const normalizedEmail = payload.email.trim().toLowerCase();
 
     // 2. Validate password strength
     const passwordValidation = validatePasswordStrength(input.password);
@@ -109,6 +85,11 @@ export class RegisterTenantOwnerUseCase {
       familyId: refreshTokenData.familyId,
       expiresAt: new Date(Date.now() + refreshTokenData.expiresIn * 1000),
     });
+
+    // 7. Invalidate the verification token to enforce single-use
+    await this.emailVerificationTokenService.invalidate(
+      input.verificationToken,
+    );
 
     this.logger.info("Tenant owner registered", {
       action: "register.tenant_owner",
