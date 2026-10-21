@@ -9,19 +9,6 @@ import type {
   InboundLeadResult,
 } from "../../application/interfaces/lead-repository.interface";
 
-export interface InboundAssistantResult {
-  id: string;
-  name: string;
-  tenantId: string;
-  variables: unknown;
-  platformAgent: {
-    id: string;
-    name: string;
-    type: string;
-    welcomeMessage: string | null;
-  };
-}
-
 export class PrismaLeadRepository implements LeadRepository {
   async list(
     tenantId: string,

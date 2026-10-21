@@ -1,3 +1,5 @@
+// modules/calls/application/use-cases/inbound-caller-match.use-case.ts
+
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import {
@@ -8,7 +10,7 @@ import { resolveWelcomeMessage } from "../../../assistants/domain/rules/assistan
 import type { AssistantVariablesConfig } from "../../../assistants/domain/types/assistant-variable.types";
 import type { LeadRepository } from "../../../leads/application/interfaces/lead-repository.interface";
 import type { AssistantRepository } from "../../../assistants/application/interfaces/assistant-repository.interface";
-import type { CallRepository } from "../../application/interfaces/call-repository.interface";
+import type { CallRepository } from "../interfaces/call-repository.interface";
 
 // ─── Input / Output Types ────────────────────────────────────────────────────
 
