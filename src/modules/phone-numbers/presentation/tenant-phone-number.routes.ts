@@ -10,6 +10,7 @@ export function buildTenantPhoneNumberRoutes(
 
   router.use(authenticate.tenant());
 
+  router.get("/", controller.list);
   router.get("/assigned", controller.getAssigned);
 
   return router;
