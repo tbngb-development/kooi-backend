@@ -95,4 +95,12 @@ export interface LeadRepository {
 
   /** Update lead status */
   updateStatus(id: string, status: string): Promise<void>;
+
+  /** Create a quick-dial outbound lead */
+  createQuickDialLead(data: {
+    phone: string;
+    name: string | null;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<{ id: string }>;
 }

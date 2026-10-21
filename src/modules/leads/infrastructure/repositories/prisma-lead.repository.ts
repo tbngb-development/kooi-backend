@@ -253,6 +253,26 @@ export class PrismaLeadRepository implements LeadRepository {
     });
   }
 
+  async createQuickDialLead(data: {
+    phone: string;
+    name: string | null;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<{ id: string }> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        name: data.name,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "OUTBOUND",
+        source: "QUICK_DIAL",
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
+  }
+
   async softDelete(leadId: string): Promise<void> {
     await prisma.lead.update({
       where: { id: leadId },

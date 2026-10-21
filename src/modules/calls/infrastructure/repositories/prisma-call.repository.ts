@@ -655,4 +655,26 @@ export class PrismaCallRepository implements CallRepository {
       },
     });
   }
+
+  async createQuickDialCallRecord(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    assistantId: string;
+    leadId: string;
+    agentNumber: string | null;
+  }): Promise<{ id: string }> {
+    return prisma.call.create({
+      data: {
+        bolnaCallId: data.bolnaCallId,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        leadId: data.leadId,
+        type: "OUTBOUND",
+        source: "QUICK_DIAL",
+        status: "PENDING",
+        agentNumber: data.agentNumber,
+      },
+      select: { id: true },
+    });
+  }
 }

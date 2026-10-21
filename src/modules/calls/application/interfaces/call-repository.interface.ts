@@ -152,9 +152,14 @@ export interface CallRepository {
     campaignId: string,
   ): Promise<AvailableFiltersResponse>;
 
-  softDelete(callId: string): Promise<void>;
-
-  restore(callId: string): Promise<void>;
+  /** Create a quick-dial outbound call record */
+  createQuickDialCallRecord(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    assistantId: string;
+    leadId: string;
+    agentNumber: string | null;
+  }): Promise<{ id: string }>;
 
   createInboundCallRecord(data: {
     bolnaCallId: string;
@@ -162,4 +167,8 @@ export interface CallRepository {
     assistantId: string;
     leadId: string;
   }): Promise<void>;
+
+  softDelete(callId: string): Promise<void>;
+
+  restore(callId: string): Promise<void>;
 }

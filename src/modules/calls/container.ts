@@ -23,6 +23,7 @@ import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
 import { PrismaLeadRepository } from "../leads/infrastructure/repositories/prisma-lead.repository";
 import { PrismaAssistantRepository } from "../assistants/infrastructure/repositories/prisma-assistant.repository";
+import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -42,6 +43,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const callRepo = new PrismaCallRepository();
   const leadRepo = new PrismaLeadRepository();
   const assistantRepo = new PrismaAssistantRepository();
+  const phoneNumberRepo = new PrismaPhoneNumberRepository();
   const log = deps.logger.child({ module: "call" });
   const listCalls = new ListCallsUseCase(callRepo);
   const getCall = new GetCallUseCase(callRepo);
@@ -56,6 +58,10 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const quickDialCall = new QuickDialCallUseCase(
     deps.bolnaClientFactory,
     deps.walletRepo,
+    assistantRepo,
+    leadRepo,
+    callRepo,
+    phoneNumberRepo,
     log,
   );
   const stopCall = new StopCallUseCase(deps.bolnaClientFactory, log);
@@ -102,4 +108,3 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     inboundCallerController: inboundCallerMatchController,
   };
 }
-

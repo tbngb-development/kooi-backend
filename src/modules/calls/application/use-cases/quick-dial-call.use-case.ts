@@ -1,6 +1,11 @@
-import prisma from "../../../../shared/config/database/prisma";
+// modules/calls/application/use-cases/quick-dial-call.use-case.ts
+
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
+import type { AssistantRepository } from "../../../assistants/application/interfaces/assistant-repository.interface";
+import type { LeadRepository } from "../../../leads/application/interfaces/lead-repository.interface";
+import type { CallRepository } from "../interfaces/call-repository.interface";
+import type { IPhoneNumberRepository } from "../../../phone-numbers/application/interfaces/phone-number-repository.interface";
 import { getEffectiveAvailableBalance } from "../../../wallet/domain/rules/bonus-first-deduction.rules";
 import {
   WalletNotFoundError,
@@ -14,7 +19,9 @@ import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import { cleanCustomerName } from "../../../leads/domain/rules/name.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { resolveWelcomeMessage } from "../../../assistants/domain/rules/assistant-variable.rules";
-import type { AssistantVariablesConfig } from "../../../assistants/domain/types/assistant-variable.types";
+import { AppError } from "../../../../shared/errors/app.error";
+
+// ─── Input / Output Types ────────────────────────────────────────────────────
 
 export interface QuickDialCallInput {
   tenantId: string;
@@ -32,10 +39,16 @@ export interface QuickDialCallOutput {
   phone: string;
 }
 
+// ─── Use Case ────────────────────────────────────────────────────────────────
+
 export class QuickDialCallUseCase {
   constructor(
     private readonly bolnaClientFactory: IBolnaClientFactory,
     private readonly walletRepo: WalletRepository,
+    private readonly assistantRepo: AssistantRepository,
+    private readonly leadRepo: LeadRepository,
+    private readonly callRepo: CallRepository,
+    private readonly phoneNumberRepo: IPhoneNumberRepository,
     private readonly logger?: Logger,
   ) {}
 
@@ -50,16 +63,10 @@ export class QuickDialCallUseCase {
     });
 
     // 1. Verify assistant ownership and active blueprint
-    const assistant = await prisma.assistant.findFirst({
-      where: {
-        id: input.assistantId,
-        tenantId: input.tenantId,
-        isDeleted: false,
-      },
-      include: {
-        platformAgent: true,
-      },
-    });
+    const assistant = await this.assistantRepo.findByIdWithPlatformAgent(
+      input.tenantId,
+      input.assistantId,
+    );
 
     if (!assistant) {
       throw new AssistantNotFoundError();
@@ -84,26 +91,29 @@ export class QuickDialCallUseCase {
       );
     }
 
-    // 3. Create a new Lead record for this quick dial request
+    // 3. Validate fromPhoneNumber (if provided)
+    let validatedFromPhone: string | undefined;
+
+    if (input.fromPhoneNumber) {
+      validatedFromPhone = await this.validateOutboundPhone(
+        input.fromPhoneNumber,
+        input.tenantId,
+      );
+    }
+
+    // 4. Create Lead record
     const customerName = input.name ? cleanCustomerName(input.name) : null;
-    const lead = await prisma.lead.create({
-      data: {
-        phone: normalizedPhone,
-        name: customerName,
-        tenantId: input.tenantId,
-        assistantId: assistant.id,
-        type: "OUTBOUND",
-        source: "QUICK_DIAL",
-        status: "PENDING",
-      },
+    const lead = await this.leadRepo.createQuickDialLead({
+      phone: normalizedPhone,
+      name: customerName,
+      tenantId: input.tenantId,
+      assistantId: assistant.id,
     });
 
-    // 4. Dispatch outbound call request to Bolna
+    // 5. Dispatch outbound call to Bolna
     const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
 
-    const assistantVars = (assistant.variables ??
-      {}) as AssistantVariablesConfig;
-    const outboundConfig = assistantVars.outbound;
+    const outboundConfig = assistant.variables?.outbound;
     const assistantOutboundVars = outboundConfig?.variables ?? {};
 
     const defaultFallback =
@@ -122,21 +132,18 @@ export class QuickDialCallUseCase {
       ...(evaluatedWelcome ? { welcome_message: evaluatedWelcome } : {}),
     };
 
-    const fromPhoneNumber = input.fromPhoneNumber;
-
     let bolnaRes;
     try {
       bolnaRes = await bolnaClient.calls.create({
         agent_id: assistant.platformAgent.bolnaId,
         recipient_phone_number: normalizedPhone,
-        ...(fromPhoneNumber ? { from_phone_number: fromPhoneNumber } : {}),
+        ...(validatedFromPhone
+          ? { from_phone_number: validatedFromPhone }
+          : {}),
         user_data: userData,
       });
     } catch (err) {
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { status: "FAILED" },
-      });
+      await this.leadRepo.updateStatus(lead.id, "FAILED");
 
       this.logger?.error("Failed to initiate Bolna call for quick dial", err, {
         action: "calls.quick_dial.bolna_error",
@@ -150,23 +157,18 @@ export class QuickDialCallUseCase {
     const resolvedAgentNumber =
       (bolnaRes as any)?.from_phone_number ??
       (bolnaRes as any)?.agent_number ??
-      fromPhoneNumber ??
+      validatedFromPhone ??
       null;
 
-    // 5. Pre-create Call record with PENDING status linked to execution ID
-    const call = await prisma.call.create({
-      data: {
-        bolnaCallId: executionId,
-        tenantId: input.tenantId,
-        assistantId: assistant.id,
-        leadId: lead.id,
-        type: "OUTBOUND",
-        source: "QUICK_DIAL",
-        status: "PENDING",
-        agentNumber: resolvedAgentNumber
-          ? normalizePhoneNumber(resolvedAgentNumber)
-          : null,
-      },
+    // 6. Create Call record
+    const call = await this.callRepo.createQuickDialCallRecord({
+      bolnaCallId: executionId,
+      tenantId: input.tenantId,
+      assistantId: assistant.id,
+      leadId: lead.id,
+      agentNumber: resolvedAgentNumber
+        ? normalizePhoneNumber(resolvedAgentNumber)
+        : null,
     });
 
     this.logger?.info("Quick dial call initiated and tracked", {
@@ -184,5 +186,53 @@ export class QuickDialCallUseCase {
       status: bolnaRes.status ?? "queued",
       phone: normalizedPhone,
     };
+  }
+
+  // ─── Private Helpers ─────────────────────────────────────────────────────
+
+  private async validateOutboundPhone(
+    rawPhone: string,
+    tenantId: string,
+  ): Promise<string> {
+    const normalized = normalizePhoneNumber(rawPhone);
+    const phoneRecord =
+      await this.phoneNumberRepo.findByPhoneNumber(normalized);
+
+    if (!phoneRecord) {
+      throw new AppError(
+        422,
+        `Phone number ${normalized} is not registered in the system.`,
+        "INVALID_OUTBOUND_PHONE",
+      );
+    }
+
+    if (phoneRecord.tenantId !== tenantId) {
+      throw new AppError(
+        422,
+        `Phone number ${normalized} does not belong to your workspace.`,
+        "INVALID_OUTBOUND_PHONE",
+      );
+    }
+
+    if (phoneRecord.status !== "ACTIVE") {
+      throw new AppError(
+        422,
+        `Phone number ${normalized} is currently ${phoneRecord.status.toLowerCase()}. Only active numbers can be used for outbound calls.`,
+        "INVALID_OUTBOUND_PHONE",
+      );
+    }
+
+    if (
+      phoneRecord.capabilities !== "OUTBOUND" &&
+      phoneRecord.capabilities !== "BOTH"
+    ) {
+      throw new AppError(
+        422,
+        `Phone number ${normalized} only supports ${phoneRecord.capabilities.toLowerCase()} calls. An outbound-capable number is required.`,
+        "INVALID_OUTBOUND_PHONE",
+      );
+    }
+
+    return normalized;
   }
 }
