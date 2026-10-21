@@ -14,6 +14,8 @@ import {
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import { cleanCustomerName } from "../../../leads/domain/rules/name.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { resolveWelcomeMessage } from "../../../assistants/domain/rules/assistant-variable.rules";
+import type { AssistantVariablesConfig } from "../../../assistants/domain/types/assistant-variable.types";
 
 export interface QuickDialCallInput {
   tenantId: string;
@@ -103,8 +105,25 @@ export class QuickDialCallUseCase {
 
     // 4. Dispatch outbound call request to Bolna
     const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
+
+    const assistantVars = (assistant.variables ?? {}) as AssistantVariablesConfig;
+    const outboundConfig = assistantVars.outbound;
+    const assistantOutboundVars = outboundConfig?.variables ?? {};
+
+    const defaultFallback =
+      assistant.platformAgent.welcomeMessage ||
+      `Hi, thanks for taking my call.`;
+
+    const evaluatedWelcome = resolveWelcomeMessage(
+      outboundConfig?.welcomeMessage,
+      assistantOutboundVars,
+      defaultFallback,
+    );
+
     const userData: Record<string, string> = {
+      ...assistantOutboundVars,
       ...(customerName ? { customer_name: customerName } : {}),
+      ...(evaluatedWelcome ? { welcome_message: evaluatedWelcome } : {}),
       ...(input.userData ?? {}),
     };
 

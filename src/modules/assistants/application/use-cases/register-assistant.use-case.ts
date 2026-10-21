@@ -10,6 +10,8 @@ import {
   PlatformAgentAlreadyAssignedError,
 } from "../../domain/errors/assistant.errors";
 import { type AssistantEntityData } from "../../domain/entities/assistant.entity";
+import { validateAssistantVariables } from "../../domain/rules/assistant-variable.rules";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 
 export class RegisterAssistantUseCase {
   constructor(
@@ -64,10 +66,21 @@ export class RegisterAssistantUseCase {
       );
     }
 
+    // 6. Validate dynamic variables against PlatformAgent constraints (if provided)
+    const cleanedVariables = input.variables
+      ? validateAssistantVariables(
+          platformAgent.type,
+          platformAgent.requiredVariables as RequiredVariable[] | null,
+          input.variables,
+        )
+      : undefined;
+
     return this.assistantRepo.create(input.tenantId, {
       platformAgentId: input.platformAgentId,
       name: input.name,
       config: platformAgent.defaultConfig as Record<string, unknown>,
+      variables: cleanedVariables,
     });
   }
 }
+

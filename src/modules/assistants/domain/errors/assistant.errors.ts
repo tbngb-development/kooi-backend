@@ -97,3 +97,13 @@ export class AssistantNotDeletedError extends AppError {
     );
   }
 }
+
+export class AssistantVariableValidationError extends AppError {
+  constructor(message: string) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      message,
+      "ASSISTANT_VARIABLE_VALIDATION_ERROR",
+    );
+  }
+}

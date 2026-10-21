@@ -118,6 +118,7 @@ model Assistant {
   name            String
   tenantId        String
   config          Json
+  variables       Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   platformAgentId String

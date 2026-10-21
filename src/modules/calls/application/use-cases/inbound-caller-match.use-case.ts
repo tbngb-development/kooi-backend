@@ -6,6 +6,8 @@ import {
 import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { resolveWelcomeMessage } from "../../../assistants/domain/rules/assistant-variable.rules";
+import type { AssistantVariablesConfig } from "../../../assistants/domain/types/assistant-variable.types";
 
 export interface InboundCallerMatchInput {
   contactNumber: string;
@@ -261,12 +263,25 @@ export class InboundCallerMatchUseCase {
       formattedName && isValidCustomerName(formattedName),
     );
 
-    const config = (assistant.config ?? {}) as Record<string, unknown>;
-    const agentName = assistant.name || "Sara";
-    const welcomeMessage =
-      (config.welcome_message as string) ||
-      (config.welcomeMessage as string) ||
+    const assistantVars = (assistant.variables ?? {}) as AssistantVariablesConfig;
+    const inboundConfig = assistantVars.inbound;
+    const inboundVariables = inboundConfig?.variables ?? {};
+
+    const agentName =
+      inboundVariables.agent_name ||
+      inboundVariables.agentName ||
+      assistant.name ||
+      "Sara";
+
+    const defaultFallback =
+      assistant.platformAgent?.welcomeMessage ||
       `Hi, this is ${agentName}. Thanks for calling! How may I help you?`;
+
+    const welcomeMessage = resolveWelcomeMessage(
+      inboundConfig?.welcomeMessage,
+      inboundVariables,
+      defaultFallback,
+    );
 
     this.logger?.info("Inbound caller processed and call record registered", {
       action: "inbound.caller_match.registered",
@@ -277,12 +292,21 @@ export class InboundCallerMatchUseCase {
       assistantId: assistant.id,
     });
 
-    return {
+    const response: InboundCallerMatchOutput = {
       is_known_lead: hasCustomerName,
       contact_number: normalizedPhone,
       customer_name: hasCustomerName ? formattedName : "",
       welcome_message: welcomeMessage,
     };
+
+    // Inject all assistant inbound variables into response for Bolna
+    for (const [key, value] of Object.entries(inboundVariables)) {
+      if (!response[key]) {
+        response[key] = value;
+      }
+    }
+
+    return response;
   }
 
   private async createInboundCallRecord(params: {

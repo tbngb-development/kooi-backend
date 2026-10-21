@@ -32,18 +32,20 @@ export function buildAssistantModule(
 
   const listAssistants = new ListAssistantsUseCase(repository);
   const getAssistant = new GetAssistantUseCase(repository);
+  const updateAssistant = new UpdateAssistantUseCase(repository);
 
   return {
     tenantController: new TenantAssistantController(
       listAssistants,
       getAssistant,
+      updateAssistant,
     ),
     adminController: new AdminAssistantController(
       listAssistants,
       new ListBolnaAgentsUseCase(bolnaProvider),
       getAssistant,
       new RegisterAssistantUseCase(repository, platformAgentRepo, apiKeyRepo),
-      new UpdateAssistantUseCase(repository),
+      updateAssistant,
       new DeleteAssistantUseCase(repository),
       new RestoreAssistantUseCase(repository),
     ),
