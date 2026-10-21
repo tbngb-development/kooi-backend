@@ -1,5 +1,4 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Prisma } from "@prisma/client";
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 import { getEffectiveAvailableBalance } from "../../../wallet/domain/rules/bonus-first-deduction.rules";
@@ -23,7 +22,6 @@ export interface QuickDialCallInput {
   phone: string;
   name?: string;
   fromPhoneNumber?: string;
-  userData?: Record<string, string>;
 }
 
 export interface QuickDialCallOutput {
@@ -97,16 +95,14 @@ export class QuickDialCallUseCase {
         type: "OUTBOUND",
         source: "QUICK_DIAL",
         status: "PENDING",
-        metadata: input.userData
-          ? (input.userData as Prisma.InputJsonValue)
-          : undefined,
       },
     });
 
     // 4. Dispatch outbound call request to Bolna
     const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
 
-    const assistantVars = (assistant.variables ?? {}) as AssistantVariablesConfig;
+    const assistantVars = (assistant.variables ??
+      {}) as AssistantVariablesConfig;
     const outboundConfig = assistantVars.outbound;
     const assistantOutboundVars = outboundConfig?.variables ?? {};
 
@@ -124,17 +120,9 @@ export class QuickDialCallUseCase {
       ...assistantOutboundVars,
       ...(customerName ? { customer_name: customerName } : {}),
       ...(evaluatedWelcome ? { welcome_message: evaluatedWelcome } : {}),
-      ...(input.userData ?? {}),
     };
 
-    const assistantConfig = (assistant.config ?? {}) as Record<string, unknown>;
-    const defaultFromNumber =
-      (assistantConfig.phone_number as string) ||
-      (assistantConfig.from_phone_number as string) ||
-      (assistantConfig.agent_number as string) ||
-      undefined;
-
-    const fromPhoneNumber = input.fromPhoneNumber || defaultFromNumber;
+    const fromPhoneNumber = input.fromPhoneNumber;
 
     let bolnaRes;
     try {
