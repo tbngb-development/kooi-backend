@@ -39,6 +39,19 @@ export interface AssistantWithPlatformAgent {
   };
 }
 
+export interface InboundAssistantResult {
+  id: string;
+  name: string;
+  tenantId: string;
+  variables: unknown;
+  platformAgent: {
+    id: string;
+    name: string;
+    type: string;
+    welcomeMessage: string | null;
+  };
+}
+
 export interface AssistantRepository {
   list(tenantId: string): Promise<AssistantEntityData[]>;
   findById(tenantId: string, id: string): Promise<AssistantEntityData | null>;
@@ -79,6 +92,10 @@ export interface AssistantRepository {
     assistantId: string,
     newPlatformAgentId: string,
   ): Promise<void>;
+  /** Find active inbound-capable assistant by Bolna agent ID */
+  findInboundByBolnaAgentId(
+    agentId: string,
+  ): Promise<InboundAssistantResult | null>;
   softDelete(tenantId: string, id: string): Promise<void>;
   restore(tenantId: string, id: string): Promise<void>;
 }

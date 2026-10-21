@@ -1,19 +1,21 @@
-import type { CallRepository } from "../interfaces/call-repository.interface";
+import type { Logger } from "../../../../shared/logging/logger.interface";
+import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
 import {
   cleanCustomerName,
   isValidCustomerName,
 } from "../../../leads/domain/rules/name.rules";
-import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
-import prisma from "../../../../shared/config/database/prisma";
-import type { Logger } from "../../../../shared/logging/logger.interface";
 import { resolveWelcomeMessage } from "../../../assistants/domain/rules/assistant-variable.rules";
 import type { AssistantVariablesConfig } from "../../../assistants/domain/types/assistant-variable.types";
+import type { LeadRepository } from "../../../leads/application/interfaces/lead-repository.interface";
+import type { AssistantRepository } from "../../../assistants/application/interfaces/assistant-repository.interface";
+import type { CallRepository } from "../../application/interfaces/call-repository.interface";
+
+// ─── Input / Output Types ────────────────────────────────────────────────────
 
 export interface InboundCallerMatchInput {
   contactNumber: string;
   agentId: string;
   executionId: string;
-  agentNumber?: string;
 }
 
 export interface InboundCallerMatchOutput {
@@ -25,11 +27,14 @@ export interface InboundCallerMatchOutput {
 }
 
 export type InboundCallerMatchResult =
-  | InboundCallerMatchOutput
-  | Record<string, never>;
+  InboundCallerMatchOutput | Record<string, never>;
+
+// ─── Use Case ────────────────────────────────────────────────────────────────
 
 export class InboundCallerMatchUseCase {
   constructor(
+    private readonly assistantRepo: AssistantRepository,
+    private readonly leadRepo: LeadRepository,
     private readonly callRepo: CallRepository,
     private readonly logger?: Logger,
   ) {}
@@ -44,226 +49,124 @@ export class InboundCallerMatchUseCase {
       contactNumber: normalizedPhone,
       agentId: input.agentId,
       executionId: input.executionId,
-      agentNumber: input.agentNumber,
     });
 
-    let assistant: any = null;
-    let targetTenantId: string | null = null;
-    const normalizedAgentNumber = input.agentNumber
-      ? normalizePhoneNumber(input.agentNumber)
-      : null;
+    // ── 1. Resolve Assistant via Bolna agent ID ──────────────────────────
+    const assistant = await this.assistantRepo.findInboundByBolnaAgentId(
+      input.agentId,
+    );
 
-    // 0. Resolve Tenant & Assistant via assigned PhoneNumber (Strict Isolation)
-    if (normalizedAgentNumber) {
-      const assignedPhone = await prisma.phoneNumber.findUnique({
-        where: { phoneNumber: normalizedAgentNumber },
-        include: {
-          tenant: true,
-          assistant: {
-            include: {
-              platformAgent: true,
-            },
-          },
-        },
-      });
-
-      if (
-        !assignedPhone ||
-        !assignedPhone.tenantId ||
-        assignedPhone.status !== "ACTIVE"
-      ) {
-        this.logger?.warn(
-          "Inbound call rejected: dialed phone number is not assigned to an active tenant",
-          {
-            action: "inbound.caller_match.rejected_unassigned_number",
-            agentNumber: normalizedAgentNumber,
-            agentId: input.agentId,
-            contactNumber: normalizedPhone,
-          },
-        );
-        return {};
-      }
-
-      targetTenantId = assignedPhone.tenantId;
-
-      // If the phone number is explicitly linked to an inbound assistant, prefer it
-      if (
-        assignedPhone.assistant &&
-        !assignedPhone.assistant.isDeleted &&
-        (assignedPhone.assistant.platformAgent?.type === "INBOUND" ||
-          assignedPhone.assistant.platformAgent?.type === "BOTH")
-      ) {
-        assistant = assignedPhone.assistant;
-      } else {
-        // Fallback: match assistant within this specific tenant's workspace
-        assistant = await prisma.assistant.findFirst({
-          where: {
-            tenantId: assignedPhone.tenantId,
-            platformAgent: { bolnaId: input.agentId },
-            isDeleted: false,
-          },
-          include: {
-            platformAgent: true,
-          },
-        });
-      }
-    }
-
-    const isSupported =
-      assistant?.platformAgent?.type === "INBOUND" ||
-      assistant?.platformAgent?.type === "BOTH";
-
-    if (!assistant || !targetTenantId || !isSupported) {
+    if (!assistant) {
       this.logger?.info(
-        "Inbound call rejected: assistant not found or does not support inbound calls",
+        "Inbound call rejected: no active inbound assistant for agent",
         {
-          action: "inbound.caller_match.rejected_not_inbound",
+          action: "inbound.caller_match.rejected",
           agentId: input.agentId,
-          agentNumber: normalizedAgentNumber,
-          platformAgentType: assistant?.platformAgent?.type ?? "NOT_FOUND",
           contactNumber: normalizedPhone,
         },
       );
       return {};
     }
 
-    // 1. Lookup lead & campaign using agent_id + caller phone
-    const rawMatchResult = await this.callRepo.findInboundLeadContext(
-      input.agentId,
+    // ── 2. Find or create Lead (E.164 exact match) ──────────────────────
+    const { lead, isNew } = await this.findOrCreateLead(
       normalizedPhone,
+      assistant.tenantId,
+      assistant.id,
     );
 
-    // Verify campaign belongs to the same isolated tenant
-    const matchResult =
-      rawMatchResult && rawMatchResult.campaign.tenantId === targetTenantId
-        ? rawMatchResult
-        : null;
+    // ── 3. Create Call record (non-blocking) ────────────────────────────
+    await this.createCallRecord(
+      input.executionId,
+      assistant.tenantId,
+      assistant.id,
+      lead.id,
+    );
 
-    if (matchResult) {
-      const { lead, campaign } = matchResult;
+    // ── 4. Build & return response ──────────────────────────────────────
+    const response = this.buildResponse(
+      normalizedPhone,
+      lead,
+      assistant,
+      isNew,
+    );
 
-      // Create or update call record for this inbound execution
-      await this.createInboundCallRecord({
-        bolnaCallId: input.executionId,
-        tenantId: campaign.tenantId,
-        campaignId: campaign.id,
-        leadId: lead.id,
-        batchId: lead.batchId,
-        agentNumber: input.agentNumber,
-      });
-
-      // Build response with campaign variables and dynamic welcome message
-      const campaignVariables = campaign.variables ?? {};
-      const leadMetadata = (lead.metadata ?? {}) as Record<string, string>;
-
-      const agentName =
-        campaignVariables.agent_name || campaignVariables.agentName || "Sara";
-
-      const builderName =
-        campaignVariables.builder_name ||
-        campaignVariables.company_name ||
-        campaignVariables.company ||
-        lead.company ||
-        "our team";
-
-      const formattedName = cleanCustomerName(lead.name);
-      const hasCustomerName = Boolean(
-        formattedName && isValidCustomerName(formattedName),
-      );
-
-      const welcomeMessage = `Hi, this is ${agentName} from ${builderName}. How may I help you?`;
-
-      const response: InboundCallerMatchOutput = {
-        is_known_lead: true,
-        contact_number: normalizePhoneNumber(lead.phone),
-        customer_name: hasCustomerName ? formattedName : "",
-        welcome_message: welcomeMessage,
-      };
-
-      for (const [key, value] of Object.entries(campaignVariables)) {
-        if (!response[key]) {
-          response[key] = value;
-        }
-      }
-
-      for (const [key, value] of Object.entries(leadMetadata)) {
-        if (
-          !response[key] &&
-          !["phone", "name", "email", "company"].includes(key.toLowerCase())
-        ) {
-          response[key] = String(value ?? "");
-        }
-      }
-
-      this.logger?.info("Inbound caller matched in campaign context", {
-        action: "inbound.caller_match.campaign_found",
-        agentId: input.agentId,
-        executionId: input.executionId,
-        leadId: lead.id,
-        campaignId: campaign.id,
-        tenantId: campaign.tenantId,
-      });
-
-      return response;
-    }
-
-    // 2. Caller not found in an active campaign -> Auto-register lead under Assistant's Tenant
-    // Check if lead already exists in tenant (e.g. from prior inbound or quick-dial call)
-    const digits = normalizedPhone.replace(/\D/g, "");
-    const last10 = digits.slice(-10);
-    const candidatePhones = Array.from(
-      new Set([normalizedPhone, `+91${last10}`, `91${last10}`, last10]),
-    ).filter(Boolean);
-
-    let lead = await prisma.lead.findFirst({
-      where: {
-        tenantId: assistant.tenantId,
-        phone: { in: candidatePhones },
-        isDeleted: false,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!lead) {
-      lead = await prisma.lead.create({
-        data: {
-          phone: normalizedPhone,
-          tenantId: assistant.tenantId,
-          assistantId: assistant.id,
-          type: "INBOUND",
-          source: "INBOUND",
-          status: "CALLING",
-        },
-      });
-
-      this.logger?.info("Registered new inbound Lead record", {
-        action: "inbound.caller_match.new_lead_registered",
-        leadId: lead.id,
-        tenantId: assistant.tenantId,
-        phone: normalizedPhone,
-      });
-    } else {
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { status: "CALLING" },
-      });
-    }
-
-    // Create Inbound Call record
-    await this.createInboundCallRecord({
-      bolnaCallId: input.executionId,
-      tenantId: assistant.tenantId,
-      assistantId: assistant.id,
+    this.logger?.info("Inbound caller processed", {
+      action: "inbound.caller_match.success",
+      agentId: input.agentId,
+      executionId: input.executionId,
       leadId: lead.id,
-      agentNumber: input.agentNumber,
+      tenantId: assistant.tenantId,
+      isNewLead: isNew,
     });
 
-    const formattedName = cleanCustomerName(lead.name);
-    const hasCustomerName = Boolean(
-      formattedName && isValidCustomerName(formattedName),
-    );
+    return response;
+  }
 
-    const assistantVars = (assistant.variables ?? {}) as AssistantVariablesConfig;
+  // ─── Private Helpers ─────────────────────────────────────────────────────
+
+  private async findOrCreateLead(
+    phone: string,
+    tenantId: string,
+    assistantId: string,
+  ): Promise<{ lead: { id: string; name: string | null }; isNew: boolean }> {
+    const existing = await this.leadRepo.findByTenantAndPhone(tenantId, phone);
+
+    if (existing) {
+      await this.leadRepo.updateStatus(existing.id, "CALLING");
+      return { lead: existing, isNew: false };
+    }
+
+    const created = await this.leadRepo.createInboundLead({
+      phone,
+      tenantId,
+      assistantId,
+    });
+
+    this.logger?.info("Registered new inbound lead", {
+      action: "inbound.caller_match.new_lead",
+      leadId: created.id,
+      tenantId,
+      phone,
+    });
+
+    return { lead: created, isNew: true };
+  }
+
+  private async createCallRecord(
+    executionId: string,
+    tenantId: string,
+    assistantId: string,
+    leadId: string,
+  ): Promise<void> {
+    try {
+      await this.callRepo.createInboundCallRecord({
+        bolnaCallId: executionId,
+        tenantId,
+        assistantId,
+        leadId,
+      });
+    } catch (err) {
+      this.logger?.error("Failed to create inbound call record", err, {
+        action: "inbound.caller_match.call_record_failed",
+        executionId,
+        leadId,
+      });
+    }
+  }
+
+  private buildResponse(
+    phone: string,
+    lead: { id: string; name: string | null },
+    assistant: {
+      name: string;
+      variables: unknown;
+      platformAgent: { welcomeMessage: string | null };
+    },
+    isNewLead: boolean,
+  ): InboundCallerMatchOutput {
+    const assistantVars = (assistant.variables ??
+      {}) as AssistantVariablesConfig;
     const inboundConfig = assistantVars.inbound;
     const inboundVariables = inboundConfig?.variables ?? {};
 
@@ -283,23 +186,18 @@ export class InboundCallerMatchUseCase {
       defaultFallback,
     );
 
-    this.logger?.info("Inbound caller processed and call record registered", {
-      action: "inbound.caller_match.registered",
-      agentId: input.agentId,
-      executionId: input.executionId,
-      leadId: lead.id,
-      tenantId: assistant.tenantId,
-      assistantId: assistant.id,
-    });
+    const formattedName = cleanCustomerName(lead.name);
+    const hasCustomerName = Boolean(
+      formattedName && isValidCustomerName(formattedName),
+    );
 
     const response: InboundCallerMatchOutput = {
-      is_known_lead: hasCustomerName,
-      contact_number: normalizedPhone,
+      is_known_lead: !isNewLead && hasCustomerName,
+      contact_number: phone,
       customer_name: hasCustomerName ? formattedName : "",
       welcome_message: welcomeMessage,
     };
 
-    // Inject all assistant inbound variables into response for Bolna
     for (const [key, value] of Object.entries(inboundVariables)) {
       if (!response[key]) {
         response[key] = value;
@@ -307,64 +205,5 @@ export class InboundCallerMatchUseCase {
     }
 
     return response;
-  }
-
-  private async createInboundCallRecord(params: {
-    bolnaCallId: string;
-    tenantId: string;
-    campaignId?: string | null;
-    assistantId?: string | null;
-    leadId: string;
-    batchId?: string | null;
-    agentNumber?: string | null;
-  }): Promise<void> {
-    try {
-      const normalizedAgentNumber = params.agentNumber
-        ? normalizePhoneNumber(params.agentNumber)
-        : null;
-
-      await prisma.call.upsert({
-        where: { bolnaCallId: params.bolnaCallId },
-        create: {
-          bolnaCallId: params.bolnaCallId,
-          tenantId: params.tenantId,
-          campaignId: params.campaignId ?? null,
-          assistantId: params.assistantId ?? null,
-          leadId: params.leadId,
-          batchId: params.batchId ?? null,
-          type: "INBOUND",
-          source: "INBOUND",
-          status: "CALLING",
-          agentNumber: normalizedAgentNumber,
-          startedAt: new Date(),
-        },
-        update: {
-          ...(normalizedAgentNumber ? { agentNumber: normalizedAgentNumber } : {}),
-        },
-      });
-
-      await prisma.lead.update({
-        where: { id: params.leadId },
-        data: { status: "CALLING" },
-      });
-    } catch (err) {
-      this.logger?.error("Failed to create new inbound call record", err, {
-        action: "inbound.caller_match.create_call_failed",
-        bolnaCallId: params.bolnaCallId,
-        leadId: params.leadId,
-      });
-    }
-  }
-
-  private buildUnknownCallerResponse(
-    contactNumber: string,
-  ): InboundCallerMatchOutput {
-    return {
-      is_known_lead: false,
-      contact_number: contactNumber,
-      customer_name: "",
-      welcome_message:
-        "Hi, this is Sara. Thanks for calling! Is this a good time to talk?",
-    };
   }
 }

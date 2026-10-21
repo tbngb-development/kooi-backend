@@ -5,6 +5,7 @@ import type {
   AssistantRepository,
   RegisterAssistantData,
   AssistantWithPlatformAgent,
+  InboundAssistantResult,
 } from "../../application/interfaces/assistant-repository.interface";
 import type { AssistantEntityData } from "../../domain/entities/assistant.entity";
 import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
@@ -35,129 +36,130 @@ export class PrismaAssistantRepository implements AssistantRepository {
       },
       orderBy: { createdAt: "desc" },
     });
-      return assistants.map((a) => ({
-        id: a.id,
-        name: a.name,
-        tenantId: a.tenantId,
-        platformAgentId: a.platformAgentId,
-        config: a.config as Record<string, unknown>,
-        variables: ((a as any).variables as AssistantVariablesConfig) ?? null,
-        createdAt: a.createdAt,
-        updatedAt: a.updatedAt,
-        isDeleted: a.isDeleted,
-        deletedAt: a.deletedAt,
-        platformAgent: a.platformAgent,
-      }));
-    }
+    return assistants.map((a) => ({
+      id: a.id,
+      name: a.name,
+      tenantId: a.tenantId,
+      platformAgentId: a.platformAgentId,
+      config: a.config as Record<string, unknown>,
+      variables: ((a as any).variables as AssistantVariablesConfig) ?? null,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      isDeleted: a.isDeleted,
+      deletedAt: a.deletedAt,
+      platformAgent: a.platformAgent,
+    }));
+  }
 
-    async findById(
-      tenantId: string,
-      id: string,
-    ): Promise<AssistantEntityData | null> {
-      const assistant = await prisma.assistant.findFirst({
-        where: {
-          id,
-          tenantId,
-        },
-      });
-      if (!assistant) return null;
-      return this.toEntityData(assistant);
-    }
+  async findById(
+    tenantId: string,
+    id: string,
+  ): Promise<AssistantEntityData | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+    if (!assistant) return null;
+    return this.toEntityData(assistant);
+  }
 
-    async findByIdWithPlatformAgent(
-      tenantId: string,
-      id: string,
-    ): Promise<AssistantWithPlatformAgent | null> {
-      const assistant = await prisma.assistant.findFirst({
-        where: { id, tenantId, isDeleted: false },
-        include: { platformAgent: { include: { industryPack: true } } },
-      });
+  async findByIdWithPlatformAgent(
+    tenantId: string,
+    id: string,
+  ): Promise<AssistantWithPlatformAgent | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: { id, tenantId, isDeleted: false },
+      include: { platformAgent: { include: { industryPack: true } } },
+    });
 
-      if (!assistant) return null;
+    if (!assistant) return null;
 
-      return {
-        id: assistant.id,
-        name: assistant.name,
-        tenantId: assistant.tenantId,
-        platformAgentId: assistant.platformAgentId,
-        config: assistant.config as Record<string, unknown>,
-        variables:
-          ((assistant as any).variables as AssistantVariablesConfig) ?? null,
-        createdAt: assistant.createdAt,
-        updatedAt: assistant.updatedAt,
-        platformAgent: {
-          id: assistant.platformAgent.id,
-          bolnaId: assistant.platformAgent.bolnaId,
-          name: assistant.platformAgent.name,
-          slug: assistant.platformAgent.slug,
-          type: assistant.platformAgent.type,
-          systemPrompt: assistant.platformAgent.systemPrompt,
-          welcomeMessage: assistant.platformAgent.welcomeMessage,
-          requiredVariables: assistant.platformAgent.requiredVariables as
-            RequiredVariable[] | null,
-          description: assistant.platformAgent.description,
-          category: assistant.platformAgent.category,
-          isFeatured: assistant.platformAgent.isFeatured,
-          industryPack: assistant.platformAgent.industryPack
-            ? {
-                id: assistant.platformAgent.industryPack.id,
-                name: assistant.platformAgent.industryPack.name,
-                slug: assistant.platformAgent.industryPack.slug,
-              }
-            : null,
-        },
-      };
-    }
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      tenantId: assistant.tenantId,
+      platformAgentId: assistant.platformAgentId,
+      config: assistant.config as Record<string, unknown>,
+      variables:
+        ((assistant as any).variables as AssistantVariablesConfig) ?? null,
+      createdAt: assistant.createdAt,
+      updatedAt: assistant.updatedAt,
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        bolnaId: assistant.platformAgent.bolnaId,
+        name: assistant.platformAgent.name,
+        slug: assistant.platformAgent.slug,
+        type: assistant.platformAgent.type,
+        systemPrompt: assistant.platformAgent.systemPrompt,
+        welcomeMessage: assistant.platformAgent.welcomeMessage,
+        requiredVariables: assistant.platformAgent.requiredVariables as
+          RequiredVariable[] | null,
+        description: assistant.platformAgent.description,
+        category: assistant.platformAgent.category,
+        isFeatured: assistant.platformAgent.isFeatured,
+        industryPack: assistant.platformAgent.industryPack
+          ? {
+              id: assistant.platformAgent.industryPack.id,
+              name: assistant.platformAgent.industryPack.name,
+              slug: assistant.platformAgent.industryPack.slug,
+            }
+          : null,
+      },
+    };
+  }
 
-    async findByPlatformAgentId(
-      tenantId: string | null,
-      platformAgentId: string,
-    ): Promise<AssistantEntityData | null> {
-      const assistant = await prisma.assistant.findFirst({
-        where: {
-          platformAgentId,
-          isDeleted: false,
-          ...(tenantId && { tenantId }),
-        },
-      });
+  async findByPlatformAgentId(
+    tenantId: string | null,
+    platformAgentId: string,
+  ): Promise<AssistantEntityData | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        platformAgentId,
+        isDeleted: false,
+        ...(tenantId && { tenantId }),
+      },
+    });
 
-      if (!assistant) return null;
-      return this.toEntityData(assistant);
-    }
+    if (!assistant) return null;
+    return this.toEntityData(assistant);
+  }
 
-    async create(
-      tenantId: string,
-      data: RegisterAssistantData,
-    ): Promise<AssistantEntityData> {
-      const assistant = await prisma.assistant.create({
-        data: {
-          platformAgentId: data.platformAgentId,
-          name: data.name,
-          tenantId,
-          config: data.config as any,
-          variables: (data.variables as any) ?? undefined,
-        },
-      });
+  async create(
+    tenantId: string,
+    data: RegisterAssistantData,
+  ): Promise<AssistantEntityData> {
+    const assistant = await prisma.assistant.create({
+      data: {
+        platformAgentId: data.platformAgentId,
+        name: data.name,
+        tenantId,
+        config: data.config as any,
+        variables: (data.variables as any) ?? undefined,
+      },
+    });
 
-      return this.toEntityData(assistant);
-    }
+    return this.toEntityData(assistant);
+  }
 
-    async update(
-      tenantId: string,
-      id: string,
-      data: { name?: string; variables?: any },
-    ): Promise<AssistantEntityData> {
-      const updateData: any = {};
-      if (data.name !== undefined) updateData.name = data.name;
-      if (data.variables !== undefined) updateData.variables = data.variables as any;
+  async update(
+    tenantId: string,
+    id: string,
+    data: { name?: string; variables?: any },
+  ): Promise<AssistantEntityData> {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.variables !== undefined)
+      updateData.variables = data.variables as any;
 
-      const assistant = await prisma.assistant.update({
-        where: { id, tenantId },
-        data: updateData,
-      });
+    const assistant = await prisma.assistant.update({
+      where: { id, tenantId },
+      data: updateData,
+    });
 
-      return this.toEntityData(assistant);
-    }
+    return this.toEntityData(assistant);
+  }
 
   async updateConfig(
     tenantId: string,
@@ -198,6 +200,49 @@ export class PrismaAssistantRepository implements AssistantRepository {
       where: { id: assistantId },
       data: { platformAgentId: newPlatformAgentId },
     });
+  }
+
+  async findInboundByBolnaAgentId(
+    agentId: string,
+  ): Promise<InboundAssistantResult | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        isDeleted: false,
+        platformAgent: {
+          bolnaId: agentId,
+          type: { in: ["INBOUND", "BOTH"] },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        tenantId: true,
+        variables: true,
+        platformAgent: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            welcomeMessage: true,
+          },
+        },
+      },
+    });
+
+    if (!assistant) return null;
+
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      tenantId: assistant.tenantId,
+      variables: assistant.variables,
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        name: assistant.platformAgent.name,
+        type: assistant.platformAgent.type,
+        welcomeMessage: assistant.platformAgent.welcomeMessage,
+      },
+    };
   }
 
   async softDelete(tenantId: string, id: string): Promise<void> {

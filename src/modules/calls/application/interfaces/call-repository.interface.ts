@@ -156,33 +156,10 @@ export interface CallRepository {
 
   restore(callId: string): Promise<void>;
 
-  findInboundLeadContext(
-    agentId: string,
-    phone: string,
-  ): Promise<{
-    lead: {
-      id: string;
-      name: string | null;
-      phone: string;
-      email: string | null;
-      company: string | null;
-      batchId: string | null;
-      metadata: Record<string, unknown> | null;
-    };
-    campaign: {
-      id: string;
-      name: string;
-      variables: Record<string, string> | null;
-      tenantId: string;
-    };
-  } | null>;
-
-  createInboundCall(data: {
+  createInboundCallRecord(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
+    assistantId: string;
     leadId: string;
-    batchId?: string | null;
-  }): Promise<{ id: string }>;
-  
+  }): Promise<void>;
 }

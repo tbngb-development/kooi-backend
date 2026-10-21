@@ -6,7 +6,21 @@ import type {
   PaginatedLeadsResult,
   DetailedLeadResult,
   LeadStatsResult,
+  InboundLeadResult,
 } from "../../application/interfaces/lead-repository.interface";
+
+export interface InboundAssistantResult {
+  id: string;
+  name: string;
+  tenantId: string;
+  variables: unknown;
+  platformAgent: {
+    id: string;
+    name: string;
+    type: string;
+    welcomeMessage: string | null;
+  };
+}
 
 export class PrismaLeadRepository implements LeadRepository {
   async list(
@@ -208,6 +222,48 @@ export class PrismaLeadRepository implements LeadRepository {
       failed,
       noAnswer,
     };
+  }
+
+  async findByTenantAndPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadResult | null> {
+    const lead = await prisma.lead.findFirst({
+      where: {
+        tenantId,
+        phone,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
+
+    return lead ?? null;
+  }
+
+  async createInboundLead(data: {
+    phone: string;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<InboundLeadResult> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "INBOUND",
+        source: "INBOUND",
+        status: "CALLING",
+      },
+      select: { id: true, name: true },
+    });
+  }
+
+  async updateStatus(id: string, status: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id },
+      data: { status: status as LeadStatus },
+    });
   }
 
   async softDelete(leadId: string): Promise<void> {

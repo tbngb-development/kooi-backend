@@ -21,6 +21,8 @@ import type { WalletRepository } from "../wallet/application/interfaces/wallet-r
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
 import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
+import { PrismaLeadRepository } from "../leads/infrastructure/repositories/prisma-lead.repository";
+import { PrismaAssistantRepository } from "../assistants/infrastructure/repositories/prisma-assistant.repository";
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -37,17 +39,19 @@ export interface CallModule {
 }
 
 export function buildCallModule(deps: CallModuleDeps): CallModule {
-  const repo = new PrismaCallRepository();
+  const callRepo = new PrismaCallRepository();
+  const leadRepo = new PrismaLeadRepository();
+  const assistantRepo = new PrismaAssistantRepository();
   const log = deps.logger.child({ module: "call" });
-  const listCalls = new ListCallsUseCase(repo);
-  const getCall = new GetCallUseCase(repo);
-  const getTranscript = new GetCallTranscriptUseCase(repo);
-  const getStats = new GetCallStatsUseCase(repo);
-  const getCallCenterStats = new GetCallCenterStatsUseCase(repo);
-  const getAvailableFilters = new GetAvailableFiltersUseCase(repo);
+  const listCalls = new ListCallsUseCase(callRepo);
+  const getCall = new GetCallUseCase(callRepo);
+  const getTranscript = new GetCallTranscriptUseCase(callRepo);
+  const getStats = new GetCallStatsUseCase(callRepo);
+  const getCallCenterStats = new GetCallCenterStatsUseCase(callRepo);
+  const getAvailableFilters = new GetAvailableFiltersUseCase(callRepo);
 
-  const archiveCall = new ArchiveCallUseCase(repo);
-  const restoreCall = new RestoreCallUseCase(repo);
+  const archiveCall = new ArchiveCallUseCase(callRepo);
+  const restoreCall = new RestoreCallUseCase(callRepo);
 
   const quickDialCall = new QuickDialCallUseCase(
     deps.bolnaClientFactory,
@@ -56,7 +60,12 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   );
   const stopCall = new StopCallUseCase(deps.bolnaClientFactory, log);
 
-  const inboundCallerMatch = new InboundCallerMatchUseCase(repo, log);
+  const inboundCallerMatch = new InboundCallerMatchUseCase(
+    assistantRepo,
+    leadRepo,
+    callRepo,
+    log,
+  );
   const inboundCallerMatchController = new InboundCallerMatchController(
     inboundCallerMatch,
   );
