@@ -248,6 +248,7 @@ express-backend/
 │   │   ├── payments/                  # Razorpay Orders, Signatures, Webhook Ingestion
 │   │   ├── plans/                     # Plan Families, Versioning, Quotas, Pricing Calculator
 │   │   ├── platform-agents/           # Master Agent Blueprints, Cloning & Bolna Sync
+│   │   ├── tenant-api-keys/           # Tenant Developer API Keys (ki-<uuid>), SHA-256 Hashing, X-API-Key Auth
 │   │   ├── tenants/                   # Tenant Organizations, Settings, Overrides
 │   │   ├── users/                     # Global Users & Tenant Memberships (RBAC)
 │   │   ├── wallet/                    # Prepaid Financial Ledger, Bonus Expiry, Balance Checks
@@ -259,7 +260,7 @@ express-backend/
 │       ├── constants/                 # Cookies, Headers, HTTP Statuses, Messages
 │       ├── errors/                    # Domain Error Hierarchy (AppError, ValidationError, etc.)
 │       ├── logging/                   # Winston Logger Wrapper
-│       ├── middleware/                # Authenticate, Authorize, EnforcePlan, Upload, RateLimit
+│       ├── middleware/                # Authenticate, Authorize, EnforcePlan, Upload, RateLimit, ApiKeyAuth
 │       ├── types/                     # Shared TypeScript Interfaces & DTO Types
 │       └── utils/                     # Phone Rules, Response Envelopes, Date Helpers
 ```
@@ -268,15 +269,16 @@ express-backend/
 
 ## 5. Database Entities & Schema (Prisma)
 
-The database schema (`prisma/schema.prisma`) comprises 24+ models structured into distinct functional domains:
+The database schema (`prisma/schema.prisma`) comprises 25+ models structured into distinct functional domains:
 
 ### 5.1 Multi-Tenancy & Identity
 
 | Model               | Fields & Purpose                                                                                                 | Key Constraints & Relations                                                                  |
 | :------------------ | :--------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
-| **`Tenant`**        | Multi-tenant organization account (`id`, `name`, `email`, `isActive`, `termsAccepted`, `workspaceSwitchStatus`). | Unique `email`. Relations to `Wallet`, `TenantPlan`, `Campaign`, `Assistant`, `BolnaApiKey`. |
-| **`User`**          | Global user identity (`id`, `email`, `password`, `name`, `isActive`).                                            | Unique `email`. Relations to `TenantUser` (memberships), `PlatformAdmin`, `RefreshToken`.    |
+| **`Tenant`**        | Multi-tenant organization account (`id`, `name`, `email`, `isActive`, `termsAccepted`, `workspaceSwitchStatus`). | Unique `email`. Relations to `Wallet`, `TenantPlan`, `Campaign`, `Assistant`, `BolnaApiKey`, `TenantApiKey`. |
+| **`User`**          | Global user identity (`id`, `email`, `password`, `name`, `isActive`).                                            | Unique `email`. Relations to `TenantUser` (memberships), `PlatformAdmin`, `RefreshToken`, `TenantApiKey`.    |
 | **`TenantUser`**    | Junction table mapping User to Tenant with RBAC role (`OWNER`, `ADMIN`, `USER`).                                 | Unique composite `[userId, tenantId]`. Cascade delete on User/Tenant deletion.               |
+| **`TenantApiKey`**  | Developer API key (`id`, `name`, `keyIdentifier`, `secretHash`, `tenantId`, `createdBy`, `lastAccessedAt`).      | Unique `keyIdentifier`, index on `tenantId`. Cascade delete on Tenant/User deletion.         |
 | **`PlatformAdmin`** | Superuser flag mapping to a `User`. Grants platform admin API rights.                                            | Unique `userId`.                                                                             |
 | **`RefreshToken`**  | Refresh token rotation tracker (`id`, `tokenHash`, `familyId`, `expiresAt`, `revokedAt`).                        | Unique `tokenHash`. Indexed by `[userId]` and `[familyId]`.                                  |
 

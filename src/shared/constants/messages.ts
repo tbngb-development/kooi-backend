@@ -95,3 +95,11 @@ export const PaymentMessages = {
   INVALID_SLAB: "Invalid recharge amount",
 } as const;
 
+export const ApiKeyMessages = {
+  CREATED: "API key created successfully",
+  DELETED: "API key deleted and revoked successfully",
+  NOT_FOUND: "API key not found",
+  INVALID_KEY: "Invalid or revoked API key",
+  KEY_NOT_PROVIDED: "API key not provided in X-API-Key header",
+} as const;
+
