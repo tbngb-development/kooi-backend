@@ -38,6 +38,7 @@ import { buildAdminPhoneNumberRoutes } from "../modules/phone-numbers/presentati
 import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentation/tenant-phone-number.routes";
 import { buildTenantContactRoutes } from "../modules/contact/presentation/contact.routes";
 import { buildPublicContactRoutes } from "../modules/contact/presentation/public-contact.routes";
+import { buildTenantApiKeyRoutes } from "../modules/tenant-api-keys/presentation/tenant-api-key.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -154,6 +155,15 @@ export function buildRoutes(c: AppContainer): Router {
     buildTenantPhoneNumberRoutes(
       c.phoneNumbers.tenantController,
       c.authenticate,
+    ),
+  );
+
+  router.use(
+    "/v1/api-keys",
+    buildTenantApiKeyRoutes(
+      c.tenantApiKeys.controller,
+      c.authenticate,
+      c.authorize,
     ),
   );
 

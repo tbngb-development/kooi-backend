@@ -84,6 +84,11 @@ import {
   buildContactModule,
   type ContactModule,
 } from "../modules/contact/container";
+import {
+  buildTenantApiKeyModule,
+  type TenantApiKeyModule,
+} from "../modules/tenant-api-keys/container";
+import type { TenantApiKeyAuthMiddleware } from "../shared/middleware/tenant-api-key-auth";
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
@@ -120,6 +125,8 @@ export interface AppContainer {
   classifier: ClassifierModule;
   phoneNumbers: PhoneNumberModule;
   contact: ContactModule;
+  tenantApiKeys: TenantApiKeyModule;
+  tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -243,6 +250,8 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
+  const tenantApiKeys = buildTenantApiKeyModule(logger);
+
   return {
     logger,
     auth,
@@ -272,6 +281,8 @@ export function buildContainer(): AppContainer {
     classifier,
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),
+    tenantApiKeys,
+    tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
