@@ -58,6 +58,13 @@ export const env = {
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",
   },
 
+  contact: {
+    salesEmail: process.env.CONTACT_SALES_EMAIL || "sales@kooi.io",
+    supportEmail: process.env.CONTACT_SUPPORT_EMAIL || "support@kooi.io",
+    demoEmail: process.env.CONTACT_DEMO_EMAIL || "demo@kooi.io",
+    bugReportEmail: process.env.CONTACT_BUG_REPORT_EMAIL || "bugs@kooi.io",
+  },
+
   razorpay: {
     keyId: process.env.RAZORPAY_LIVE_KEY_ID || "",
     keySecret: process.env.RAZORPAY_LIVE_KEY_SECRET || "",

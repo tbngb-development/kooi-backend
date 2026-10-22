@@ -75,6 +75,29 @@ export class AuthenticateMiddleware {
     };
   }
 
+  optional(): RequestHandler {
+    return async (req, res, next) => {
+      try {
+        const hasToken =
+          Boolean(req.cookies?.[COOKIE_ACCESS_TOKEN]) ||
+          (typeof req.headers[HEADER_AUTHORIZATION] === "string" &&
+            req.headers[HEADER_AUTHORIZATION]!.startsWith(BEARER_PREFIX));
+
+        if (!hasToken) {
+          return next();
+        }
+
+        const context = await this.resolveContext(req, res);
+        (req as Request & { user?: AuthContext }).user = context;
+        next();
+      } catch (err) {
+        // For optional auth, gracefully fallback to unauthenticated state
+        (req as Request & { user?: AuthContext }).user = undefined;
+        next();
+      }
+    };
+  }
+
   private async resolveContext(
     req: Request,
     res: Response,

@@ -80,6 +80,10 @@ import {
   buildPhoneNumberModule,
   type PhoneNumberModule,
 } from "../modules/phone-numbers/container";
+import {
+  buildContactModule,
+  type ContactModule,
+} from "../modules/contact/container";
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
@@ -115,6 +119,7 @@ export interface AppContainer {
   industryPacks: IndustryPackModule;
   classifier: ClassifierModule;
   phoneNumbers: PhoneNumberModule;
+  contact: ContactModule;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -266,6 +271,7 @@ export function buildContainer(): AppContainer {
     invites,
     classifier,
     phoneNumbers: buildPhoneNumberModule({ logger }),
+    contact: buildContactModule(logger),
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,

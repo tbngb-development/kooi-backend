@@ -36,6 +36,8 @@ import { buildAdminClassifierRoutes } from "../modules/classifier/presentation/a
 import { buildTenantClassifierRoutes } from "../modules/classifier/presentation/tenant-classifier.routes";
 import { buildAdminPhoneNumberRoutes } from "../modules/phone-numbers/presentation/admin-phone-number.routes";
 import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentation/tenant-phone-number.routes";
+import { buildTenantContactRoutes } from "../modules/contact/presentation/contact.routes";
+import { buildPublicContactRoutes } from "../modules/contact/presentation/public-contact.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -58,6 +60,18 @@ export function buildRoutes(c: AppContainer): Router {
   router.use(
     "/v1/auth/owner-invites",
     buildPublicInviteRoutes(c.invites.publicController),
+  );
+
+  // ── Public Contact API ──────────────────────────────────────────────────
+  router.use(
+    "/v1/public/contact",
+    buildPublicContactRoutes(c.contact.publicController),
+  );
+
+  // ── Authenticated Tenant Contact API ─────────────────────────────────────
+  router.use(
+    "/v1/contact",
+    buildTenantContactRoutes(c.contact.tenantController, c.authenticate),
   );
 
   router.use(
@@ -132,10 +146,7 @@ export function buildRoutes(c: AppContainer): Router {
 
   router.use(
     "/v1/classifier",
-    buildTenantClassifierRoutes(
-      c.classifier.tenantController,
-      c.authenticate,
-    ),
+    buildTenantClassifierRoutes(c.classifier.tenantController, c.authenticate),
   );
 
   router.use(

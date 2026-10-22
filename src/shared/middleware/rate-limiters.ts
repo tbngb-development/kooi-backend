@@ -82,3 +82,20 @@ export const manualBatchRateLimiter = rateLimit({
       "Too many manual batch submissions. Please wait a minute before trying again.",
   },
 });
+
+/**
+ * Rate limit for contact form submissions.
+ * 5 submissions per 15 minutes per IP to prevent spam abuse.
+ */
+export const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    message: "Too many contact submissions from this network. Please wait a few minutes before trying again.",
+  },
+});
+
