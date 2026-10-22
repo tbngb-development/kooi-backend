@@ -26,6 +26,7 @@ import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import { toUserFriendlyError } from "../../domain/rules/batch-error-messages";
 import axios from "axios";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import type { IPhoneNumberRepository } from "../../../phone-numbers/application/interfaces/phone-number-repository.interface";
 
 export interface BatchJobData {
   batchId: string;
@@ -49,6 +50,7 @@ export class BatchProcessingWorker {
     private readonly campaignRepo: CampaignRepository,
     private readonly planRepo: PlanRepository,
     private readonly bolnaProvider: BolnaBatchProvider,
+    private readonly phoneNumberRepo: IPhoneNumberRepository,
     logger?: Logger,
   ) {
     this.log = logger?.child({ component: "BatchProcessingWorker" });
@@ -267,12 +269,25 @@ export class BatchProcessingWorker {
         ? `${env.webhook.baseUrl}/api/webhooks/bolna-batch`
         : undefined;
 
+      const outboundPhones =
+        await this.phoneNumberRepo.findOutboundPhoneNumbers(tenantId);
+
+      if (outboundPhones.length > 0) {
+        this.log?.info("Using tenant outbound phone numbers", {
+          action: "batch.worker.outbound_phones",
+          batchId,
+          tenantId,
+          count: outboundPhones.length,
+        });
+      }
+
       const bolnaResult = await this.bolnaProvider.createBatch(tenantId, {
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
         fileName: `bolna-${batchId}.csv`,
         retryConfig: retryConfig ?? undefined,
-        fromPhoneNumbers: [env.bolna.testNumber],
+        fromPhoneNumbers:
+          outboundPhones.length > 0 ? outboundPhones : undefined,
         webhookUrl,
       });
 
@@ -360,7 +375,7 @@ export class BatchProcessingWorker {
       if (isFinalAttempt) {
         await this.failBatch(batchId, campaignId, technicalMessage);
       }
-      
+
       throw err;
     }
   }

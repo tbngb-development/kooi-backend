@@ -48,7 +48,7 @@ export class StopCallUseCase {
       throw new CallNotFoundError();
     }
 
-    const stoppableStatuses = ["PENDING", "CALLING", "SCHEDULED"];
+    const stoppableStatuses = ["PENDING", "SCHEDULED"];
     if (!stoppableStatuses.includes(call.status)) {
       throw new CallCannotBeStoppedError(call.status);
     }

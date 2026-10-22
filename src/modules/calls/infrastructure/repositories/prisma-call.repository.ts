@@ -636,86 +636,45 @@ export class PrismaCallRepository implements CallRepository {
     return values;
   }
 
-  async findInboundLeadContext(agentId: string, phone: string) {
-    const digits = phone.replace(/\D/g, "");
-    const last10 = digits.slice(-10);
-    const candidatePhones = Array.from(
-      new Set([phone, `+91${last10}`, `91${last10}`, last10]),
-    ).filter(Boolean);
-
-    const lead = await prisma.lead.findFirst({
-      where: {
-        phone: { in: candidatePhones },
-        isDeleted: false,
-        campaign: {
-          isDeleted: false,
-          assistant: {
-            isDeleted: false,
-            platformAgent: {
-              bolnaId: agentId,
-              type: { in: ["INBOUND", "BOTH"] },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        email: true,
-        company: true,
-        batchId: true,
-        metadata: true,
-        campaign: {
-          select: {
-            id: true,
-            name: true,
-            variables: true,
-            tenantId: true,
-          },
-        },
-      },
-    });
-
-    if (!lead || !lead.campaign) return null;
-
-    return {
-      lead: {
-        id: lead.id,
-        name: lead.name,
-        phone: lead.phone,
-        email: lead.email,
-        company: lead.company,
-        batchId: lead.batchId,
-        metadata: lead.metadata as Record<string, unknown> | null,
-      },
-      campaign: {
-        id: lead.campaign.id,
-        name: lead.campaign.name,
-        variables: lead.campaign.variables as Record<string, string> | null,
-        tenantId: lead.campaign.tenantId,
-      },
-    };
-  }
-
-  async createInboundCall(data: {
+  async createInboundCallRecord(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
+    assistantId: string;
     leadId: string;
-    batchId?: string | null;
-  }) {
+  }): Promise<void> {
+    await prisma.call.create({
+      data: {
+        bolnaCallId: data.bolnaCallId,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        leadId: data.leadId,
+        type: "INBOUND",
+        source: "INBOUND",
+        status: "CALLING",
+        startedAt: new Date(),
+      },
+    });
+  }
+
+  async createQuickDialCallRecord(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    assistantId: string;
+    leadId: string;
+    agentNumber: string | null;
+  }): Promise<{ id: string }> {
     return prisma.call.create({
       data: {
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
-        campaignId: data.campaignId,
+        assistantId: data.assistantId,
         leadId: data.leadId,
-        batchId: data.batchId ?? null,
-        status: "CALLING",
-        startedAt: new Date(),
+        type: "OUTBOUND",
+        source: "QUICK_DIAL",
+        status: "PENDING",
+        agentNumber: data.agentNumber,
       },
+      select: { id: true },
     });
   }
 }

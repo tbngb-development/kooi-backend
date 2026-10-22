@@ -76,6 +76,12 @@ export class InvalidResetTokenError extends UnauthorizedError {
   }
 }
 
+export class InvalidVerificationTokenError extends UnauthorizedError {
+  constructor() {
+    super(AuthMessages.VERIFICATION_TOKEN_INVALID);
+  }
+}
+
 export class InvalidOldPasswordError extends UnauthorizedError {
   constructor() {
     super(AuthMessages.INVALID_OLD_PASSWORD);

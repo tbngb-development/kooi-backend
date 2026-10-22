@@ -24,6 +24,7 @@ import { BatchProcessingWorker } from "./infrastructure/jobs/batch-processing.wo
 import { ArchiveBatchUseCase } from "./application/use-cases/archive-batch.use-case";
 import { RestoreBatchUseCase } from "./application/use-cases/restore-batch.use-case";
 import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue-manual-batch-upload.use-case";
+import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -46,7 +47,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   );
   const bolnaProvider = new BolnaBatchProviderImpl(deps.bolnaClientFactory);
   const planRepo = new PrismaPlanRepository();
-
+  const phoneNumberRepo = new PrismaPhoneNumberRepository();
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
   const getBatch = new GetBatchUseCase(batchRepo);
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
@@ -71,6 +72,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     campaignRepo,
     planRepo,
     bolnaProvider,
+    phoneNumberRepo,
     log,
   );
 

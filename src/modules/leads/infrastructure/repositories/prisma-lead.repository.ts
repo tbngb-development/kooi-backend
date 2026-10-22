@@ -6,6 +6,7 @@ import type {
   PaginatedLeadsResult,
   DetailedLeadResult,
   LeadStatsResult,
+  InboundLeadResult,
 } from "../../application/interfaces/lead-repository.interface";
 
 export class PrismaLeadRepository implements LeadRepository {
@@ -208,6 +209,68 @@ export class PrismaLeadRepository implements LeadRepository {
       failed,
       noAnswer,
     };
+  }
+
+  async findByTenantAndPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadResult | null> {
+    const lead = await prisma.lead.findFirst({
+      where: {
+        tenantId,
+        phone,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
+
+    return lead ?? null;
+  }
+
+  async createInboundLead(data: {
+    phone: string;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<InboundLeadResult> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "INBOUND",
+        source: "INBOUND",
+        status: "CALLING",
+      },
+      select: { id: true, name: true },
+    });
+  }
+
+  async updateStatus(id: string, status: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id },
+      data: { status: status as LeadStatus },
+    });
+  }
+
+  async createQuickDialLead(data: {
+    phone: string;
+    name: string | null;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<{ id: string }> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        name: data.name,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "OUTBOUND",
+        source: "QUICK_DIAL",
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
   }
 
   async softDelete(leadId: string): Promise<void> {

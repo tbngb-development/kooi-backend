@@ -8,6 +8,7 @@ import { AssignPhoneNumberUseCase } from "./application/use-cases/assign-phone-n
 import { UnassignPhoneNumberUseCase } from "./application/use-cases/unassign-phone-number.use-case";
 import { DeletePhoneNumberUseCase } from "./application/use-cases/delete-phone-number.use-case";
 import { GetTenantPhoneNumberUseCase } from "./application/use-cases/get-tenant-phone-number.use-case";
+import { ListTenantPhoneNumbersUseCase } from "./application/use-cases/list-tenant-phone-numbers.use-case";
 import { GetTenantAssistantsUseCase } from "./application/use-cases/get-tenant-assistants.use-case";
 import { AdminPhoneNumberController } from "./presentation/admin-phone-number.controller";
 import { TenantPhoneNumberController } from "./presentation/tenant-phone-number.controller";
@@ -54,6 +55,9 @@ export function buildPhoneNumberModule(
   const getTenantPhoneNumberUseCase = new GetTenantPhoneNumberUseCase(
     repository,
   );
+  const listTenantPhoneNumbersUseCase = new ListTenantPhoneNumbersUseCase(
+    repository,
+  );
   const getTenantAssistantsUseCase = new GetTenantAssistantsUseCase(repository);
 
   const adminController = new AdminPhoneNumberController(
@@ -69,6 +73,7 @@ export function buildPhoneNumberModule(
 
   const tenantController = new TenantPhoneNumberController(
     getTenantPhoneNumberUseCase,
+    listTenantPhoneNumbersUseCase,
   );
 
   return {

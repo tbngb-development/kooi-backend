@@ -63,18 +63,44 @@ export interface LeadStatsResult {
   noAnswer: number;
 }
 
+export interface InboundLeadResult {
+  id: string;
+  name: string | null;
+}
+
 export interface LeadRepository {
   list(
     tenantId: string,
     filters: ListLeadsFilters,
   ): Promise<PaginatedLeadsResult>;
 
-  findById(
-    tenantId: string,
-    id: string,
-  ): Promise<DetailedLeadResult | null>;
+  findById(tenantId: string, id: string): Promise<DetailedLeadResult | null>;
 
   getStats(tenantId: string, campaignId?: string): Promise<LeadStatsResult>;
   softDelete(leadId: string): Promise<void>;
   restore(leadId: string): Promise<void>;
+
+  /** Exact E.164 phone match within a tenant */
+  findByTenantAndPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadResult | null>;
+
+  /** Create a new inbound lead (no campaign/batch) */
+  createInboundLead(data: {
+    phone: string;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<InboundLeadResult>;
+
+  /** Update lead status */
+  updateStatus(id: string, status: string): Promise<void>;
+
+  /** Create a quick-dial outbound lead */
+  createQuickDialLead(data: {
+    phone: string;
+    name: string | null;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<{ id: string }>;
 }

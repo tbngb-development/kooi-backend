@@ -1,6 +1,7 @@
 import { PrismaAuthRepository } from "../modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { JwtTokenService } from "../modules/auth/infrastructure/services/jwt-token.service";
 import { JwtPasswordResetTokenService } from "../modules/auth/infrastructure/services/jwt-password-reset-token.service";
+import { JwtEmailVerificationTokenService } from "../modules/auth/infrastructure/services/jwt-email-verification-token.service";
 import { BcryptPasswordService } from "../modules/auth/infrastructure/services/bcrypt-password.service";
 import { AuthenticateMiddleware } from "../shared/middleware/authenticate";
 import { AuthorizeMiddleware } from "../shared/middleware/authorize";
@@ -79,6 +80,10 @@ import {
   buildPhoneNumberModule,
   type PhoneNumberModule,
 } from "../modules/phone-numbers/container";
+import {
+  buildContactModule,
+  type ContactModule,
+} from "../modules/contact/container";
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
@@ -114,6 +119,7 @@ export interface AppContainer {
   industryPacks: IndustryPackModule;
   classifier: ClassifierModule;
   phoneNumbers: PhoneNumberModule;
+  contact: ContactModule;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -137,6 +143,7 @@ export function buildContainer(): AppContainer {
   const email = new ResendEmailService(logger.child({ module: "email" }));
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
+  const emailVerificationTokenService = new JwtEmailVerificationTokenService(redis);
 
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
   const bolnaClientFactory = new BolnaClientFactory(
@@ -160,6 +167,7 @@ export function buildContainer(): AppContainer {
     passwordService,
     otpService,
     passwordResetTokenService,
+    emailVerificationTokenService,
     emailService: email,
     logger,
   });
@@ -263,6 +271,7 @@ export function buildContainer(): AppContainer {
     invites,
     classifier,
     phoneNumbers: buildPhoneNumberModule({ logger }),
+    contact: buildContactModule(logger),
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,

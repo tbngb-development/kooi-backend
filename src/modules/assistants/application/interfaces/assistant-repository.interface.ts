@@ -1,11 +1,13 @@
 import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import { type AssistantEntityData } from "../../domain/entities/assistant.entity";
 import type { PlatformAgentType } from "@prisma/client";
+import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
 
 export interface RegisterAssistantData {
   platformAgentId: string;
   name: string;
   config: Record<string, unknown>;
+  variables?: AssistantVariablesConfig;
 }
 
 export interface AssistantWithPlatformAgent {
@@ -14,6 +16,7 @@ export interface AssistantWithPlatformAgent {
   tenantId: string;
   platformAgentId: string;
   config: Record<string, unknown>;
+  variables: AssistantVariablesConfig | null;
   createdAt: Date;
   updatedAt: Date;
   platformAgent: {
@@ -21,7 +24,7 @@ export interface AssistantWithPlatformAgent {
     bolnaId: string;
     name: string;
     slug: string;
-    type?: PlatformAgentType;
+    type: PlatformAgentType;
     systemPrompt: string | null;
     welcomeMessage: string | null;
     requiredVariables: RequiredVariable[] | null;
@@ -33,6 +36,19 @@ export interface AssistantWithPlatformAgent {
       name: string;
       slug: string;
     } | null;
+  };
+}
+
+export interface InboundAssistantResult {
+  id: string;
+  name: string;
+  tenantId: string;
+  variables: unknown;
+  platformAgent: {
+    id: string;
+    name: string;
+    type: string;
+    welcomeMessage: string | null;
   };
 }
 
@@ -54,7 +70,7 @@ export interface AssistantRepository {
   update(
     tenantId: string,
     id: string,
-    name: string,
+    data: { name?: string; variables?: AssistantVariablesConfig },
   ): Promise<AssistantEntityData>;
   updateConfig(
     tenantId: string,
@@ -76,6 +92,10 @@ export interface AssistantRepository {
     assistantId: string,
     newPlatformAgentId: string,
   ): Promise<void>;
+  /** Find active inbound-capable assistant by Bolna agent ID */
+  findInboundByBolnaAgentId(
+    agentId: string,
+  ): Promise<InboundAssistantResult | null>;
   softDelete(tenantId: string, id: string): Promise<void>;
   restore(tenantId: string, id: string): Promise<void>;
 }

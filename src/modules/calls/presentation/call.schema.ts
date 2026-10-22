@@ -70,7 +70,6 @@ export const quickDialSchema = z.object({
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   name: z.string().trim().optional(),
   fromPhoneNumber: z.string().trim().optional(),
-  userData: z.record(z.string(), z.string()).optional(),
 });
 
 export const stopCallParamSchema = z.object({

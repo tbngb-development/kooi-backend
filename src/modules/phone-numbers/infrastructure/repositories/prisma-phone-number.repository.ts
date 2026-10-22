@@ -294,4 +294,18 @@ export class PrismaPhoneNumberRepository implements IPhoneNumberRepository {
     });
     return Boolean(assistant);
   }
+
+  async findOutboundPhoneNumbers(tenantId: string): Promise<string[]> {
+    const phones = await prisma.phoneNumber.findMany({
+      where: {
+        tenantId,
+        status: "ACTIVE",
+        capabilities: { in: ["OUTBOUND", "BOTH"] },
+      },
+      select: { phoneNumber: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return phones.map((p) => p.phoneNumber);
+  }
 }

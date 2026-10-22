@@ -23,6 +23,9 @@ export const AuthMessages = {
     "New password must be different from the current password.",
   RESET_TOKEN_INVALID:
     "Invalid or expired reset token. Please restart the process.",
+  VERIFICATION_TOKEN_INVALID:
+    "Invalid or expired verification token. Please verify your email again.",
+  EMAIL_VERIFIED_SUCCESS: "Email verified successfully.",
 
   // Errors
   INVALID_CREDENTIALS: "Invalid email or password",

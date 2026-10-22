@@ -16,6 +16,7 @@ import {
   resetPasswordSchema,
   changePasswordSchema,
   sendRegisterOtpSchema,
+  verifyRegisterOtpSchema,
 } from "./auth.schema";
 import {
   loginLimiter,
@@ -38,6 +39,13 @@ export function buildTenantAuthRoutes(
     otpRequestLimiter, // Max 3 per 10 mins
     validate(sendRegisterOtpSchema),
     controller.sendRegisterOtp,
+  );
+
+  router.post(
+    "/register/verify-otp",
+    loginLimiter,
+    validate(verifyRegisterOtpSchema),
+    controller.verifyRegisterOtp,
   );
 
   router.post(

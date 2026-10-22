@@ -166,7 +166,6 @@ export class TenantCallController {
         phone: body.phone,
         name: body.name,
         fromPhoneNumber: body.fromPhoneNumber,
-        userData: body.userData,
       });
       sendSuccess(res, data, 201, "Quick dial call initiated successfully");
     } catch (err) {

@@ -5,8 +5,10 @@ import type {
   AssistantRepository,
   RegisterAssistantData,
   AssistantWithPlatformAgent,
+  InboundAssistantResult,
 } from "../../application/interfaces/assistant-repository.interface";
 import type { AssistantEntityData } from "../../domain/entities/assistant.entity";
+import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
 
 export class PrismaAssistantRepository implements AssistantRepository {
   async list(tenantId: string): Promise<AssistantEntityData[]> {
@@ -40,6 +42,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
       tenantId: a.tenantId,
       platformAgentId: a.platformAgentId,
       config: a.config as Record<string, unknown>,
+      variables: ((a as any).variables as AssistantVariablesConfig) ?? null,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
       isDeleted: a.isDeleted,
@@ -79,6 +82,8 @@ export class PrismaAssistantRepository implements AssistantRepository {
       tenantId: assistant.tenantId,
       platformAgentId: assistant.platformAgentId,
       config: assistant.config as Record<string, unknown>,
+      variables:
+        ((assistant as any).variables as AssistantVariablesConfig) ?? null,
       createdAt: assistant.createdAt,
       updatedAt: assistant.updatedAt,
       platformAgent: {
@@ -131,6 +136,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         name: data.name,
         tenantId,
         config: data.config as any,
+        variables: (data.variables as any) ?? undefined,
       },
     });
 
@@ -140,11 +146,16 @@ export class PrismaAssistantRepository implements AssistantRepository {
   async update(
     tenantId: string,
     id: string,
-    name: string,
+    data: { name?: string; variables?: any },
   ): Promise<AssistantEntityData> {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.variables !== undefined)
+      updateData.variables = data.variables as any;
+
     const assistant = await prisma.assistant.update({
       where: { id, tenantId },
-      data: { name },
+      data: updateData,
     });
 
     return this.toEntityData(assistant);
@@ -191,6 +202,49 @@ export class PrismaAssistantRepository implements AssistantRepository {
     });
   }
 
+  async findInboundByBolnaAgentId(
+    agentId: string,
+  ): Promise<InboundAssistantResult | null> {
+    const assistant = await prisma.assistant.findFirst({
+      where: {
+        isDeleted: false,
+        platformAgent: {
+          bolnaId: agentId,
+          type: { in: ["INBOUND", "BOTH"] },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        tenantId: true,
+        variables: true,
+        platformAgent: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            welcomeMessage: true,
+          },
+        },
+      },
+    });
+
+    if (!assistant) return null;
+
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      tenantId: assistant.tenantId,
+      variables: assistant.variables,
+      platformAgent: {
+        id: assistant.platformAgent.id,
+        name: assistant.platformAgent.name,
+        type: assistant.platformAgent.type,
+        welcomeMessage: assistant.platformAgent.welcomeMessage,
+      },
+    };
+  }
+
   async softDelete(tenantId: string, id: string): Promise<void> {
     await prisma.assistant.update({
       where: { id, tenantId },
@@ -212,6 +266,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
       tenantId: a.tenantId,
       platformAgentId: a.platformAgentId,
       config: a.config as Record<string, unknown>,
+      variables: ((a as any).variables as AssistantVariablesConfig) ?? null,
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
       isDeleted: a.isDeleted,
