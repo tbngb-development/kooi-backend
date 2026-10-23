@@ -4,6 +4,7 @@ import request from "supertest";
 import { buildTenantOutboundCallRoutes } from "../presentation/tenant-outbound-call.routes";
 import { TenantOutboundCallController } from "../presentation/tenant-outbound-call.controller";
 import { InitiateOutboundCallUseCase } from "../application/use-cases/initiate-outbound-call.use-case";
+import { CallWalletGuard } from "../../wallet/application/guards/call-wallet.guard";
 import { ApiKeyCryptoService } from "../../tenant-api-keys/infrastructure/services/api-key-crypto.service";
 import { VerifyTenantApiKeyUseCase } from "../../tenant-api-keys/application/use-cases/verify-tenant-api-key.use-case";
 import { TenantApiKeyAuthMiddleware } from "../../../shared/middleware/tenant-api-key-auth";
@@ -16,6 +17,10 @@ import type { LeadRepository } from "../../leads/application/interfaces/lead-rep
 import type { CallRepository } from "../application/interfaces/call-repository.interface";
 import type { IBolnaClientFactory } from "../../../shared/config/external/bolna/bolna-client.factory";
 import { HttpStatus } from "../../../shared/constants/http-status";
+
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
+  assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
+}));
 
 // ── In-Memory Repositories ───────────────────────────────────────────────────
 
@@ -129,7 +134,7 @@ class InMemoryCallRepository implements Partial<CallRepository> {
 
 // ── Test Suite ───────────────────────────────────────────────────────────────
 
-describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outbound)", () => {
+describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/public/outbound)", () => {
   let app: express.Express;
   let apiKeyRepo: InMemoryTenantApiKeyRepository;
   let assistantRepo: InMemoryAssistantRepository;
@@ -302,9 +307,10 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
     const verifyApiKeyUseCase = new VerifyTenantApiKeyUseCase(apiKeyRepo, cryptoService);
     const apiKeyAuthMiddleware = new TenantApiKeyAuthMiddleware(verifyApiKeyUseCase);
 
+    const callWalletGuard = new CallWalletGuard(walletRepo as any);
     const initiateOutboundCallUseCase = new InitiateOutboundCallUseCase(
       bolnaClientFactory,
-      walletRepo as any,
+      callWalletGuard,
       assistantRepo as any,
       leadRepo as any,
       callRepo as any,
@@ -316,7 +322,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
 
     // Mount Outbound Call Routes
     app.use(
-      "/api/v1/calls",
+      "/api/v1/public/outbound",
       buildTenantOutboundCallRoutes(outboundController, apiKeyAuthMiddleware),
     );
 
@@ -343,7 +349,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 1. Successful Outbound Call ───────────────────────────────────────────
   it("1. should initiate a call successfully with a valid API key and return 201 Created", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -373,7 +379,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 2. Missing or Invalid API Key ─────────────────────────────────────────
   it("2a. should reject request when X-API-Key header is missing", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .send({
         phoneNumber: "+919876543210",
         name: "Rahul",
@@ -387,7 +393,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
 
   it("2b. should reject request when X-API-Key is invalid", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", "invalid_api_key_12345")
       .send({
         phoneNumber: "+919876543210",
@@ -401,7 +407,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
 
   it("2c. should reject request when API key is sent via Authorization: Bearer instead of X-API-Key", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("Authorization", `Bearer ${tenant1ApiKey}`)
       .send({
         phoneNumber: "+919876543210",
@@ -416,7 +422,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 3. Missing Phone Number ───────────────────────────────────────────────
   it("3. should reject request when phoneNumber is missing", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         name: "Rahul",
@@ -434,7 +440,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
 
   it("3b. should reject request when phoneNumber is not in valid E.164 format", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "9876543210", // Missing leading + and country code
@@ -449,7 +455,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 4. Missing Assistant ID ───────────────────────────────────────────────
   it("4. should reject request when assistantId is missing or not a valid UUID", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -467,7 +473,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 5. Optional Name Omitted ──────────────────────────────────────────────
   it("5. should accept request when optional name is omitted", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -482,7 +488,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 6. Inactive Assistant ─────────────────────────────────────────────────
   it("6. should reject request when assistant template is inactive", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -497,7 +503,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   it("7. should reject request with 404 when assistant belongs to another tenant", async () => {
     // tenant-1 attempts to call using tenant-2's assistant
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -511,7 +517,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 8. Assistant Not Configured for Outbound Calls ─────────────────────────
   it("8. should reject request when assistant is configured only for INBOUND calls", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -527,7 +533,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
     walletRepo.balances["tenant-1"] = { cashBalance: 0, bonusBalance: 0 };
 
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -546,7 +552,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
     );
 
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -563,7 +569,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
     // 60 allowed calls for tenant-2
     for (let i = 0; i < 60; i++) {
       const res = await request(app)
-        .post("/api/v1/calls/outbound")
+        .post("/api/v1/public/outbound")
         .set("X-API-Key", tenant2ApiKey)
         .send({
           phoneNumber: "+919876543210",
@@ -574,7 +580,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
 
     // 61st call is blocked with 429
     const blockedRes = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant2ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -588,7 +594,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   // ── 12. Exactly One Call Initiated Per Request ────────────────────────────
   it("12. should initiate exactly one call per accepted request", async () => {
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",
@@ -621,7 +627,7 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/calls/outb
   it("14. should resolve tenant context exclusively from API key and ignore body tenantId", async () => {
     // Caller sends key for tenant-1, but attempts to spoof tenant-2 in the body
     const res = await request(app)
-      .post("/api/v1/calls/outbound")
+      .post("/api/v1/public/outbound")
       .set("X-API-Key", tenant1ApiKey)
       .send({
         phoneNumber: "+919876543210",

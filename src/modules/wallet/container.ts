@@ -18,6 +18,11 @@ import { DebitWalletForCallUseCase } from "./application/use-cases/debit-wallet.
 import { ExpireBonusCreditsUseCase } from "./application/use-cases/expire-bonus-credits.use-case";
 import { BonusExpiryScheduler } from "./infrastructure/jobs/bonus-expiry.scheduler";
 
+import {
+  CallWalletGuard,
+  type ICallWalletGuard,
+} from "./application/guards/call-wallet.guard";
+
 export interface WalletModuleDeps {
   planRepository: PlanRepository;
   bolnaClientFactory: IBolnaClientFactory;
@@ -29,6 +34,9 @@ export interface WalletModule {
   repository: WalletRepository;
   tenantController: TenantWalletController;
   adminController: AdminWalletController;
+  guards: {
+    callWalletGuard: ICallWalletGuard;
+  };
   useCases: {
     debitWalletForCall: DebitWalletForCallUseCase;
     checkBalanceForBatch: CheckBalanceForBatchUseCase;
@@ -88,6 +96,8 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
     log,
   );
 
+  const callWalletGuard = new CallWalletGuard(repository);
+
   return {
     repository,
     tenantController: new TenantWalletController(getWallet, listTransactions),
@@ -96,6 +106,9 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
       listTransactions,
       adjustWallet,
     ),
+    guards: {
+      callWalletGuard,
+    },
     useCases: {
       debitWalletForCall,
       checkBalanceForBatch,

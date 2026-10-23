@@ -4,7 +4,6 @@ import type {
   ResolvedCallContext,
 } from "../interfaces/webhook-repository.interface";
 import type { WebhookCallPayload } from "../dto/webhook.dto";
-import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class CallResolverService {
@@ -40,15 +39,17 @@ export class CallResolverService {
     }
 
     const bolnaBatchId = payload.batch_id;
-    const phone =
-      payload.telephony_data?.to_number ??
-      payload.context_details?.recipient_phone_number ??
-      payload.user_number;
+    const isOutbound = payload.telephony_data?.call_type !== "inbound";
+    const phone = isOutbound
+      ? (payload.telephony_data?.to_number ??
+         payload.context_details?.recipient_phone_number ??
+         payload.user_number)
+      : (payload.telephony_data?.from_number ??
+         payload.user_number);
     const retried = payload.batch_run_details?.retried ?? 0;
 
     if (!bolnaBatchId && payload.agent_id && phone) {
       // Non-batch call fallback (Quick Dial or Inbound)
-      const isOutbound = payload.telephony_data?.call_type === "outbound";
       const callType = isOutbound ? "OUTBOUND" : "INBOUND";
       const callSource = isOutbound ? "QUICK_DIAL" : "INBOUND";
       const agentNumber =
@@ -106,17 +107,17 @@ export class CallResolverService {
           orderBy: { createdAt: "desc" },
         });
 
-        const isOutbound = payload.telephony_data?.call_type === "outbound";
-        const callType = isOutbound ? "OUTBOUND" : "INBOUND";
-        const callSource = isOutbound ? "QUICK_DIAL" : "INBOUND";
-        const agentNumber =
-          payload.agent_number ??
-          (isOutbound
-            ? payload.telephony_data?.from_number
-            : payload.telephony_data?.to_number) ??
-          null;
-
         if (!lead) {
+          this.logger?.info("Creating new lead for webhook", {
+            action: "webhook.call_resolver.lead_created",
+            bolnaCallId,
+            phone,
+            tenantId: targetTenantId,
+            assistantId: assistant.id,
+            callType,
+            callSource,
+            agentNumber,
+          });
           lead = await prisma.lead.create({
             data: {
               phone,

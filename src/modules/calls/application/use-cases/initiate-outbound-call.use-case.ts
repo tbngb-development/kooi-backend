@@ -1,15 +1,10 @@
 // modules/calls/application/use-cases/initiate-outbound-call.use-case.ts
 
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
-import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
+import type { ICallWalletGuard } from "../../../wallet/application/guards/call-wallet.guard";
 import type { AssistantRepository } from "../../../assistants/application/interfaces/assistant-repository.interface";
 import type { LeadRepository } from "../../../leads/application/interfaces/lead-repository.interface";
 import type { CallRepository } from "../interfaces/call-repository.interface";
-import { getEffectiveAvailableBalance } from "../../../wallet/domain/rules/bonus-first-deduction.rules";
-import {
-  WalletNotFoundError,
-  InsufficientBalanceError,
-} from "../../../wallet/domain/errors/wallet.errors";
 import {
   AssistantNotFoundError,
   BolnaAgentNotFoundError,
@@ -29,7 +24,7 @@ import type {
 export class InitiateOutboundCallUseCase {
   constructor(
     private readonly bolnaClientFactory: IBolnaClientFactory,
-    private readonly walletRepo: WalletRepository,
+    private readonly callWalletGuard: ICallWalletGuard,
     private readonly assistantRepo: AssistantRepository,
     private readonly leadRepo: LeadRepository,
     private readonly callRepo: CallRepository,
@@ -76,17 +71,7 @@ export class InitiateOutboundCallUseCase {
     }
 
     // 2. Validate tenant wallet balance
-    const wallet = await this.walletRepo.findByTenantId(input.tenantId);
-    if (!wallet) {
-      throw new WalletNotFoundError(input.tenantId);
-    }
-
-    const availableBalance = getEffectiveAvailableBalance(wallet);
-    if (availableBalance <= 0) {
-      throw new InsufficientBalanceError(
-        "Insufficient wallet balance to place an outbound call. Please recharge your wallet.",
-      );
-    }
+    await this.callWalletGuard.assertSufficientBalance(input.tenantId);
 
     // 3. Create Lead record for this call
     const customerName = input.name ? cleanCustomerName(input.name) : null;

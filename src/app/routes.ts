@@ -99,22 +99,24 @@ export function buildRoutes(c: AppContainer): Router {
   );
   router.use(
     "/v1/calls",
-    buildTenantOutboundCallRoutes(
-      c.calls.outboundCallController,
-      c.tenantApiKeyAuth,
-    ),
-  );
-  router.use(
-    "/v1/calls",
     buildTenantCallRoutes(
       c.calls.tenantController,
       c.authenticate,
       c.authorize,
     ),
   );
+
   router.use(
     "/v1/public/inbound",
     buildInboundCallerMatchRoutes(c.calls.inboundCallerController),
+  );
+
+  router.use(
+    "/v1/public/outbound",
+    buildTenantOutboundCallRoutes(
+      c.calls.outboundCallController,
+      c.tenantApiKeyAuth,
+    ),
   );
 
   router.use(
