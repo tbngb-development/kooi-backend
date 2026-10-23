@@ -14,6 +14,7 @@ import type { AssistantVariablesConfig } from "../../../assistants/domain/types/
 import type { LeadRepository } from "../../../leads/application/interfaces/lead-repository.interface";
 import type { AssistantRepository } from "../../../assistants/application/interfaces/assistant-repository.interface";
 import type { CallRepository } from "../interfaces/call-repository.interface";
+import type { ICallWalletGuard } from "../../../wallet/application/guards/call-wallet.guard";
 
 // ─── Input / Output Types ────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export class InboundCallerMatchUseCase {
     private readonly assistantRepo: AssistantRepository,
     private readonly leadRepo: LeadRepository,
     private readonly callRepo: CallRepository,
+    private readonly callWalletGuard: ICallWalletGuard,
     private readonly logger?: Logger,
   ) {}
 
@@ -76,6 +78,23 @@ export class InboundCallerMatchUseCase {
           action: "inbound.caller_match.rejected",
           agentId: input.agentId,
           contactNumber: normalizedPhone,
+        },
+      );
+      return {};
+    }
+
+    // ── 1.1 Verify tenant wallet balance ────────────────────────────────
+    const hasFunds = await this.callWalletGuard.hasSufficientBalance(
+      assistant.tenantId,
+    );
+    if (!hasFunds) {
+      this.logger?.warn(
+        "Inbound call rejected: insufficient tenant wallet balance",
+        {
+          action: "inbound.caller_match.insufficient_balance",
+          agentId: input.agentId,
+          contactNumber: normalizedPhone,
+          tenantId: assistant.tenantId,
         },
       );
       return {};

@@ -20,6 +20,7 @@ import { StopCallUseCase } from "./application/use-cases/stop-call.use-case";
 import { TenantOutboundCallController } from "./presentation/tenant-outbound-call.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
+import type { ICallWalletGuard } from "../wallet/application/guards/call-wallet.guard";
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
 import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
@@ -29,7 +30,8 @@ import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/rep
 
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
-  walletRepo: WalletRepository;
+  callWalletGuard: ICallWalletGuard;
+  walletRepo?: WalletRepository;
   debitWalletForCall?: DebitWalletForCallUseCase;
   classifierQueue?: Queue;
   logger: Logger;
@@ -60,7 +62,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
 
   const quickDialCall = new QuickDialCallUseCase(
     deps.bolnaClientFactory,
-    deps.walletRepo,
+    deps.callWalletGuard,
     assistantRepo,
     leadRepo,
     callRepo,
@@ -73,6 +75,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     assistantRepo,
     leadRepo,
     callRepo,
+    deps.callWalletGuard,
     log,
   );
   const inboundCallerMatchController = new InboundCallerMatchController(
@@ -88,7 +91,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
 
   const initiateOutboundCall = new InitiateOutboundCallUseCase(
     deps.bolnaClientFactory,
-    deps.walletRepo,
+    deps.callWalletGuard,
     assistantRepo,
     leadRepo,
     callRepo,

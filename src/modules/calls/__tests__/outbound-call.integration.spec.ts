@@ -4,6 +4,7 @@ import request from "supertest";
 import { buildTenantOutboundCallRoutes } from "../presentation/tenant-outbound-call.routes";
 import { TenantOutboundCallController } from "../presentation/tenant-outbound-call.controller";
 import { InitiateOutboundCallUseCase } from "../application/use-cases/initiate-outbound-call.use-case";
+import { CallWalletGuard } from "../../wallet/application/guards/call-wallet.guard";
 import { ApiKeyCryptoService } from "../../tenant-api-keys/infrastructure/services/api-key-crypto.service";
 import { VerifyTenantApiKeyUseCase } from "../../tenant-api-keys/application/use-cases/verify-tenant-api-key.use-case";
 import { TenantApiKeyAuthMiddleware } from "../../../shared/middleware/tenant-api-key-auth";
@@ -16,6 +17,10 @@ import type { LeadRepository } from "../../leads/application/interfaces/lead-rep
 import type { CallRepository } from "../application/interfaces/call-repository.interface";
 import type { IBolnaClientFactory } from "../../../shared/config/external/bolna/bolna-client.factory";
 import { HttpStatus } from "../../../shared/constants/http-status";
+
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
+  assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
+}));
 
 // ── In-Memory Repositories ───────────────────────────────────────────────────
 
@@ -302,9 +307,10 @@ describe("Tenant Single Outbound Call Integration Suite (POST /api/v1/public/out
     const verifyApiKeyUseCase = new VerifyTenantApiKeyUseCase(apiKeyRepo, cryptoService);
     const apiKeyAuthMiddleware = new TenantApiKeyAuthMiddleware(verifyApiKeyUseCase);
 
+    const callWalletGuard = new CallWalletGuard(walletRepo as any);
     const initiateOutboundCallUseCase = new InitiateOutboundCallUseCase(
       bolnaClientFactory,
-      walletRepo as any,
+      callWalletGuard,
       assistantRepo as any,
       leadRepo as any,
       callRepo as any,
