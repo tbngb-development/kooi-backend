@@ -11,6 +11,7 @@ import { buildAdminCampaignRoutes } from "../modules/campaigns/presentation/admi
 import { buildTenantLeadRoutes } from "../modules/leads/presentation/tenant-lead.routes";
 import { buildAdminLeadRoutes } from "../modules/leads/presentation/admin-lead.routes";
 import { buildTenantCallRoutes } from "../modules/calls/presentation/tenant-call.routes";
+import { buildTenantOutboundCallRoutes } from "../modules/calls/presentation/tenant-outbound-call.routes";
 import { buildAdminCallRoutes } from "../modules/calls/presentation/admin-call.routes";
 import { buildTenantDashboardRoutes } from "../modules/dashboard/presentation/tenant-dashboard.routes";
 import { buildAdminDashboardRoutes } from "../modules/dashboard/presentation/admin-dashboard.routes";
@@ -94,6 +95,13 @@ export function buildRoutes(c: AppContainer): Router {
       c.leads.tenantController,
       c.authenticate,
       c.authorize,
+    ),
+  );
+  router.use(
+    "/v1/calls",
+    buildTenantOutboundCallRoutes(
+      c.calls.outboundCallController,
+      c.tenantApiKeyAuth,
     ),
   );
   router.use(

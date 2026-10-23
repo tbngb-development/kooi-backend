@@ -3,9 +3,9 @@ import { z } from "zod";
 // Helper validators
 const nameValidator = z
   .string()
+  .trim()
   .min(3, "Name must be at least 3 characters")
-  .max(100, "Name must not exceed 100 characters")
-  .transform((val) => val.trim());
+  .max(100, "Name must not exceed 100 characters");
 
 const emailValidator = z
   .email("Please provide a valid email address")

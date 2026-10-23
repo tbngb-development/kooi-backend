@@ -31,6 +31,7 @@ export interface AssistantWithPlatformAgent {
     description: string | null;
     category: string | null;
     isFeatured: boolean;
+    isActive: boolean;
     industryPack: {
       id: string;
       name: string;

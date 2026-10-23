@@ -99,6 +99,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         description: assistant.platformAgent.description,
         category: assistant.platformAgent.category,
         isFeatured: assistant.platformAgent.isFeatured,
+        isActive: assistant.platformAgent.isActive,
         industryPack: assistant.platformAgent.industryPack
           ? {
               id: assistant.platformAgent.industryPack.id,
