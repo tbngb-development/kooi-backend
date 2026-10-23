@@ -1,7 +1,10 @@
 // modules/calls/application/use-cases/inbound-caller-match.use-case.ts
 
 import type { Logger } from "../../../../shared/logging/logger.interface";
-import { normalizePhoneNumber } from "../../../leads/domain/rules/phone.rules";
+import {
+  normalizePhoneNumber,
+  isValidE164,
+} from "../../../leads/domain/rules/phone.rules";
 import {
   cleanCustomerName,
   isValidCustomerName,
@@ -45,6 +48,14 @@ export class InboundCallerMatchUseCase {
     input: InboundCallerMatchInput,
   ): Promise<InboundCallerMatchResult> {
     const normalizedPhone = normalizePhoneNumber(input.contactNumber);
+
+    if (!input.contactNumber || !isValidE164(normalizedPhone)) {
+      this.logger?.warn("Inbound caller match rejected: invalid or missing contact number", {
+        action: "inbound.caller_match.invalid_phone",
+        contactNumber: input.contactNumber,
+      });
+      return {};
+    }
 
     this.logger?.info("Inbound caller match request", {
       action: "inbound.caller_match",
