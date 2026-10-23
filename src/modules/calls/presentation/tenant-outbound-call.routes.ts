@@ -14,7 +14,7 @@ export function buildTenantOutboundCallRoutes(
   const router = Router();
 
   router.post(
-    "/outbound",
+    "/",
     apiKeyAuth.authenticate(),
     outboundCallRateLimiter,
     validate(initiateOutboundCallSchema),
