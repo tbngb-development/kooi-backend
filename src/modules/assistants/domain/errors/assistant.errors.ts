@@ -107,3 +107,14 @@ export class AssistantVariableValidationError extends AppError {
     );
   }
 }
+
+export class AssistantNotConfiguredForOutboundError extends AppError {
+  constructor(assistantId: string) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Assistant '${assistantId}' is not configured to make outbound calls.`,
+      "ASSISTANT_NOT_OUTBOUND_CAPABLE",
+    );
+  }
+}
+

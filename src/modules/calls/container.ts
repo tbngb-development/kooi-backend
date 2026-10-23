@@ -15,7 +15,9 @@ import { InboundCallerMatchUseCase } from "./application/use-cases/inbound-calle
 import { InboundCallerMatchController } from "./presentation/inbound-caller-match.controller";
 import { SyncBolnaExecutionUseCase } from "./application/use-cases/sync-bolna-execution.use-case";
 import { QuickDialCallUseCase } from "./application/use-cases/quick-dial-call.use-case";
+import { InitiateOutboundCallUseCase } from "./application/use-cases/initiate-outbound-call.use-case";
 import { StopCallUseCase } from "./application/use-cases/stop-call.use-case";
+import { TenantOutboundCallController } from "./presentation/tenant-outbound-call.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
@@ -37,6 +39,7 @@ export interface CallModule {
   adminController: AdminCallController;
   tenantController: TenantCallController;
   inboundCallerController: InboundCallerMatchController;
+  outboundCallController: TenantOutboundCallController;
 }
 
 export function buildCallModule(deps: CallModuleDeps): CallModule {
@@ -83,6 +86,18 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     log,
   );
 
+  const initiateOutboundCall = new InitiateOutboundCallUseCase(
+    deps.bolnaClientFactory,
+    deps.walletRepo,
+    assistantRepo,
+    leadRepo,
+    callRepo,
+    log,
+  );
+  const outboundCallController = new TenantOutboundCallController(
+    initiateOutboundCall,
+  );
+
   return {
     tenantController: new TenantCallController(
       listCalls,
@@ -106,5 +121,6 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       syncBolnaExecution,
     ),
     inboundCallerController: inboundCallerMatchController,
+    outboundCallController,
   };
 }

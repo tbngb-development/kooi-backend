@@ -99,3 +99,25 @@ export const contactLimiter = rateLimit({
   },
 });
 
+/**
+ * Rate limit for outbound call API requests.
+ * 60 requests per minute per tenant.
+ */
+export const outboundCallRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+  keyGenerator: (req) => {
+    const user = (req as any).user;
+    return user?.tenantId || user?.apiKeyId || req.ip || "unknown";
+  },
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    message: "Outbound call rate limit exceeded. Please slow down.",
+  },
+});
+
+
