@@ -117,8 +117,10 @@ export interface CampaignDetailOverview {
   scheduledCalls: number;
   totalCostPaisa: number;
   totalCost?: number;
+  totalPlatformCostPaisa?: number;
   avgCostPaisa: number;
   avgCost?: number;
+  avgPlatformCostPaisa?: number;
   totalDurationSec: number;
   totalDuration?: number;
   avgDurationSec: number;

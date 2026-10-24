@@ -25,6 +25,7 @@ import { ArchiveBatchUseCase } from "./application/use-cases/archive-batch.use-c
 import { RestoreBatchUseCase } from "./application/use-cases/restore-batch.use-case";
 import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue-manual-batch-upload.use-case";
 import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
+import { RetryFailedBatchUseCase } from "./application/use-cases/retry-failed-batch.use-case";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -53,6 +54,22 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
   const archiveBatch = new ArchiveBatchUseCase(batchRepo);
   const restoreBatch = new RestoreBatchUseCase(batchRepo);
+
+  const stopBatch = new StopBatchUseCase(batchRepo, campaignRepo, bolnaProvider, log);
+  const resumeBatch = new ResumeBatchUseCase(
+    batchRepo,
+    campaignRepo,
+    storage,
+    bolnaProvider,
+    deps.checkBalanceForBatch,
+    log,
+  );
+  const retryFailedBatch = new RetryFailedBatchUseCase(
+    batchRepo,
+    campaignRepo,
+    resumeBatch,
+    log,
+  );
 
   const enqueueBatchUpload = new EnqueueBatchUploadUseCase(
     batchRepo,
@@ -100,15 +117,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         deps.checkBalanceForBatch,
         log,
       ),
-      new StopBatchUseCase(batchRepo, campaignRepo, bolnaProvider, log),
-      new ResumeBatchUseCase(
-        batchRepo,
-        campaignRepo,
-        storage,
-        bolnaProvider,
-        deps.checkBalanceForBatch,
-        log,
-      ),
+      stopBatch,
+      resumeBatch,
       new DeleteBatchUseCase(batchRepo, bolnaProvider, log),
       getBatchStats,
       archiveBatch,
@@ -119,6 +129,9 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       getBatchStats,
       archiveBatch,
       restoreBatch,
+      stopBatch,
+      resumeBatch,
+      retryFailedBatch,
     ),
     schedulers: { batchProcessing: batchProcessingScheduler },
   };
