@@ -27,6 +27,7 @@ export interface WalletTransactionResponse {
   description: string;
   sourceType: WalletTxSourceType | null;
   sourceId: string | null;
+  createdBy: string | null;
   createdAt: string;
 }
 
@@ -34,6 +35,9 @@ export interface ListTransactionsQuery {
   page?: number;
   limit?: number;
   type?: WalletTxType;
+  sourceType?: WalletTxSourceType;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface PaginatedTransactionsResponse {

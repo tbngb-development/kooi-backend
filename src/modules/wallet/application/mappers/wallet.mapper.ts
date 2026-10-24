@@ -43,6 +43,7 @@ export function toWalletTransactionResponse(
     description: tx.description,
     sourceType: tx.sourceType,
     sourceId: tx.sourceId,
+    createdBy: tx.createdBy ?? null,
     createdAt: tx.createdAt.toISOString(),
   };
 }
