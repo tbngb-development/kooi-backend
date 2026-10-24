@@ -16,6 +16,11 @@ export interface CallEntityData {
   cost: number | null;
   platformCost: number | null;
   billableSeconds: number | null;
+  planVersionId?: string | null;
+  appliedRate?: number | null;
+  appliedMinSec?: number | null;
+  appliedIncrementSec?: number | null;
+  chargedAmount?: number | null;
   recording: string | null;
   transcript: string | null;
   transcriptMessages: unknown | null;
@@ -72,8 +77,17 @@ export class CallEntity {
   get ourCostPaisa(): number | null {
     return this.data.platformCost;
   }
+  get platformCost(): number | null {
+    return this.data.platformCost;
+  }
   get billableSeconds(): number | null {
     return this.data.billableSeconds;
+  }
+  get appliedRate(): number | null | undefined {
+    return this.data.appliedRate;
+  }
+  get chargedAmount(): number | null | undefined {
+    return this.data.chargedAmount;
   }
   get isDeleted(): boolean {
     return this.data.isDeleted;

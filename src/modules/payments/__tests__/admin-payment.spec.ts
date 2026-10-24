@@ -114,7 +114,7 @@ describe("Admin Payment Module — Unit Tests", () => {
         bonusExpiresAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as unknown as TenantPlan);
+      } as any);
 
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         planVersionId: "pv-1",
@@ -161,7 +161,7 @@ describe("Admin Payment Module — Unit Tests", () => {
         id: "tp-2",
         tenantId: "tenant-2",
         status: "PENDING_PAYMENT",
-      } as unknown as TenantPlan);
+      } as any);
 
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         planVersionId: "pv-2",
@@ -189,7 +189,7 @@ describe("Admin Payment Module — Unit Tests", () => {
         id: "tp-2",
         tenantId: "tenant-2",
         status: "PENDING_PAYMENT",
-      } as unknown as TenantPlan);
+      } as any);
 
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         planVersionId: "pv-2",
@@ -218,7 +218,7 @@ describe("Admin Payment Module — Unit Tests", () => {
         id: "tp-3",
         tenantId: "tenant-3",
         status: "PENDING_PAYMENT",
-      } as unknown as TenantPlan);
+      } as any);
 
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         planVersionId: "pv-3",

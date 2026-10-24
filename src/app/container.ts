@@ -248,6 +248,9 @@ export function buildContainer(): AppContainer {
     walletRepo: wallet.repository,
     debitWalletForCall: wallet.useCases.debitWalletForCall,
     classifierQueue: classifier.queue,
+    processClassifierExtractionUseCase:
+      classifier.useCases.processClassifierExtraction,
+    classifierRepo: classifier.repository,
     logger,
   });
 

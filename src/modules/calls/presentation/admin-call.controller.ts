@@ -16,6 +16,7 @@ import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-av
 import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.use-case";
 import type { RestoreCallUseCase } from "../application/use-cases/restore-call.use-case";
 import type { SyncBolnaExecutionUseCase } from "../application/use-cases/sync-bolna-execution.use-case";
+import type { ReEvaluateClassifierUseCase } from "../application/use-cases/re-evaluate-classifier.use-case";
 
 export class AdminCallController {
   constructor(
@@ -27,6 +28,7 @@ export class AdminCallController {
     private readonly archiveCallUseCase: ArchiveCallUseCase,
     private readonly restoreCallUseCase: RestoreCallUseCase,
     private readonly syncBolnaExecutionUseCase: SyncBolnaExecutionUseCase,
+    private readonly reEvaluateClassifierUseCase?: ReEvaluateClassifierUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -193,6 +195,24 @@ export class AdminCallController {
 
       const result = await this.syncBolnaExecutionUseCase.execute(parsed);
       sendSuccess(res, result, 200, "Call synced successfully from Bolna");
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  reEvaluateClassifier = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const callId = param(req, "id");
+      if (!this.reEvaluateClassifierUseCase) {
+        throw new TenantBadRequestError("Classifier re-evaluation is not configured");
+      }
+      const result = await this.reEvaluateClassifierUseCase.execute(tenantId, callId);
+      sendSuccess(res, result, 200, "Classifier dispositions re-evaluated successfully");
     } catch (err) {
       next(err);
     }

@@ -17,11 +17,14 @@ import { SyncBolnaExecutionUseCase } from "./application/use-cases/sync-bolna-ex
 import { QuickDialCallUseCase } from "./application/use-cases/quick-dial-call.use-case";
 import { InitiateOutboundCallUseCase } from "./application/use-cases/initiate-outbound-call.use-case";
 import { StopCallUseCase } from "./application/use-cases/stop-call.use-case";
+import { ReEvaluateClassifierUseCase } from "./application/use-cases/re-evaluate-classifier.use-case";
 import { TenantOutboundCallController } from "./presentation/tenant-outbound-call.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
 import type { ICallWalletGuard } from "../wallet/application/guards/call-wallet.guard";
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
+import type { ProcessClassifierExtractionUseCase } from "../classifier/application/use-cases/process-classifier-extraction.use-case";
+import type { ClassifierRepository } from "../classifier/application/interfaces/classifier-repository.interface";
 import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
 import { PrismaLeadRepository } from "../leads/infrastructure/repositories/prisma-lead.repository";
@@ -34,6 +37,8 @@ export interface CallModuleDeps {
   walletRepo?: WalletRepository;
   debitWalletForCall?: DebitWalletForCallUseCase;
   classifierQueue?: Queue;
+  processClassifierExtractionUseCase?: ProcessClassifierExtractionUseCase;
+  classifierRepo?: ClassifierRepository;
   logger: Logger;
 }
 
@@ -89,6 +94,16 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     log,
   );
 
+  const reEvaluateClassifier =
+    deps.processClassifierExtractionUseCase && deps.classifierRepo
+      ? new ReEvaluateClassifierUseCase(
+          callRepo,
+          deps.processClassifierExtractionUseCase,
+          deps.classifierRepo,
+          log,
+        )
+      : undefined;
+
   const initiateOutboundCall = new InitiateOutboundCallUseCase(
     deps.bolnaClientFactory,
     deps.callWalletGuard,
@@ -122,6 +137,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       archiveCall,
       restoreCall,
       syncBolnaExecution,
+      reEvaluateClassifier,
     ),
     inboundCallerController: inboundCallerMatchController,
     outboundCallController,
