@@ -66,6 +66,7 @@ export interface PaymentSummaryResponse {
 export interface ActivateFreeOnboardingInput {
   tenantId: string;
   adminUserId: string;
+  waiverReason?: string;
 }
 
 export interface ActivateFreeOnboardingResult {
@@ -73,6 +74,15 @@ export interface ActivateFreeOnboardingResult {
   planVersionId: string;
   includedBalance: number;
   bonusExpiresAt: string | null;
+}
+
+export interface ReconcilePaymentResult {
+  rechargeId: string;
+  status: string;
+  previousStatus: string;
+  reconciled: boolean;
+  message: string;
+  razorpayPaymentId?: string | null;
 }
 
 // ── Razorpay Webhook Typed DTOs ───────────────────────────────

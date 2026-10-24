@@ -23,6 +23,7 @@ export function buildAdminPaymentRoutes(
     validate(activateFreeOnboardingSchema),
     controller.activateFree,
   );
+  router.post("/:id/sync", controller.reconcile);
 
   return router;
 }

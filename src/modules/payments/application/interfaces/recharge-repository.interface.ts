@@ -36,7 +36,11 @@ export interface RechargeRepository {
   markFailed(rechargeId: string, reason: string): Promise<Recharge>;
 
   listWithTenant(
-    filter: { tenantId?: string; status?: RechargeStatus },
+    filter: {
+      tenantId?: string;
+      status?: RechargeStatus;
+      purpose?: RechargePurpose;
+    },
     pagination: { page: number; limit: number },
   ): Promise<{ items: RechargeWithTenant[]; total: number }>;
 

@@ -21,6 +21,7 @@ import { ProcessRazorpayWebhookUseCase } from "./application/use-cases/process-r
 import { GetPaymentSummaryUseCase } from "./application/use-cases/get-payment-summary.use-case";
 import { ListAdminPaymentsUseCase } from "./application/use-cases/list-admin-payments.use-case";
 import { ActivateFreeOnboardingUseCase } from "./application/use-cases/activate-free-onboarding.use-case";
+import { ReconcilePaymentUseCase } from "./application/use-cases/reconcile-payment.use-case";
 import { CreatePlanUpgradeOrderUseCase } from "./application/use-cases/create-plan-upgrade-order.use-case";
 import { TenantPaymentController } from "./presentation/tenant-payment.controller";
 import { AdminPaymentController } from "./presentation/admin-payment.controller";
@@ -117,6 +118,13 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
     log,
   );
 
+  const reconcilePayment = new ReconcilePaymentUseCase(
+    rechargeRepo,
+    provider,
+    completePayment,
+    log,
+  );
+
   // ── Assemble ──────────────────────────────────────────────
   return {
     provider,
@@ -132,6 +140,7 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
       listAdminPayments,
       getPaymentSummary,
       activateFreeOnboarding,
+      reconcilePayment,
     ),
     webhookController: new RazorpayWebhookController(processWebhook, log),
   };
