@@ -54,7 +54,14 @@ export interface InboundAssistantResult {
 }
 
 export interface AssistantRepository {
-  list(tenantId: string): Promise<AssistantEntityData[]>;
+  list(
+    tenantId: string,
+    includeArchived?: boolean,
+  ): Promise<AssistantEntityData[]>;
+  countActiveCampaigns(
+    tenantId: string,
+    assistantId: string,
+  ): Promise<number>;
   findById(tenantId: string, id: string): Promise<AssistantEntityData | null>;
   findByIdWithPlatformAgent(
     tenantId: string,

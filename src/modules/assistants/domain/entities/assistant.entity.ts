@@ -52,6 +52,24 @@ export interface GetAssistantOutput {
   }[];
 }
 
+export interface AssistantMetricSummary {
+  totalCalls: number;
+  completedCalls: number;
+  billableSeconds: number;
+  avgDurationSeconds: number;
+  activeCampaignCount: number;
+  totalCampaignCount: number;
+}
+
+export interface AssistantPhoneNumberSummary {
+  id: string;
+  phoneNumber: string;
+  friendlyName: string | null;
+  provider: string;
+  status: string;
+  capabilities: string;
+}
+
 export interface AssistantEntityData {
   id: string;
   name: string;
@@ -63,6 +81,9 @@ export interface AssistantEntityData {
   updatedAt: Date;
   isDeleted: boolean;
   deletedAt: Date | null;
+  syncStatus?: "SYNCED" | "DRIFT_DETECTED" | "TEMPLATE_INACTIVE";
+  phoneNumbers?: AssistantPhoneNumberSummary[];
+  metrics?: AssistantMetricSummary;
   platformAgent?: {
     id: string;
     bolnaId: string;
@@ -71,6 +92,8 @@ export interface AssistantEntityData {
     type?: PlatformAgentType;
     welcomeMessage?: string | null;
     category?: string | null;
+    isActive?: boolean;
+    updatedAt?: Date;
     industryPack?: {
       id: string;
       name: string;

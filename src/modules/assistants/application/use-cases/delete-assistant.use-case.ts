@@ -1,5 +1,8 @@
 import { type AssistantRepository } from "../interfaces/assistant-repository.interface";
-import { AssistantNotFoundError } from "../../domain/errors/assistant.errors";
+import {
+  AssistantNotFoundError,
+  AssistantInUseError,
+} from "../../domain/errors/assistant.errors";
 
 export class DeleteAssistantUseCase {
   constructor(private readonly assistantRepo: AssistantRepository) {}
@@ -8,6 +11,15 @@ export class DeleteAssistantUseCase {
     const assistant = await this.assistantRepo.findById(tenantId, id);
     if (!assistant) throw new AssistantNotFoundError();
 
-    await this.assistantRepo.softDelete(tenantId, id); // Changed from delete()
+    const activeCampaignCount = await this.assistantRepo.countActiveCampaigns(
+      tenantId,
+      id,
+    );
+    if (activeCampaignCount > 0) {
+      throw new AssistantInUseError(activeCampaignCount);
+    }
+
+    await this.assistantRepo.softDelete(tenantId, id);
   }
 }
+
