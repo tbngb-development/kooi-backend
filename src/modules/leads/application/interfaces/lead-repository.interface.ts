@@ -38,6 +38,15 @@ export interface DetailedLeadResult extends LeadEntityData {
     description: string | null;
     status: string;
   } | null;
+  assistant?: {
+    id: string;
+    name: string;
+  } | null;
+  batch?: {
+    id: string;
+    fileName: string | null;
+    status: string;
+  } | null;
   calls: Array<{
     id: string;
     bolnaCallId: string | null;
@@ -61,6 +70,7 @@ export interface LeadStatsResult {
   called: number;
   failed: number;
   noAnswer: number;
+  doNotCall?: number;
 }
 
 export interface InboundLeadResult {
@@ -79,6 +89,12 @@ export interface LeadRepository {
   getStats(tenantId: string, campaignId?: string): Promise<LeadStatsResult>;
   softDelete(leadId: string): Promise<void>;
   restore(leadId: string): Promise<void>;
+
+  updateDnc(
+    tenantId: string,
+    leadId: string,
+    data: { doNotCall: boolean; reason: string; adminUserId: string },
+  ): Promise<DetailedLeadResult>;
 
   /** Exact E.164 phone match within a tenant */
   findByTenantAndPhone(

@@ -8,6 +8,9 @@ import { TenantLeadController } from "./presentation/tenant-lead.controller";
 import { AdminLeadController } from "./presentation/admin-lead.controller";
 import { ArchiveLeadUseCase } from "./application/use-cases/archive-lead.use-case";
 import { RestoreLeadUseCase } from "./application/use-cases/restore-lead.use-case";
+import { ToggleLeadDncUseCase } from "./application/use-cases/toggle-lead-dnc.use-case";
+import { RevealLeadPiiUseCase } from "./application/use-cases/reveal-lead-pii.use-case";
+import { createLogger } from "../../shared/config/logging/winston.logger";
 
 export interface LeadModule {
   tenantController: TenantLeadController;
@@ -16,11 +19,14 @@ export interface LeadModule {
 
 export function buildLeadModule(): LeadModule {
   const repo = new PrismaLeadRepository();
+  const logger = createLogger();
   const listLeads = new ListLeadsUseCase(repo);
   const getLead = new GetLeadUseCase(repo);
   const getLeadStats = new GetLeadStatsUseCase(repo);
   const archiveLead = new ArchiveLeadUseCase(repo);
   const restoreLead = new RestoreLeadUseCase(repo);
+  const toggleLeadDnc = new ToggleLeadDncUseCase(repo);
+  const revealLeadPii = new RevealLeadPiiUseCase(repo, logger);
 
   return {
     tenantController: new TenantLeadController(
@@ -35,6 +41,8 @@ export function buildLeadModule(): LeadModule {
       getLeadStats,
       archiveLead,
       restoreLead,
+      toggleLeadDnc,
+      revealLeadPii,
     ),
   };
 }
