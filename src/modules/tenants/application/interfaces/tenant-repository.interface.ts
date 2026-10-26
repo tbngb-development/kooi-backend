@@ -125,6 +125,9 @@ export interface TenantRepository {
     data: {
       name?: string;
       isActive?: boolean;
+      isVerified?: boolean;
+      phone?: string | null;
+      verifiedAt?: Date | null;
       suspensionReason?: string | null;
       suspendedAt?: Date | null;
       suspendedBy?: string | null;

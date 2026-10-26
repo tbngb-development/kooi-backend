@@ -5,6 +5,7 @@ import type { TenantCampaignController } from "./tenant-campaign.controller";
 import type { TenantBatchController } from "../../batches/presentation/tenant-batch.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
+import type { EnforceTenantVerificationMiddleware } from "../../../shared/middleware/enforce-tenant-verification";
 import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   createCampaignSchema,
@@ -23,15 +24,20 @@ export function buildTenantCampaignRoutes(
   batchController: TenantBatchController,
   authenticate: AuthenticateMiddleware,
   authorize: AuthorizeMiddleware,
+  enforceVerification?: EnforceTenantVerificationMiddleware,
 ): Router {
   const router = Router();
+
+  const verificationGuard = enforceVerification
+    ? [enforceVerification.check()]
+    : [];
 
   router.use(authenticate.tenant());
 
   // Nested batch routes at /:campaignId/batches
   router.use(
     "/:campaignId/batches",
-    buildTenantBatchRoutes(batchController, authorize),
+    buildTenantBatchRoutes(batchController, authorize, enforceVerification),
   );
 
   // Collection
@@ -57,11 +63,13 @@ export function buildTenantCampaignRoutes(
   router.get("/:id/call-metrics", controller.callMetrics);
   router.post(
     "/:id/parse-leads",
+    ...verificationGuard,
     leadsUploadMemory.single("file"),
     controller.parseLeads,
   );
   router.post(
     "/:campaignId/parse-manual",
+    ...verificationGuard,
     validate(parseManualLeadsSchema),
     controller.parseManual,
   );
