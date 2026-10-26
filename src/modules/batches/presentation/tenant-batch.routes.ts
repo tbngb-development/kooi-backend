@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { TenantBatchController } from "./tenant-batch.controller";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
+import type { EnforceTenantVerificationMiddleware } from "../../../shared/middleware/enforce-tenant-verification";
 import { validate } from "../../../shared/middleware/validate";
 import {
   createBatchBodySchema,
@@ -13,22 +14,29 @@ import { manualBatchRateLimiter } from "../../../shared/middleware/rate-limiters
 export function buildTenantBatchRoutes(
   controller: TenantBatchController,
   authorize: AuthorizeMiddleware,
+  enforceVerification?: EnforceTenantVerificationMiddleware,
 ): Router {
   const router = Router({ mergeParams: true });
 
+  const verificationGuard = enforceVerification
+    ? [enforceVerification.check()]
+    : [];
+
   router.get("/", controller.list);
 
-  // File upload path (existing)
+  // File upload path (restricted for unverified trial)
   router.post(
     "/",
+    ...verificationGuard,
     leadsUploadMemory.single("file"),
     validate(createBatchBodySchema),
     controller.create,
   );
 
-  // Manual data entry path (new)
+  // Manual data entry path (restricted for unverified trial)
   router.post(
     "/manual",
+    ...verificationGuard,
     manualBatchRateLimiter,
     validate(createManualBatchBodySchema),
     controller.createManual,
@@ -49,9 +57,10 @@ export function buildTenantBatchRoutes(
     controller.archive,
   );
 
-  router.post("/:batchId/run", controller.run);
+  router.post("/:batchId/run", ...verificationGuard, controller.run);
   router.post(
     "/:batchId/schedule",
+    ...verificationGuard,
     validate(scheduleBatchSchema),
     controller.schedule,
   );

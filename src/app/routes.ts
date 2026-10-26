@@ -87,6 +87,7 @@ export function buildRoutes(c: AppContainer): Router {
       c.batches.tenantController,
       c.authenticate,
       c.authorize,
+      c.enforceTenantVerification,
     ),
   );
   router.use(

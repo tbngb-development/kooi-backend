@@ -101,6 +101,9 @@ export class PrismaTenantRepository implements TenantRepository {
     data: {
       name?: string;
       isActive?: boolean;
+      isVerified?: boolean;
+      phone?: string | null;
+      verifiedAt?: Date | null;
       suspensionReason?: string | null;
       suspendedAt?: Date | null;
       suspendedBy?: string | null;
@@ -111,6 +114,11 @@ export class PrismaTenantRepository implements TenantRepository {
       data: {
         ...(data.name !== undefined && { name: data.name }),
         ...(typeof data.isActive === "boolean" && { isActive: data.isActive }),
+        ...(typeof data.isVerified === "boolean" && {
+          isVerified: data.isVerified,
+        }),
+        ...(data.phone !== undefined && { phone: data.phone }),
+        ...(data.verifiedAt !== undefined && { verifiedAt: data.verifiedAt }),
         ...(data.suspensionReason !== undefined && {
           suspensionReason: data.suspensionReason,
         }),

@@ -6,6 +6,7 @@ import { BcryptPasswordService } from "../modules/auth/infrastructure/services/b
 import { AuthenticateMiddleware } from "../shared/middleware/authenticate";
 import { AuthorizeMiddleware } from "../shared/middleware/authorize";
 import { EnforcePlanMiddleware } from "../shared/middleware/enforce-plan";
+import { EnforceTenantVerificationMiddleware } from "../shared/middleware/enforce-tenant-verification";
 import redis from "../shared/config/database/redis";
 import {
   BolnaClientFactory,
@@ -137,6 +138,7 @@ export interface AppContainer {
   authenticate: AuthenticateMiddleware;
   authorize: AuthorizeMiddleware;
   enforcePlan: EnforcePlanMiddleware;
+  enforceTenantVerification: EnforceTenantVerificationMiddleware;
 
   bolnaClientFactory: IBolnaClientFactory;
 }
@@ -264,11 +266,24 @@ export function buildContainer(): AppContainer {
 
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
+  const tenants = buildTenantModule({
+    otpService,
+    emailService: email,
+    redis,
+    logger,
+  });
+
+  const enforceTenantVerification = new EnforceTenantVerificationMiddleware(
+    planRepo,
+    tenants.repository,
+    logger,
+  );
+
   return {
     logger,
     auth,
     assistants,
-    tenants: buildTenantModule(),
+    tenants,
     campaigns: buildCampaignModule({ logger }),
     batches: buildBatchModule({
       bolnaClientFactory,
@@ -304,6 +319,7 @@ export function buildContainer(): AppContainer {
     authenticate: new AuthenticateMiddleware(tokenService, authRepository),
     authorize: new AuthorizeMiddleware(),
     enforcePlan,
+    enforceTenantVerification,
     bolnaClientFactory,
   };
 }

@@ -3,6 +3,9 @@ export interface TenantEntityData {
   name: string;
   email: string;
   isActive: boolean;
+  isVerified?: boolean;
+  phone?: string | null;
+  verifiedAt?: Date | null;
   suspensionReason?: string | null;
   suspendedAt?: Date | null;
   suspendedBy?: string | null;
@@ -30,6 +33,15 @@ export class TenantEntity {
   }
   get isActive(): boolean {
     return this.data.isActive;
+  }
+  get isVerified(): boolean {
+    return this.data.isVerified ?? false;
+  }
+  get phone(): string | null | undefined {
+    return this.data.phone;
+  }
+  get verifiedAt(): Date | null | undefined {
+    return this.data.verifiedAt;
   }
 
   toPrimitives(): TenantEntityData {
