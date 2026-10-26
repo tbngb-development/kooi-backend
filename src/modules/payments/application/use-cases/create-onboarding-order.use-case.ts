@@ -10,6 +10,7 @@ import {
   PlanAlreadyActiveError,
   NoPendingPlanError,
   OnboardingFeeNotZeroError,
+  TrialPlanDoesNotRequirePaymentError,
 } from "../../domain/errors/payment.errors";
 import type { CreateOrderResult } from "../dto/payment.dto";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -45,7 +46,12 @@ export class CreateOnboardingOrderUseCase {
       throw new CustomPlanSelectionNotAllowedError();
     }
 
-    // 4. Block ₹0 onboarding from Razorpay flow (use free activation instead)
+    // 4. Block trial plans from payment order creation (they activate without payment)
+    if (effectiveTerms.isTrial) {
+      throw new TrialPlanDoesNotRequirePaymentError();
+    }
+
+    // 5. Block ₹0 onboarding from Razorpay flow (use free activation instead)
     if (effectiveTerms.onboardingFee <= 0) {
       throw new OnboardingFeeNotZeroError(effectiveTerms.onboardingFee);
     }

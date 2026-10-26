@@ -95,6 +95,7 @@ import { PrismaRechargeRepository } from "../modules/payments/infrastructure/rep
 import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
 import { PrismaAssistantRepository } from "../modules/assistants/infrastructure/repositories/prisma-assistant.repository";
 import { PrismaPlatformAgentRepository } from "../modules/platform-agents/infrastructure/repositories/prisma-platform-agent.repository";
+import { PrismaPlanRepository } from "../modules/plans/infrastructure/repositories/prisma-plan.repository";
 import { BolnaTemplateProviderImpl } from "../modules/platform-agents/infrastructure/services/bolna-template.provider";
 
 // Logging
@@ -179,17 +180,16 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // 2. Plans Module
-  const plans = buildPlanModule(logger);
+  // 2. Core Repositories & Platform Agents Module
+  const planRepo = new PrismaPlanRepository();
 
-  // 3. Platform Agents Module (depends only on core repositories and logger)
   const platformAgents = buildPlatformAgentModule({
     platformAgentRepo,
     templateProvider,
     logger,
   });
 
-  // 4. Bolna API Keys Module (requires cross-module cloning parameters)
+  // 3. Bolna API Keys Module (requires cross-module cloning parameters)
   const bolnaApiKeys = buildBolnaApiKeyModule({
     assistantRepo,
     platformAgentRepo,
@@ -198,20 +198,28 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  const enforcePlan = new EnforcePlanMiddleware(plans.repository);
+  const enforcePlan = new EnforcePlanMiddleware(planRepo);
 
-  // 5. Wallet Module
+  // 4. Wallet Module
   const wallet = buildWalletModule({
-    planRepository: plans.repository,
+    planRepository: planRepo,
     bolnaClientFactory,
     email,
+    logger,
+  });
+
+  // 5. Plans Module (with wallet and Bolna key auto-assignment for free trial onboarding)
+  const plans = buildPlanModule({
+    repository: planRepo,
+    walletRepository: wallet.repository,
+    autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     logger,
   });
 
   // 6. Payments Module
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
-    planRepository: plans.repository,
+    planRepository: planRepo,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
     logger,

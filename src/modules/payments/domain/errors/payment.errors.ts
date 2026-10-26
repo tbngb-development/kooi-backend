@@ -72,3 +72,13 @@ export class OnboardingFeeNotZeroError extends AppError {
     );
   }
 }
+
+export class TrialPlanDoesNotRequirePaymentError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.BAD_REQUEST,
+      "Trial plans are free and do not require onboarding payment.",
+      "TRIAL_PLAN_NO_PAYMENT",
+    );
+  }
+}
