@@ -78,6 +78,11 @@ export class PrismaPlanRepository implements PlanRepository {
           lowBalanceThreshold: input.lowBalanceThreshold ?? 10000,
           includedBalance: input.includedBalance ?? 0,
           bonusValidityDays: input.bonusValidityDays ?? null,
+
+          isTrial: input.isTrial ?? false,
+          contactLimit: input.isTrial ? (input.contactLimit ?? null) : null,
+          validityDays: input.isTrial ? (input.validityDays ?? 30) : null,
+
           publishedAt: input.publishImmediately ? new Date() : null,
         },
       });
@@ -221,6 +226,10 @@ export class PrismaPlanRepository implements PlanRepository {
           lowBalanceThreshold: input.lowBalanceThreshold ?? 10000,
           includedBalance: input.includedBalance ?? 0,
           bonusValidityDays: input.bonusValidityDays ?? null,
+
+          isTrial: input.isTrial ?? false,
+          contactLimit: input.isTrial ? (input.contactLimit ?? null) : null,
+          validityDays: input.isTrial ? (input.validityDays ?? 30) : null,
         },
       });
     });
@@ -312,6 +321,35 @@ export class PrismaPlanRepository implements PlanRepository {
 
     if (!tenantPlan) return null;
 
+    let effectiveStatus = tenantPlan.status;
+    if (
+      effectiveStatus === "ACTIVE" &&
+      tenantPlan.expiresAt &&
+      new Date() > tenantPlan.expiresAt
+    ) {
+      effectiveStatus = "EXPIRED";
+      await prisma.$transaction(async (tx) => {
+        await tx.tenantPlan.update({
+          where: { id: tenantPlan.id },
+          data: { status: "EXPIRED" },
+        });
+        await tx.tenantPlanEvent.create({
+          data: {
+            tenantPlanId: tenantPlan.id,
+            tenantId,
+            type: "EXPIRED",
+            toPlanVersionId: tenantPlan.planVersionId,
+            metadata: {
+              reason: "Trial validity period expired",
+              expiredAt: tenantPlan.expiresAt?.toISOString(),
+            },
+          },
+        });
+      }).catch(() => {
+        // Safe against race conditions
+      });
+    }
+
     const terms = resolveEffectiveTerms(
       tenantPlan.plan,
       tenantPlan.planVersion,
@@ -325,9 +363,11 @@ export class PrismaPlanRepository implements PlanRepository {
       ...terms,
       tenantPlanId: tenantPlan.id,
       tenantId: tenantPlan.tenantId,
-      status: tenantPlan.status,
+      status: effectiveStatus,
       activatedAt: tenantPlan.activatedAt,
+      expiresAt: tenantPlan.expiresAt,
       bonusExpiresAt: tenantPlan.bonusExpiresAt,
+      contactsUsed: tenantPlan.contactsUsed,
     };
   }
 
@@ -423,6 +463,14 @@ export class PrismaPlanRepository implements PlanRepository {
         );
       }
 
+      const now = new Date();
+      const expiresAt =
+        planVersion.isTrial && planVersion.validityDays
+          ? new Date(
+              now.getTime() + planVersion.validityDays * 24 * 60 * 60 * 1000,
+            )
+          : null;
+
       const tenantPlan = await tx.tenantPlan.upsert({
         where: { tenantId },
         create: {
@@ -430,15 +478,19 @@ export class PrismaPlanRepository implements PlanRepository {
           planId: planVersion.planId,
           planVersionId,
           status: "ACTIVE",
-          activatedAt: new Date(),
+          activatedAt: now,
+          expiresAt,
           bonusExpiresAt,
+          contactsUsed: 0,
         },
         update: {
           planId: planVersion.planId,
           planVersionId,
           status: "ACTIVE",
-          activatedAt: new Date(),
+          activatedAt: now,
+          expiresAt,
           bonusExpiresAt,
+          contactsUsed: 0,
         },
       });
 
@@ -656,6 +708,8 @@ export class PrismaPlanRepository implements PlanRepository {
           maxAgents: effectiveTerms.maxAgents,
           teamMembers,
           maxTeamMembers: effectiveTerms.maxTeamMembers,
+          contactsUsed: tp.contactsUsed,
+          contactLimit: effectiveTerms.contactLimit,
         };
 
         return {
@@ -678,7 +732,9 @@ export class PrismaPlanRepository implements PlanRepository {
           },
 
           activatedAt: tp.activatedAt?.toISOString() ?? null,
+          expiresAt: tp.expiresAt?.toISOString() ?? null,
           bonusExpiresAt: tp.bonusExpiresAt?.toISOString() ?? null,
+          contactsUsed: tp.contactsUsed,
           createdAt: tp.createdAt.toISOString(),
 
           usage,
@@ -767,4 +823,52 @@ export class PrismaPlanRepository implements PlanRepository {
       where: { tenantId },
     });
   }
+
+  async incrementContactsUsed(
+    tenantId: string,
+    count: number,
+  ): Promise<void> {
+    if (count <= 0) return;
+    await prisma.tenantPlan.updateMany({
+      where: { tenantId },
+      data: {
+        contactsUsed: { increment: count },
+      },
+    });
+  }
+
+  async getTrialContactUsage(tenantId: string): Promise<{
+    contactsUsed: number;
+    contactLimit: number | null;
+    remaining: number | null;
+    isTrial: boolean;
+    isExpired: boolean;
+  }> {
+    const plan = await this.getActivePlanForTenant(tenantId);
+    if (!plan) {
+      return {
+        contactsUsed: 0,
+        contactLimit: null,
+        remaining: null,
+        isTrial: false,
+        isExpired: false,
+      };
+    }
+
+    const isExpired = plan.status === "EXPIRED";
+    const isTrial = plan.isTrial;
+    const contactLimit = plan.contactLimit;
+    const contactsUsed = plan.contactsUsed ?? 0;
+    const remaining =
+      contactLimit !== null ? Math.max(0, contactLimit - contactsUsed) : null;
+
+    return {
+      contactsUsed,
+      contactLimit,
+      remaining,
+      isTrial,
+      isExpired,
+    };
+  }
 }
+

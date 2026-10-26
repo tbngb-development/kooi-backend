@@ -15,6 +15,9 @@ import { AdminPlanController } from "./presentation/admin-plan.controller";
 import { TenantPlanController } from "./presentation/tenant-plan.controller";
 import { ChangeTenantPlanUseCase } from "./application/use-cases/change-tenant-plan.use-case";
 import { ListPlanSubscribersUseCase } from "./application/use-cases/list-plan-subscribers.use-case";
+import { ExpireTrialPlansUseCase } from "./application/use-cases/expire-trial-plans.use-case";
+import { TrialExpiryScheduler } from "./infrastructure/jobs/trial-expiry.scheduler";
+import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface PlanModule {
   repository: PlanRepository;
@@ -23,12 +26,16 @@ export interface PlanModule {
     selectPlan: SelectPlanUseCase;
     getTenantPlan: GetTenantPlanUseCase;
     updateTenantPlanOverrides: UpdateTenantPlanOverridesUseCase;
+    expireTrialPlans: ExpireTrialPlansUseCase;
+  };
+  schedulers: {
+    trialExpiry: TrialExpiryScheduler;
   };
   adminController: AdminPlanController;
   tenantController: TenantPlanController;
 }
 
-export function buildPlanModule(): PlanModule {
+export function buildPlanModule(logger?: Logger): PlanModule {
   const repository = new PrismaPlanRepository();
 
   const listPlans = new ListPlansUseCase(repository);
@@ -46,6 +53,8 @@ export function buildPlanModule(): PlanModule {
   );
   const changeTenantPlan = new ChangeTenantPlanUseCase(repository);
   const listSubscribers = new ListPlanSubscribersUseCase(repository);
+  const expireTrialPlans = new ExpireTrialPlansUseCase(logger);
+  const trialExpiryScheduler = new TrialExpiryScheduler(expireTrialPlans, logger ?? console as unknown as Logger);
 
   return {
     repository,
@@ -54,6 +63,10 @@ export function buildPlanModule(): PlanModule {
       selectPlan,
       getTenantPlan,
       updateTenantPlanOverrides,
+      expireTrialPlans,
+    },
+    schedulers: {
+      trialExpiry: trialExpiryScheduler,
     },
     adminController: new AdminPlanController(
       listPlans,

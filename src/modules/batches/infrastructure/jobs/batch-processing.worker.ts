@@ -159,6 +159,15 @@ export class BatchProcessingWorker {
       }
 
       const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
+      if (activePlan?.status === "EXPIRED") {
+        await this.failBatch(
+          batchId,
+          campaignId,
+          "Your free trial has expired. Historical data remains accessible, but uploading new leads requires an active plan.",
+        );
+        return;
+      }
+
       if (
         activePlan &&
         activePlan.maxLeadsPerBatch !== null &&
@@ -171,6 +180,24 @@ export class BatchProcessingWorker {
           `Batch exceeds plan limit of ${activePlan.maxLeadsPerBatch} leads per batch (${newLeads.length} found).`,
         );
         return;
+      }
+
+      if (
+        activePlan &&
+        activePlan.isTrial &&
+        activePlan.contactLimit !== null &&
+        activePlan.contactLimit !== undefined
+      ) {
+        const currentUsed = activePlan.contactsUsed ?? 0;
+        const remaining = Math.max(0, activePlan.contactLimit - currentUsed);
+        if (newLeads.length > remaining) {
+          await this.failBatch(
+            batchId,
+            campaignId,
+            `Trial contact limit exceeded: Batch contains ${newLeads.length} valid lead(s), but your trial has only ${remaining} remaining contact allowance (${currentUsed} of ${activePlan.contactLimit} used). Upload rejected.`,
+          );
+          return;
+        }
       }
 
       await this.batchRepo.updateProgress(batchId, "PARSING", 30);
@@ -195,6 +222,10 @@ export class BatchProcessingWorker {
 
         const progress = 35 + Math.round((i / newLeads.length) * 15);
         await this.batchRepo.updateProgress(batchId, "STORING", progress);
+      }
+
+      if (activePlan && activePlan.isTrial) {
+        await this.planRepo.incrementContactsUsed(tenantId, newLeads.length);
       }
 
       if (env.skipCrossBatchDedup) {

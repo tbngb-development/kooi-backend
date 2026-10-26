@@ -6,6 +6,7 @@ import {
   PlanLimitExceededError,
   PlanFeatureNotAvailableError,
   TenantPlanNotFoundError,
+  TrialExpiredError,
 } from "../../modules/plans/domain/errors/plan.errors";
 import type { Logger } from "../logging/logger.interface";
 
@@ -31,6 +32,7 @@ export class EnforcePlanMiddleware {
         // Authoritative resolution of active plan + overrides
         const plan = await this.planRepo.getActivePlanForTenant(ctx.tenantId);
         if (!plan) throw new TenantPlanNotFoundError(ctx.tenantId);
+        if (plan.status === "EXPIRED") throw new TrialExpiredError();
         if (plan.status !== "ACTIVE") throw new PlanNotActiveError();
 
         switch (feature) {

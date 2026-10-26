@@ -101,3 +101,25 @@ export class ScheduledCampaignConflictError extends AppError {
     );
   }
 }
+
+export class TrialContactLimitExceededError extends AppError {
+  constructor(limit: number, currentUsed: number, incomingCount: number) {
+    const remaining = Math.max(0, limit - currentUsed);
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Trial contact limit exceeded: Upload contains ${incomingCount} valid lead(s), but your trial has only ${remaining} remaining contact allowance (${currentUsed} of ${limit} contacts used). Please reduce your lead list or upgrade to a paid plan.`,
+      "TRIAL_CONTACT_LIMIT_EXCEEDED",
+    );
+  }
+}
+
+export class TrialExpiredError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.FORBIDDEN,
+      "Your free trial has expired. Historical campaigns, call logs, and data remain accessible, but new lead uploads and calling actions require an active paid plan.",
+      "TRIAL_EXPIRED",
+    );
+  }
+}
+

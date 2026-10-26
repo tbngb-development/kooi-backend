@@ -180,7 +180,7 @@ export function buildContainer(): AppContainer {
   });
 
   // 2. Plans Module
-  const plans = buildPlanModule();
+  const plans = buildPlanModule(logger);
 
   // 3. Platform Agents Module (depends only on core repositories and logger)
   const platformAgents = buildPlatformAgentModule({

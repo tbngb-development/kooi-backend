@@ -71,6 +71,12 @@ export interface ParseLeadsOutput {
       durationMaxSec: number;
     };
   };
+  trialUsage?: {
+    isTrial: boolean;
+    contactsUsed: number;
+    contactLimit: number | null;
+    remaining: number | null;
+  };
 }
 
 // ── Campaign List ──────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ const server = app.listen(env.port, () => {
 
   try {
     container.wallet.schedulers.bonusExpiry.start();
+    container.plans.schedulers.trialExpiry.start();
     container.batches.schedulers.batchProcessing.start();
     container.bolnaApiKeys.schedulers.agentClone.start();
     container.auth.schedulers.refreshTokenCleanup.start();
@@ -32,6 +33,7 @@ const server = app.listen(env.port, () => {
 function gracefulShutdown(signal: string): void {
   logger.info("Graceful shutdown initiated", { signal });
   container.wallet.schedulers.bonusExpiry.stop();
+  container.plans.schedulers.trialExpiry.stop();
   container.batches.schedulers.batchProcessing.stop();
   container.bolnaApiKeys.schedulers.agentClone.stop();
   container.auth.schedulers.refreshTokenCleanup.stop();
