@@ -16,6 +16,8 @@ import {
 import {
   ScheduledCampaignConflictError,
   TenantPlanNotFoundError,
+  TrialContactLimitExceededError,
+  TrialExpiredError,
 } from "../../../plans/domain/errors/plan.errors";
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
 
@@ -55,6 +57,23 @@ export class EnqueueBatchUploadUseCase {
       input.tenantId,
     );
     if (!activePlan) throw new TenantPlanNotFoundError(input.tenantId);
+    if (activePlan.status === "EXPIRED") {
+      throw new TrialExpiredError();
+    }
+    if (
+      activePlan.isTrial &&
+      activePlan.contactLimit !== null &&
+      activePlan.contactLimit !== undefined
+    ) {
+      const currentUsed = activePlan.contactsUsed ?? 0;
+      if (currentUsed >= activePlan.contactLimit) {
+        throw new TrialContactLimitExceededError(
+          activePlan.contactLimit,
+          currentUsed,
+          1,
+        );
+      }
+    }
 
     // 3. Validate file
     if (!input.fileBuffer || input.fileBuffer.length === 0) {

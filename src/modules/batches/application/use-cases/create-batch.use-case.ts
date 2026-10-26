@@ -36,6 +36,8 @@ import {
 import {
   ScheduledCampaignConflictError,
   TenantPlanNotFoundError,
+  TrialContactLimitExceededError,
+  TrialExpiredError,
 } from "../../../plans/domain/errors/plan.errors";
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -71,6 +73,9 @@ export class CreateBatchUseCase {
       input.tenantId,
     );
     if (!activePlan) throw new TenantPlanNotFoundError(input.tenantId);
+    if (activePlan.status === "EXPIRED") {
+      throw new TrialExpiredError();
+    }
 
     // ── [FAIL FAST] 3. Validate Plan Caps & Time-Conflicts BEFORE doing any I/O ──
     let targetScheduledDate: Date | null = null;
@@ -172,6 +177,22 @@ export class CreateBatchUseCase {
       }
     }
 
+    // 8b. Enforce trial contact limit (null = unlimited)
+    if (
+      activePlan.isTrial &&
+      activePlan.contactLimit !== null &&
+      activePlan.contactLimit !== undefined
+    ) {
+      const currentUsed = activePlan.contactsUsed ?? 0;
+      if (currentUsed + newLeads.length > activePlan.contactLimit) {
+        throw new TrialContactLimitExceededError(
+          activePlan.contactLimit,
+          currentUsed,
+          newLeads.length,
+        );
+      }
+    }
+
     // 9. Resolve retry config + enforce plan retryAutomation capability
     let resolvedRetryConfig: RetryConfig | undefined =
       input.retryConfig ??
@@ -212,6 +233,10 @@ export class CreateBatchUseCase {
         metadata: row as Record<string, unknown>,
       })),
     );
+
+    if (activePlan.isTrial) {
+      await this.planRepo.incrementContactsUsed(input.tenantId, newLeads.length);
+    }
 
     // 11. Upload original file to Cloudinary reference
     let originalFileUrl: string | undefined;

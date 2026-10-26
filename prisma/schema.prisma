@@ -526,6 +526,10 @@ model PlanVersion {
   integrations    IntegrationTier @default(NONE)
   supportTier     SupportTier     @default(STANDARD)
 
+  isTrial               Boolean      @default(false)
+  contactLimit          Int?
+  validityDays          Int?
+
   lowBalanceThreshold Int  @default(10000)
   includedBalance     Int  @default(0)
   bonusValidityDays   Int?
@@ -563,7 +567,9 @@ model TenantPlan {
   perMinuteRateOverride Int?
 
   activatedAt    DateTime?
+  expiresAt      DateTime?
   bonusExpiresAt DateTime?
+  contactsUsed   Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

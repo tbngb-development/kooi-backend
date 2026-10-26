@@ -23,7 +23,11 @@ import {
 } from "../../../leads/domain/rules/lead-dedup.rules";
 import { env } from "../../../../shared/config/env";
 import { MaxLeadsPerBatchExceededError } from "../../../batches/domain/errors/batch.errors";
-import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
+import {
+  TenantPlanNotFoundError,
+  TrialContactLimitExceededError,
+  TrialExpiredError,
+} from "../../../plans/domain/errors/plan.errors";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ParseLeadsUseCase {
@@ -52,6 +56,9 @@ export class ParseLeadsUseCase {
     );
 
     if (!activePlan) throw new TenantPlanNotFoundError(input.tenantId);
+    if (activePlan.status === "EXPIRED") {
+      throw new TrialExpiredError();
+    }
 
     // 2. Parse file
     const { rows, headerInfo } = parseLeadBuffer(
@@ -146,6 +153,22 @@ export class ParseLeadsUseCase {
       }
     }
 
+    // 3b. Enforce trial contact limit (null = unlimited)
+    if (
+      activePlan.isTrial &&
+      activePlan.contactLimit !== null &&
+      activePlan.contactLimit !== undefined
+    ) {
+      const currentUsed = activePlan.contactsUsed ?? 0;
+      if (currentUsed + newLeads.length > activePlan.contactLimit) {
+        throw new TrialContactLimitExceededError(
+          activePlan.contactLimit,
+          currentUsed,
+          newLeads.length,
+        );
+      }
+    }
+
     // 4. Generate Financial Cost Estimations
     const estimation = await this.estimateCampaignCost(
       input.tenantId,
@@ -182,6 +205,20 @@ export class ParseLeadsUseCase {
         customer_name: headerInfo.hasCustomerName,
       },
       estimation,
+      trialUsage: activePlan.isTrial
+        ? {
+            isTrial: true,
+            contactsUsed: activePlan.contactsUsed ?? 0,
+            contactLimit: activePlan.contactLimit,
+            remaining:
+              activePlan.contactLimit !== null
+                ? Math.max(
+                    0,
+                    activePlan.contactLimit - (activePlan.contactsUsed ?? 0),
+                  )
+                : null,
+          }
+        : undefined,
     };
   }
 

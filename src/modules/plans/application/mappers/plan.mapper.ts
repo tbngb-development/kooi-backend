@@ -44,6 +44,10 @@ export function toPlanVersionResponse(v: PlanVersion): PlanVersionResponse {
     includedBalance: v.includedBalance,
     bonusValidityDays: v.bonusValidityDays,
 
+    isTrial: v.isTrial,
+    contactLimit: v.contactLimit,
+    validityDays: v.validityDays,
+
     publishedAt: v.publishedAt?.toISOString() ?? null,
     archivedAt: v.archivedAt?.toISOString() ?? null,
     createdAt: v.createdAt.toISOString(),
@@ -110,7 +114,9 @@ export function toTenantPlanResponse(
       perMinuteRateOverride: tenantPlan.perMinuteRateOverride,
     },
     activatedAt: tenantPlan.activatedAt?.toISOString() ?? null,
+    expiresAt: tenantPlan.expiresAt?.toISOString() ?? null,
     bonusExpiresAt: tenantPlan.bonusExpiresAt?.toISOString() ?? null,
+    contactsUsed: tenantPlan.contactsUsed,
     createdAt: tenantPlan.createdAt.toISOString(),
     updatedAt: tenantPlan.updatedAt.toISOString(),
   };

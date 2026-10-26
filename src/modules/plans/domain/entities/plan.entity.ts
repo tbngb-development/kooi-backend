@@ -27,6 +27,9 @@ export interface PlanLimits {
   maxTeamMembers: number | null;
   retryAutomation: boolean;
   industryPackLimit: number | null;
+  isTrial: boolean;
+  contactLimit: number | null;
+  validityDays: number | null;
 }
 
 export interface PlanCapabilities {
@@ -88,7 +91,9 @@ export interface TenantPlanEntity {
   onboardingFeeOverride: number | null;
   perMinuteRateOverride: number | null;
   activatedAt: Date | null;
+  expiresAt: Date | null;
   bonusExpiresAt: Date | null;
+  contactsUsed: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -154,6 +159,9 @@ export function resolveEffectiveTerms(
     maxTeamMembers: version.maxTeamMembers,
     retryAutomation: version.retryAutomation,
     industryPackLimit: version.industryPackLimit,
+    isTrial: version.isTrial,
+    contactLimit: version.contactLimit,
+    validityDays: version.validityDays,
 
     callingChannel: version.callingChannel,
     brochureUpload: version.brochureUpload,
