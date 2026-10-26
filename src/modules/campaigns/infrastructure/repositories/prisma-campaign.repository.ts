@@ -384,6 +384,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       stoppedCalls,
       scheduledCalls,
       costAgg,
+      platformCostAgg,
       durationAgg,
       completedDurationAgg,
     ] = await Promise.all([
@@ -400,6 +401,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         _sum: { chargedAmount: true },
       }),
       prisma.call.aggregate({
+        where: { ...callWhere, platformCost: { not: null } },
+        _sum: { platformCost: true },
+      }),
+      prisma.call.aggregate({
         where: { ...callWhere, duration: { not: null } },
         _sum: { duration: true },
       }),
@@ -411,8 +416,11 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     const totalLeads = actualLeadCount;
     const totalCostPaisa = costAgg._sum.chargedAmount ?? 0;
+    const totalPlatformCostPaisa = platformCostAgg._sum.platformCost ?? 0;
     const avgCostPaisa =
       completedCalls > 0 ? Math.round(totalCostPaisa / completedCalls) : 0;
+    const avgPlatformCostPaisa =
+      completedCalls > 0 ? Math.round(totalPlatformCostPaisa / completedCalls) : 0;
     const totalDurationSec = durationAgg._sum.duration ?? 0;
     const avgDurationSec = Math.round(completedDurationAgg._avg.duration ?? 0);
 
@@ -428,8 +436,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
       scheduledCalls,
       totalCostPaisa,
       totalCost: totalCostPaisa,
+      totalPlatformCostPaisa,
       avgCostPaisa,
       avgCost: avgCostPaisa,
+      avgPlatformCostPaisa,
       totalDurationSec,
       totalDuration: totalDurationSec,
       avgDurationSec,

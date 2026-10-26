@@ -42,13 +42,23 @@ export class ActivateFreeOnboardingUseCase {
     if (tenantPlan.status === "ACTIVE") throw new PlanAlreadyActiveError();
     if (tenantPlan.status !== "PENDING_PAYMENT") throw new NoPendingPlanError();
 
-    // 2. Resolve effective terms and validate ₹0 onboarding
+    // 2. Resolve effective terms and validate onboarding fee or contract waiver
     const effectiveTerms = await this.planRepo.getActivePlanForTenant(
       input.tenantId,
     );
     if (!effectiveTerms) throw new TenantPlanNotFoundError(input.tenantId);
     if (effectiveTerms.onboardingFee > 0) {
-      throw new OnboardingFeeNotZeroError(effectiveTerms.onboardingFee);
+      if (!input.waiverReason || input.waiverReason.trim().length < 10) {
+        throw new OnboardingFeeNotZeroError(effectiveTerms.onboardingFee);
+      }
+      this.logger.warn("Onboarding fee waived by platform administrator", {
+        action: "payment.free_onboarding.fee_waived",
+        tenantId: input.tenantId,
+        planVersionId: effectiveTerms.planVersionId,
+        standardOnboardingFee: effectiveTerms.onboardingFee,
+        waiverReason: input.waiverReason.trim(),
+        adminUserId: input.adminUserId,
+      });
     }
 
     // 3. Activate plan (PlanRepository handles TenantPlanEvent creation)
@@ -84,7 +94,9 @@ export class ActivateFreeOnboardingUseCase {
         amount: effectiveTerms.includedBalance,
         type: "BONUS",
         targetBalance: "BONUS",
-        description: `Plan bonus — ${effectiveTerms.planName} (free onboarding)`,
+        description: input.waiverReason
+          ? `Plan bonus — ${effectiveTerms.planName} (contract fee waiver)`
+          : `Plan bonus — ${effectiveTerms.planName} (free onboarding)`,
         sourceType: "PLAN_BONUS",
         sourceId: tenantPlan.id,
         idempotencyKey: `plan_bonus:${tenantPlan.id}:${effectiveTerms.planVersionId}`,
@@ -99,6 +111,8 @@ export class ActivateFreeOnboardingUseCase {
       planVersionId: effectiveTerms.planVersionId,
       includedBalancePaisa: effectiveTerms.includedBalance,
       adminUserId: input.adminUserId,
+      feeWaived: effectiveTerms.onboardingFee > 0,
+      waiverReason: input.waiverReason ?? null,
     });
 
     return {

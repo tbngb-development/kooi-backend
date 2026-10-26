@@ -28,6 +28,9 @@ export interface ClassifierModule {
   tenantController: TenantClassifierController;
   repository: PrismaClassifierRepository;
   queue: Queue;
+  useCases: {
+    processClassifierExtraction: ProcessClassifierExtractionUseCase;
+  };
   schedulers: {
     classifierExtraction: ClassifierExtractionScheduler;
   };
@@ -89,6 +92,9 @@ export function buildClassifierModule(
     tenantController,
     repository,
     queue: scheduler.getQueue(),
+    useCases: {
+      processClassifierExtraction: processExtraction,
+    },
     schedulers: {
       classifierExtraction: scheduler,
     },

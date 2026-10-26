@@ -35,4 +35,18 @@ export const verifyPaymentSchema = z.object({
 
 export const activateFreeOnboardingSchema = z.object({
   tenantId: z.string().uuid("Invalid tenant ID"),
+  waiverReason: z
+    .string()
+    .trim()
+    .min(10, "Waiver reason must be at least 10 characters")
+    .max(500)
+    .optional(),
+});
+
+export const listAdminPaymentsQuerySchema = z.object({
+  tenantId: z.string().uuid().optional(),
+  status: z.enum(["INITIATED", "SUCCESS", "FAILED", "REFUNDED"]).optional(),
+  purpose: z.enum(["ONBOARDING", "WALLET_TOPUP", "PLAN_UPGRADE"]).optional(),
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
 });

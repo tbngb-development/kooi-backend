@@ -21,5 +21,11 @@ export function buildAdminBatchRoutes(
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);
 
+  // Operational controls
+  router.post("/:id/abort", controller.abort);
+  router.post("/:id/stop", controller.abort);
+  router.post("/:id/resume", controller.resume);
+  router.post("/:id/retry-failed", controller.retryFailed);
+
   return router;
 }

@@ -37,6 +37,9 @@ export function buildAdminCallRoutes(
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);
 
+  // Administrative classifier re-evaluation
+  router.post("/:id/re-evaluate-classifier", controller.reEvaluateClassifier);
+
   router.get("/:id", controller.get);
 
   return router;

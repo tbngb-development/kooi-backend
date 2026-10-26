@@ -189,12 +189,22 @@ export class PrismaClassifierRepository implements ClassifierRepository {
   async createCallResult(data: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     dispositionCount: number;
     transcriptLength: number;
   }) {
-    return prisma.classifierCallResult.create({ data });
+    return prisma.classifierCallResult.upsert({
+      where: { callId: data.callId },
+      create: data,
+      update: {
+        status: "PENDING",
+        dispositionCount: data.dispositionCount,
+        transcriptLength: data.transcriptLength,
+        errorMessage: null,
+        processedAt: null,
+      },
+    });
   }
 
   async updateCallResult(
@@ -285,6 +295,16 @@ export class PrismaClassifierRepository implements ClassifierRepository {
         tenantId: true,
         campaignId: true,
         batchId: true,
+        assistant: {
+          select: {
+            platformAgent: {
+              select: {
+                id: true,
+                industryPackId: true,
+              },
+            },
+          },
+        },
         campaign: {
           select: {
             assistant: {
@@ -304,14 +324,17 @@ export class PrismaClassifierRepository implements ClassifierRepository {
 
     if (!call) return null;
 
+    const agent =
+      call.assistant?.platformAgent ??
+      call.campaign?.assistant?.platformAgent;
+
     return {
       transcript: call.transcript,
       tenantId: call.tenantId,
       campaignId: call.campaignId,
       batchId: call.batchId,
-      platformAgentId: call.campaign?.assistant?.platformAgent?.id ?? null,
-      industryPackId:
-        call.campaign?.assistant?.platformAgent?.industryPackId ?? null,
+      platformAgentId: agent?.id ?? null,
+      industryPackId: agent?.industryPackId ?? null,
     };
   }
 

@@ -42,9 +42,14 @@ export class AdminAssistantController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const includeArchived =
+        req.query.includeArchived === "false" ? false : true;
       sendSuccess(
         res,
-        await this.listAssistantsUseCase.execute(this.resolveTenantId(req)),
+        await this.listAssistantsUseCase.execute(
+          this.resolveTenantId(req),
+          includeArchived,
+        ),
       );
     } catch (err) {
       next(err);

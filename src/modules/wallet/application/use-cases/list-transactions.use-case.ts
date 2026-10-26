@@ -15,10 +15,16 @@ export class ListTransactionsUseCase {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(Math.max(query.limit ?? 20, 1), 100);
 
+    const startDate = query.startDate ? new Date(query.startDate) : undefined;
+    const endDate = query.endDate ? new Date(query.endDate) : undefined;
+
     const { items, total } = await this.walletRepo.listTransactions(tenantId, {
       page,
       limit,
       type: query.type,
+      sourceType: query.sourceType,
+      startDate,
+      endDate,
     });
 
     return {

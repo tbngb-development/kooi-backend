@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Tenant" ADD COLUMN IF NOT EXISTS "suspensionReason" TEXT,
+ADD COLUMN IF NOT EXISTS "suspendedAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "suspendedBy" TEXT;

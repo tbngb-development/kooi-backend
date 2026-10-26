@@ -17,6 +17,10 @@ model Tenant {
   email     String   @unique
   isActive  Boolean  @default(true)
 
+  suspensionReason String?
+  suspendedAt      DateTime?
+  suspendedBy      String?
+
   termsAccepted   Boolean   @default(false)
   termsAcceptedAt DateTime?
   termsVersion    String?

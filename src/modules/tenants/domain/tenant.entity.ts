@@ -3,6 +3,15 @@ export interface TenantEntityData {
   name: string;
   email: string;
   isActive: boolean;
+  suspensionReason?: string | null;
+  suspendedAt?: Date | null;
+  suspendedBy?: string | null;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string | null;
+  workspaceSwitchStatus?: string;
+  workspaceSwitchError?: string | null;
+  bolnaApiKeyId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
