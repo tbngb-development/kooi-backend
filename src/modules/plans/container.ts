@@ -15,6 +15,11 @@ import { AdminPlanController } from "./presentation/admin-plan.controller";
 import { TenantPlanController } from "./presentation/tenant-plan.controller";
 import { ChangeTenantPlanUseCase } from "./application/use-cases/change-tenant-plan.use-case";
 import { ListPlanSubscribersUseCase } from "./application/use-cases/list-plan-subscribers.use-case";
+import { ExpireTrialPlansUseCase } from "./application/use-cases/expire-trial-plans.use-case";
+import { TrialExpiryScheduler } from "./infrastructure/jobs/trial-expiry.scheduler";
+import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
+import type { AutoAssignKeyUseCase } from "../bolna-api-keys/application/use-cases/auto-assign-key.use-case";
+import type { Logger } from "../../shared/logging/logger.interface";
 
 export interface PlanModule {
   repository: PlanRepository;
@@ -23,13 +28,32 @@ export interface PlanModule {
     selectPlan: SelectPlanUseCase;
     getTenantPlan: GetTenantPlanUseCase;
     updateTenantPlanOverrides: UpdateTenantPlanOverridesUseCase;
+    expireTrialPlans: ExpireTrialPlansUseCase;
+  };
+  schedulers: {
+    trialExpiry: TrialExpiryScheduler;
   };
   adminController: AdminPlanController;
   tenantController: TenantPlanController;
 }
 
-export function buildPlanModule(): PlanModule {
-  const repository = new PrismaPlanRepository();
+export interface BuildPlanModuleDependencies {
+  repository?: PlanRepository;
+  walletRepository?: WalletRepository;
+  autoAssignKey?: AutoAssignKeyUseCase;
+  logger?: Logger;
+}
+
+export function buildPlanModule(
+  depsOrLogger?: Logger | BuildPlanModuleDependencies,
+): PlanModule {
+  const deps: BuildPlanModuleDependencies =
+    depsOrLogger && "info" in depsOrLogger
+      ? { logger: depsOrLogger }
+      : (depsOrLogger ?? {});
+
+  const logger = deps.logger;
+  const repository = deps.repository ?? new PrismaPlanRepository();
 
   const listPlans = new ListPlansUseCase(repository);
   const getPlan = new GetPlanUseCase(repository);
@@ -40,12 +64,22 @@ export function buildPlanModule(): PlanModule {
   const publishPlanVersion = new PublishPlanVersionUseCase(repository);
   const archivePlanVersion = new ArchivePlanVersionUseCase(repository);
   const activateTenantPlan = new ActivateTenantPlanUseCase(repository);
-  const selectPlan = new SelectPlanUseCase(repository);
+  const selectPlan = new SelectPlanUseCase(
+    repository,
+    deps.walletRepository,
+    deps.autoAssignKey,
+    logger,
+  );
   const updateTenantPlanOverrides = new UpdateTenantPlanOverridesUseCase(
     repository,
   );
   const changeTenantPlan = new ChangeTenantPlanUseCase(repository);
   const listSubscribers = new ListPlanSubscribersUseCase(repository);
+  const expireTrialPlans = new ExpireTrialPlansUseCase(logger);
+  const trialExpiryScheduler = new TrialExpiryScheduler(
+    expireTrialPlans,
+    logger ?? (console as unknown as Logger),
+  );
 
   return {
     repository,
@@ -54,6 +88,10 @@ export function buildPlanModule(): PlanModule {
       selectPlan,
       getTenantPlan,
       updateTenantPlanOverrides,
+      expireTrialPlans,
+    },
+    schedulers: {
+      trialExpiry: trialExpiryScheduler,
     },
     adminController: new AdminPlanController(
       listPlans,

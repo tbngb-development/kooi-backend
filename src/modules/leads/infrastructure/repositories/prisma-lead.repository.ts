@@ -6,6 +6,7 @@ import type {
   PaginatedLeadsResult,
   DetailedLeadResult,
   LeadStatsResult,
+  InboundLeadResult,
 } from "../../application/interfaces/lead-repository.interface";
 
 export class PrismaLeadRepository implements LeadRepository {
@@ -92,6 +93,9 @@ export class PrismaLeadRepository implements LeadRepository {
         tenantId: l.tenantId,
         campaignId: l.campaignId,
         batchId: l.batchId,
+        assistantId: l.assistantId,
+        type: l.type,
+        source: l.source,
         metadata: l.metadata as Record<string, unknown> | null,
         createdAt: l.createdAt,
         updatedAt: l.updatedAt,
@@ -127,6 +131,19 @@ export class PrismaLeadRepository implements LeadRepository {
             status: true,
           },
         },
+        assistant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        batch: {
+          select: {
+            id: true,
+            fileName: true,
+            status: true,
+          },
+        },
         calls: {
           orderBy: { createdAt: "desc" },
           include: {
@@ -154,12 +171,17 @@ export class PrismaLeadRepository implements LeadRepository {
       tenantId: lead.tenantId,
       campaignId: lead.campaignId,
       batchId: lead.batchId,
+      assistantId: lead.assistantId,
+      type: lead.type,
+      source: lead.source,
       metadata: lead.metadata as Record<string, unknown> | null,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
       isDeleted: lead.isDeleted,
       deletedAt: lead.deletedAt,
       campaign: lead.campaign,
+      assistant: lead.assistant,
+      batch: lead.batch,
       calls: lead.calls.map((c) => ({
         id: c.id,
         bolnaCallId: c.bolnaCallId,
@@ -179,6 +201,47 @@ export class PrismaLeadRepository implements LeadRepository {
     };
   }
 
+  async updateDnc(
+    tenantId: string,
+    leadId: string,
+    data: { doNotCall: boolean; reason: string; adminUserId: string },
+  ): Promise<DetailedLeadResult> {
+    const lead = await prisma.lead.findFirst({
+      where: { id: leadId, tenantId },
+      select: { id: true, metadata: true },
+    });
+
+    if (!lead) {
+      throw new Error("Lead not found");
+    }
+
+    const currentMeta = (lead.metadata as Record<string, unknown>) ?? {};
+    const updatedMeta = {
+      ...currentMeta,
+      dncReason: data.reason,
+      dncSetAt: new Date().toISOString(),
+      dncSetBy: data.adminUserId,
+      dncAudit: {
+        doNotCall: data.doNotCall,
+        reason: data.reason,
+        setAt: new Date().toISOString(),
+        setBy: data.adminUserId,
+      },
+    };
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        doNotCall: data.doNotCall,
+        metadata: updatedMeta,
+        ...(data.doNotCall && { stoppedReason: "MANUAL" }),
+      },
+    });
+
+    const updated = await this.findById(tenantId, leadId);
+    return updated!;
+  }
+
   async getStats(
     tenantId: string,
     campaignId?: string,
@@ -189,7 +252,7 @@ export class PrismaLeadRepository implements LeadRepository {
       ...(campaignId && { campaignId }),
     };
 
-    const [total, pending, calling, called, failed, noAnswer] =
+    const [total, pending, calling, called, failed, noAnswer, doNotCall] =
       await Promise.all([
         prisma.lead.count({ where }),
         prisma.lead.count({ where: { ...where, status: "PENDING" } }),
@@ -207,7 +270,70 @@ export class PrismaLeadRepository implements LeadRepository {
       called,
       failed,
       noAnswer,
+      doNotCall,
     };
+  }
+
+  async findByTenantAndPhone(
+    tenantId: string,
+    phone: string,
+  ): Promise<InboundLeadResult | null> {
+    const lead = await prisma.lead.findFirst({
+      where: {
+        tenantId,
+        phone,
+        isDeleted: false,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
+
+    return lead ?? null;
+  }
+
+  async createInboundLead(data: {
+    phone: string;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<InboundLeadResult> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "INBOUND",
+        source: "INBOUND",
+        status: "CALLING",
+      },
+      select: { id: true, name: true },
+    });
+  }
+
+  async updateStatus(id: string, status: string): Promise<void> {
+    await prisma.lead.update({
+      where: { id },
+      data: { status: status as LeadStatus },
+    });
+  }
+
+  async createQuickDialLead(data: {
+    phone: string;
+    name: string | null;
+    tenantId: string;
+    assistantId: string;
+  }): Promise<{ id: string }> {
+    return prisma.lead.create({
+      data: {
+        phone: data.phone,
+        name: data.name,
+        tenantId: data.tenantId,
+        assistantId: data.assistantId,
+        type: "OUTBOUND",
+        source: "QUICK_DIAL",
+        status: "PENDING",
+      },
+      select: { id: true },
+    });
   }
 
   async softDelete(leadId: string): Promise<void> {

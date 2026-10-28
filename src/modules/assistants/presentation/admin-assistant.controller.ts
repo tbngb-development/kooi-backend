@@ -42,9 +42,14 @@ export class AdminAssistantController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const includeArchived =
+        req.query.includeArchived === "false" ? false : true;
       sendSuccess(
         res,
-        await this.listAssistantsUseCase.execute(this.resolveTenantId(req)),
+        await this.listAssistantsUseCase.execute(
+          this.resolveTenantId(req),
+          includeArchived,
+        ),
       );
     } catch (err) {
       next(err);
@@ -79,6 +84,7 @@ export class AdminAssistantController {
         tenantId: this.resolveTenantId(req),
         name: req.body.name,
         platformAgentId: req.body.platformAgentId,
+        variables: req.body.variables,
       });
       sendSuccess(res, data, HttpStatus.CREATED);
     } catch (err) {
@@ -96,6 +102,7 @@ export class AdminAssistantController {
         tenantId: this.resolveTenantId(req),
         id: param(req, "id"),
         name: req.body.name,
+        variables: req.body.variables,
       });
       sendSuccess(res, data);
     } catch (err) {

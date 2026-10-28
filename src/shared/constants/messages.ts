@@ -23,6 +23,9 @@ export const AuthMessages = {
     "New password must be different from the current password.",
   RESET_TOKEN_INVALID:
     "Invalid or expired reset token. Please restart the process.",
+  VERIFICATION_TOKEN_INVALID:
+    "Invalid or expired verification token. Please verify your email again.",
+  EMAIL_VERIFIED_SUCCESS: "Email verified successfully.",
 
   // Errors
   INVALID_CREDENTIALS: "Invalid email or password",
@@ -92,10 +95,11 @@ export const PaymentMessages = {
   INVALID_SLAB: "Invalid recharge amount",
 } as const;
 
-export const RECHARGE_SLABS_PAISA = [
-  100_000, // ₹1,000
-  500_000, // ₹5,000
-  1_000_000, // ₹10,000
-  2_500_000, // ₹25,000
-  10_000_000, // ₹1,00,000
-] as const;
+export const ApiKeyMessages = {
+  CREATED: "API key created successfully",
+  DELETED: "API key deleted and revoked successfully",
+  NOT_FOUND: "API key not found",
+  INVALID_KEY: "Invalid or revoked API key",
+  KEY_NOT_PROVIDED: "API key not provided in X-API-Key header",
+} as const;
+

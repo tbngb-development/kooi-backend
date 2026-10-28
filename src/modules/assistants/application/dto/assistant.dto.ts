@@ -1,13 +1,18 @@
+import type { PlatformAgentType } from "@prisma/client";
+import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
+
 export interface RegisterAssistantInput {
   tenantId: string;
   name: string;
   platformAgentId: string;
+  variables?: AssistantVariablesConfig;
 }
 
 export interface UpdateAssistantInput {
   tenantId: string;
   id: string;
-  name: string;
+  name?: string;
+  variables?: AssistantVariablesConfig;
 }
 
 export interface GetAssistantOutput {
@@ -17,6 +22,7 @@ export interface GetAssistantOutput {
     tenantId: string;
     platformAgentId: string;
     config: Record<string, unknown>;
+    variables: AssistantVariablesConfig | null;
     createdAt: Date;
     updatedAt: Date;
     platformAgent: {
@@ -24,6 +30,8 @@ export interface GetAssistantOutput {
       bolnaId: string;
       name: string;
       slug: string;
+      type: PlatformAgentType;
+      welcomeMessage: string | null;
       description: string | null;
       category: string | null;
       isFeatured: boolean;
@@ -39,6 +47,8 @@ export interface GetAssistantOutput {
     label: string;
     required: boolean;
     isEditable: boolean;
+    inputType: string;
+    defaultValue: string | null;
   }[];
 }
 
@@ -48,6 +58,8 @@ export interface AssistantEntityData {
   tenantId: string;
   platformAgentId: string;
   config: Record<string, unknown>;
+  variables: AssistantVariablesConfig | null;
   createdAt: Date;
   updatedAt: Date;
 }
+

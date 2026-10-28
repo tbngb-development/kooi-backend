@@ -19,7 +19,9 @@ export type TenantActivePlan = EffectivePlanTerms & {
   tenantId: string;
   status: TenantPlanStatus;
   activatedAt: Date | null;
+  expiresAt: Date | null;
   bonusExpiresAt: Date | null;
+  contactsUsed: number;
 };
 
 export interface PlanRepository {
@@ -80,6 +82,15 @@ export interface PlanRepository {
    * No-op if tenant plan is not ACTIVE.
    */
   recordBonusExpiredEvent(tenantId: string): Promise<void>;
+
+  incrementContactsUsed(tenantId: string, count: number): Promise<void>;
+  getTrialContactUsage(tenantId: string): Promise<{
+    contactsUsed: number;
+    contactLimit: number | null;
+    remaining: number | null;
+    isTrial: boolean;
+    isExpired: boolean;
+  }>;
 
   // ── Enforcement Counts ────────────────────────────────────────
   countActiveCampaigns(tenantId: string): Promise<number>;

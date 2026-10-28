@@ -41,6 +41,9 @@ export interface ListTransactionsOptions {
   page: number;
   limit: number;
   type?: WalletTxType;
+  sourceType?: WalletTxSourceType;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface ExpiredBonusWallet {

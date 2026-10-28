@@ -10,6 +10,7 @@ const requiredVariableSchema = z.object({
 });
 
 const genderSchema = z.enum(["MALE", "FEMALE"]);
+const platformAgentTypeSchema = z.enum(["OUTBOUND", "INBOUND", "BOTH"]);
 
 // ── Platform Agent CRUD ─────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ export const registerPlatformAgentSchema = z.object({
   industryPackId: z.string().uuid().optional(),
   category: z.string().max(50).optional(),
   description: z.string().max(500).optional(),
+  type: platformAgentTypeSchema.optional().default("OUTBOUND"),
   isFeatured: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
   welcomeMessage: z.string().max(1000).nullable().optional(),
@@ -44,6 +46,7 @@ export const updatePlatformAgentSchema = z.object({
   industryPackId: z.string().uuid().nullable().optional(),
   category: z.string().max(50).optional(),
   description: z.string().max(500).optional(),
+  type: platformAgentTypeSchema.optional(),
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
@@ -60,6 +63,7 @@ export const updateExtractionConfigSchema = z.object({
 
 export const listPlatformAgentsQuerySchema = z.object({
   industryPackId: z.string().uuid().optional(),
+  type: platformAgentTypeSchema.optional(),
   isActive: z.preprocess(
     (val) => (val === "true" ? true : val === "false" ? false : undefined),
     z.boolean().optional(),
@@ -79,6 +83,7 @@ export const importFromBolnaSchema = z.object({
   industryPackId: z.string().uuid().optional(),
   category: z.string().max(50).optional(),
   description: z.string().max(500).optional(),
+  type: platformAgentTypeSchema.optional(),
   isFeatured: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
   includeExtractions: z.boolean().optional(),
@@ -103,6 +108,7 @@ export const createAgentFromScratchSchema = z.object({
   industryPackId: z.string().uuid("Invalid industry pack ID format").optional(),
   category: z.string().optional(),
   description: z.string().optional(),
+  type: platformAgentTypeSchema.optional(),
 });
 
 // ── NEW: Clone Platform Agent Schema ────────────────────────────────

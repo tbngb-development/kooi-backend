@@ -46,7 +46,6 @@ export const env = {
     apiUrl: process.env.BOLNA_API_URL || "https://api.bolna.ai",
     encryptionSecret: requireEnv("BOLNA_KEY_ENCRYPTION_SECRET"),
     bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
-    testNumber: process.env.BOLNA_TEST_INBOUND_NUMBER ?? "",
   },
 
   webhook: {
@@ -59,9 +58,16 @@ export const env = {
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",
   },
 
+  contact: {
+    salesEmail: process.env.CONTACT_SALES_EMAIL || "sales@kooi.io",
+    supportEmail: process.env.CONTACT_SUPPORT_EMAIL || "support@kooi.io",
+    demoEmail: process.env.CONTACT_DEMO_EMAIL || "demo@kooi.io",
+    bugReportEmail: process.env.CONTACT_BUG_REPORT_EMAIL || "bugs@kooi.io",
+  },
+
   razorpay: {
-    keyId: process.env.RAZORPAY_KEY_ID || "",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+    keyId: process.env.RAZORPAY_LIVE_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_LIVE_KEY_SECRET || "",
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
   },
 

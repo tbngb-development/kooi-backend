@@ -119,7 +119,7 @@ export class PrismaCallExtractionRepository implements CallExtractionRepository 
   async replaceExtractionOverview(params: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     items: OverviewPersistenceItem[];
   }): Promise<void> {
@@ -151,7 +151,7 @@ export class PrismaCallExtractionRepository implements CallExtractionRepository 
   async replaceExtractionInsights(params: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     items: InsightPersistenceItem[];
   }): Promise<void> {

@@ -52,21 +52,59 @@ const planVersionBaseSchema = {
   lowBalanceThreshold: z.number().int().min(0).optional(),
   includedBalance: z.number().int().min(0).optional(),
   bonusValidityDays: z.number().int().min(1).nullable().optional(),
+
+  isTrial: z.boolean().optional(),
+  contactLimit: z.number().int().min(1).nullable().optional(),
+  validityDays: z.number().int().min(1).nullable().optional(),
 };
 
-export const createPlanVersionSchema = z.object(planVersionBaseSchema);
+export const createPlanVersionSchema = z
+  .object(planVersionBaseSchema)
+  .transform((data) => {
+    if (data.isTrial) {
+      return {
+        ...data,
+        isTrial: true,
+        onboardingFee: 0,
+        validityDays: data.validityDays ?? 30,
+      };
+    }
+    return {
+      ...data,
+      isTrial: false,
+      contactLimit: null,
+      validityDays: null,
+    };
+  });
 
-export const createPlanSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  slug: z
-    .string()
-    .min(1, "Slug is required")
-    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
-  displayOrder: z.number().int().min(0).optional(),
-  description: z.string().nullable().optional(),
-  publishImmediately: z.boolean().optional(),
-  ...planVersionBaseSchema,
-});
+export const createPlanSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    slug: z
+      .string()
+      .min(1, "Slug is required")
+      .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+    displayOrder: z.number().int().min(0).optional(),
+    description: z.string().nullable().optional(),
+    publishImmediately: z.boolean().optional(),
+    ...planVersionBaseSchema,
+  })
+  .transform((data) => {
+    if (data.isTrial) {
+      return {
+        ...data,
+        isTrial: true,
+        onboardingFee: 0,
+        validityDays: data.validityDays ?? 30,
+      };
+    }
+    return {
+      ...data,
+      isTrial: false,
+      contactLimit: null,
+      validityDays: null,
+    };
+  });
 
 export const updatePlanSchema = z.object({
   name: z.string().min(1).optional(),

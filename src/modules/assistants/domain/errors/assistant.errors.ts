@@ -97,3 +97,24 @@ export class AssistantNotDeletedError extends AppError {
     );
   }
 }
+
+export class AssistantVariableValidationError extends AppError {
+  constructor(message: string) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      message,
+      "ASSISTANT_VARIABLE_VALIDATION_ERROR",
+    );
+  }
+}
+
+export class AssistantNotConfiguredForOutboundError extends AppError {
+  constructor(assistantId: string) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Assistant '${assistantId}' is not configured to make outbound calls.`,
+      "ASSISTANT_NOT_OUTBOUND_CAPABLE",
+    );
+  }
+}
+

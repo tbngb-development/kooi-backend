@@ -44,7 +44,8 @@ export function evaluateCallRetry(
     currentAttempts < maxRetries &&
     retryStatuses.includes(statusKey);
 
-  const finalCallStatus: CallStatus = willRetry ? "SCHEDULED" : status;
+  // A call that terminated with BUSY, NO_ANSWER, or FAILED retains its true terminal disposition
+  const finalCallStatus: CallStatus = status;
 
   let leadStatus: LeadStatus;
   if (retryEnabled) {
@@ -73,5 +74,17 @@ export function mapLastRetryToLeadStatus(rawStatus?: string | null): LeadStatus 
   const normalized = rawStatus.toLowerCase();
   if (normalized === "busy") return "BUSY";
   if (normalized === "no-answer" || normalized === "no_answer") return "NO_ANSWER";
+  return "FAILED";
+}
+
+/**
+ * Maps the last retry status from a scheduled webhook into the appropriate CallStatus.
+ */
+export function mapRetryStatusToCallStatus(rawStatus?: string | null): CallStatus {
+  if (!rawStatus) return "FAILED";
+  const normalized = rawStatus.toLowerCase();
+  if (normalized.includes("busy")) return "BUSY";
+  if (normalized.includes("no-answer") || normalized.includes("no_answer")) return "NO_ANSWER";
+  if (normalized.includes("completed")) return "COMPLETED";
   return "FAILED";
 }

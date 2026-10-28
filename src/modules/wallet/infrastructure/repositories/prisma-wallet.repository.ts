@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Wallet, WalletTransaction } from "@prisma/client";
+import type { Prisma, Wallet, WalletTransaction } from "@prisma/client";
 import type {
   WalletRepository,
   CreateWalletData,
@@ -243,9 +243,16 @@ export class PrismaWalletRepository implements WalletRepository {
     opts: ListTransactionsOptions,
   ): Promise<{ items: WalletTransaction[]; total: number }> {
     const skip = (opts.page - 1) * opts.limit;
-    const where = {
+    const where: Prisma.WalletTransactionWhereInput = {
       tenantId,
       ...(opts.type && { type: opts.type }),
+      ...(opts.sourceType && { sourceType: opts.sourceType }),
+      ...((opts.startDate || opts.endDate) && {
+        createdAt: {
+          ...(opts.startDate && { gte: opts.startDate }),
+          ...(opts.endDate && { lte: opts.endDate }),
+        },
+      }),
     };
 
     const [items, total] = await prisma.$transaction([

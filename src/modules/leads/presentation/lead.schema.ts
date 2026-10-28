@@ -42,3 +42,11 @@ export type AdminListLeadsQuery = z.infer<typeof adminListLeadsQuerySchema>;
 export type AdminGetLeadsStatsQuery = z.infer<
   typeof adminGetLeadsStatsQuerySchema
 >;
+
+export const toggleLeadDncSchema = z.object({
+  doNotCall: z.boolean(),
+  reason: z.string().min(3, "Reason must be at least 3 characters"),
+});
+
+export type ToggleLeadDncInput = z.infer<typeof toggleLeadDncSchema>;
+

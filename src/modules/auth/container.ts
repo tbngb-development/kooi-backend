@@ -3,6 +3,7 @@ import type { TokenService } from "./application/interfaces/token-service.interf
 import type { PasswordService } from "./application/interfaces/password-service.interface";
 import type { OtpService } from "./application/interfaces/otp-service.interface";
 import type { PasswordResetTokenService } from "./application/interfaces/password-reset-token.service.interface";
+import type { EmailVerificationTokenService } from "./application/interfaces/email-verification-token.service.interface";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
 import type { Logger } from "../../shared/logging/logger.interface";
 
@@ -21,6 +22,7 @@ import { ChangePasswordUseCase } from "./application/use-cases/change-password.u
 import { TenantAuthController } from "./presentation/tenant-auth.controller";
 import { AdminAuthController } from "./presentation/admin-auth.controller";
 import { SendRegisterOtpUseCase } from "./application/use-cases/send-register-otp.use-case";
+import { VerifyRegisterOtpUseCase } from "./application/use-cases/verify-register-otp.use-case";
 import { AdminLoginUseCase } from "./application/use-cases/admin-login.use-case";
 import { RevokeAllSessionsUseCase } from "./application/use-cases/revoke-all-sessions.use-case";
 import { RefreshTokenCleanupService } from "./infrastructure/services/refresh-token-cleanup.service";
@@ -40,6 +42,7 @@ export interface AuthModuleDeps {
   passwordService: PasswordService;
   otpService: OtpService;
   passwordResetTokenService: PasswordResetTokenService;
+  emailVerificationTokenService: EmailVerificationTokenService;
   emailService: IEmailService;
   logger: Logger;
 }
@@ -51,6 +54,7 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     passwordService,
     otpService,
     passwordResetTokenService,
+    emailVerificationTokenService,
     emailService,
   } = deps;
 
@@ -105,13 +109,20 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
     log,
   );
 
+  const verifyRegisterOtpUseCase = new VerifyRegisterOtpUseCase(
+    authRepository,
+    otpService,
+    emailVerificationTokenService,
+    log,
+  );
+
   return {
     tenantController: new TenantAuthController(
       new RegisterTenantOwnerUseCase(
         authRepository,
         passwordService,
         tokenService,
-        otpService,
+        emailVerificationTokenService,
         log,
       ),
       loginUseCase,
@@ -131,6 +142,7 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       resetPasswordUseCase,
       changePasswordUseCase,
       new SendRegisterOtpUseCase(authRepository, otpService, emailService, log),
+      verifyRegisterOtpUseCase,
       revokeAllSessions,
     ),
 

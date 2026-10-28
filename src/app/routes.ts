@@ -11,6 +11,7 @@ import { buildAdminCampaignRoutes } from "../modules/campaigns/presentation/admi
 import { buildTenantLeadRoutes } from "../modules/leads/presentation/tenant-lead.routes";
 import { buildAdminLeadRoutes } from "../modules/leads/presentation/admin-lead.routes";
 import { buildTenantCallRoutes } from "../modules/calls/presentation/tenant-call.routes";
+import { buildTenantOutboundCallRoutes } from "../modules/calls/presentation/tenant-outbound-call.routes";
 import { buildAdminCallRoutes } from "../modules/calls/presentation/admin-call.routes";
 import { buildTenantDashboardRoutes } from "../modules/dashboard/presentation/tenant-dashboard.routes";
 import { buildAdminDashboardRoutes } from "../modules/dashboard/presentation/admin-dashboard.routes";
@@ -34,6 +35,11 @@ import { buildAdminIndustryPackRoutes } from "../modules/industry-packs/presenta
 import { buildInboundCallerMatchRoutes } from "../modules/calls/presentation/inbound-caller-match.routes";
 import { buildAdminClassifierRoutes } from "../modules/classifier/presentation/admin-classifier.routes";
 import { buildTenantClassifierRoutes } from "../modules/classifier/presentation/tenant-classifier.routes";
+import { buildAdminPhoneNumberRoutes } from "../modules/phone-numbers/presentation/admin-phone-number.routes";
+import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentation/tenant-phone-number.routes";
+import { buildTenantContactRoutes } from "../modules/contact/presentation/contact.routes";
+import { buildPublicContactRoutes } from "../modules/contact/presentation/public-contact.routes";
+import { buildTenantApiKeyRoutes } from "../modules/tenant-api-keys/presentation/tenant-api-key.routes";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -58,6 +64,18 @@ export function buildRoutes(c: AppContainer): Router {
     buildPublicInviteRoutes(c.invites.publicController),
   );
 
+  // ── Public Contact API ──────────────────────────────────────────────────
+  router.use(
+    "/v1/public/contact",
+    buildPublicContactRoutes(c.contact.publicController),
+  );
+
+  // ── Authenticated Tenant Contact API ─────────────────────────────────────
+  router.use(
+    "/v1/contact",
+    buildTenantContactRoutes(c.contact.tenantController, c.authenticate),
+  );
+
   router.use(
     "/v1/assistants",
     buildTenantAssistantRoutes(c.assistants.tenantController, c.authenticate),
@@ -69,6 +87,7 @@ export function buildRoutes(c: AppContainer): Router {
       c.batches.tenantController,
       c.authenticate,
       c.authorize,
+      c.enforceTenantVerification,
     ),
   );
   router.use(
@@ -87,9 +106,18 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+
   router.use(
     "/v1/public/inbound",
     buildInboundCallerMatchRoutes(c.calls.inboundCallerController),
+  );
+
+  router.use(
+    "/v1/public/outbound",
+    buildTenantOutboundCallRoutes(
+      c.calls.outboundCallController,
+      c.tenantApiKeyAuth,
+    ),
   );
 
   router.use(
@@ -130,9 +158,23 @@ export function buildRoutes(c: AppContainer): Router {
 
   router.use(
     "/v1/classifier",
-    buildTenantClassifierRoutes(
-      c.classifier.tenantController,
+    buildTenantClassifierRoutes(c.classifier.tenantController, c.authenticate),
+  );
+
+  router.use(
+    "/v1/phone-numbers",
+    buildTenantPhoneNumberRoutes(
+      c.phoneNumbers.tenantController,
       c.authenticate,
+    ),
+  );
+
+  router.use(
+    "/v1/api-keys",
+    buildTenantApiKeyRoutes(
+      c.tenantApiKeys.controller,
+      c.authenticate,
+      c.authorize,
     ),
   );
 
@@ -268,6 +310,15 @@ export function buildRoutes(c: AppContainer): Router {
   router.use(
     "/v1/admin/users",
     buildAdminUserRoutes(c.users.adminController, c.authenticate, c.authorize),
+  );
+
+  router.use(
+    "/v1/admin/phone-numbers",
+    buildAdminPhoneNumberRoutes(
+      c.phoneNumbers.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
   );
 
   return router;

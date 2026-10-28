@@ -2,10 +2,11 @@ import { Router } from "express";
 import type { AdminLeadController } from "./admin-lead.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
-import { validateQuery } from "../../../shared/middleware/validate";
+import { validate, validateQuery } from "../../../shared/middleware/validate";
 import {
   adminGetLeadsStatsQuerySchema,
   adminListLeadsQuerySchema,
+  toggleLeadDncSchema,
 } from "./lead.schema";
 export function buildAdminLeadRoutes(
   controller: AdminLeadController,
@@ -28,6 +29,13 @@ export function buildAdminLeadRoutes(
 
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);
+
+  router.patch(
+    "/:id/dnc",
+    validate(toggleLeadDncSchema),
+    controller.toggleDnc,
+  );
+  router.post("/:id/reveal-pii", controller.revealPii);
 
   return router;
 }

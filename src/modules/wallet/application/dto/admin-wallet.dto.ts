@@ -5,4 +5,5 @@ export interface AdjustWalletInput {
   targetBalance?: "CASH" | "BONUS";
   description: string;
   bonusExpiresAt?: string | null;
+  idempotencyKey?: string;
 }

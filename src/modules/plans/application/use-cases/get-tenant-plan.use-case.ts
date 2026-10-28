@@ -7,6 +7,9 @@ export class GetTenantPlanUseCase {
   constructor(private readonly planRepo: PlanRepository) {}
 
   async execute(tenantId: string): Promise<TenantPlanResponse> {
+    // Triggers real-time trial expiration transition if expiresAt has passed
+    await this.planRepo.getActivePlanForTenant(tenantId);
+
     const tenantPlan = await this.planRepo.getTenantPlan(tenantId);
     if (!tenantPlan) throw new TenantPlanNotFoundError(tenantId);
 

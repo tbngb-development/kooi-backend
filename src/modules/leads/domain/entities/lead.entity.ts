@@ -1,4 +1,9 @@
-import { type LeadStatus, type LeadStopReason } from "@prisma/client";
+import {
+  type LeadStatus,
+  type LeadStopReason,
+  type LeadType,
+  type LeadSource,
+} from "@prisma/client";
 
 export interface LeadEntityData {
   id: string;
@@ -10,8 +15,11 @@ export interface LeadEntityData {
   doNotCall: boolean;
   stoppedReason?: LeadStopReason | null;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
   batchId: string | null;
+  assistantId?: string | null;
+  type?: LeadType;
+  source?: LeadSource;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
@@ -40,8 +48,17 @@ export class LeadEntity {
   get tenantId(): string {
     return this.data.tenantId;
   }
-  get campaignId(): string {
+  get campaignId(): string | null {
     return this.data.campaignId;
+  }
+  get assistantId(): string | null | undefined {
+    return this.data.assistantId;
+  }
+  get type(): LeadType | undefined {
+    return this.data.type;
+  }
+  get source(): LeadSource | undefined {
+    return this.data.source;
   }
 
   get isDeleted(): boolean {

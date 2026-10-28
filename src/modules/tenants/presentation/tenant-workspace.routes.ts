@@ -4,6 +4,10 @@ import type { AuthenticateMiddleware } from "../../../shared/middleware/authenti
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
 import { validate } from "../../../shared/middleware/validate";
 import { updateWorkspaceSchema } from "./tenant.schema";
+import {
+  sendMobileOtpSchema,
+  verifyMobileOtpSchema,
+} from "./tenant-verification.schema";
 
 /**
  * Tenant-scoped routes for active workspace management.
@@ -34,6 +38,21 @@ export function buildTenantWorkspaceRoutes(
     "/current/stats",
     authorize.tenantRoles("OWNER", "ADMIN"),
     controller.getCurrentStats,
+  );
+
+  // Mobile verification (OWNER or ADMIN)
+  router.post(
+    "/current/verify-mobile/send-otp",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    validate(sendMobileOtpSchema),
+    controller.sendVerificationOtp,
+  );
+
+  router.post(
+    "/current/verify-mobile/verify-otp",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    validate(verifyMobileOtpSchema),
+    controller.verifyOtp,
   );
 
   return router;

@@ -23,15 +23,20 @@ export class AdjustWalletUseCase {
           : null
         : undefined;
 
+    const idempotencyKey =
+      input.idempotencyKey ||
+      `admin_adj_${input.tenantId}_${input.type}_${input.amount}_${Math.floor(Date.now() / 60000)}`;
+
     if (input.type === "DEBIT") {
       const tx = await this.walletRepo.debit({
         tenantId: input.tenantId,
         amount: input.amount,
         description: input.description,
         sourceType: "ADMIN_ADJUSTMENT",
-        sourceId: `admin_${Date.now()}`,
-        idempotencyKey: `admin_adj_${input.tenantId}_${Date.now()}`,
+        sourceId: `admin_${adminUserId}`,
+        idempotencyKey,
         createdBy: adminUserId,
+        allowOverdraft: false,
       });
 
       this.logger.info("Admin wallet adjustment (debit)", {
@@ -53,8 +58,8 @@ export class AdjustWalletUseCase {
       targetBalance: input.targetBalance,
       description: input.description,
       sourceType: "ADMIN_ADJUSTMENT",
-      sourceId: `admin_${Date.now()}`,
-      idempotencyKey: `admin_adj_${input.tenantId}_${Date.now()}`,
+      sourceId: `admin_${adminUserId}`,
+      idempotencyKey,
       createdBy: adminUserId,
       bonusExpiresAt,
     });

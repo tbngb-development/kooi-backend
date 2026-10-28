@@ -17,23 +17,27 @@ export const sendRegisterOtpSchema = z.object({
   email: emailSchema,
 });
 
+export const verifyRegisterOtpSchema = z.object({
+  email: emailSchema,
+  otp: z
+    .string()
+    .length(6, "Verification code must be 6 digits")
+    .regex(/^\d{6}$/, "Verification code must be numeric"),
+});
+
 export const registerTenantOwnerSchema = z.object({
+  verificationToken: z.string().min(1, "Verification token is required"),
   tenantName: z
     .string()
     .min(1, "Tenant name is required")
     .max(100, "Tenant name too long")
     .trim(),
-  email: emailSchema,
   password: passwordSchema,
   name: nameSchema,
   termsAccepted: z.literal(true, {
     message: "You must accept the Terms & Conditions to continue.",
   }),
   termsVersion: z.string().min(1, "Terms version is required").max(20),
-  otp: z
-    .string()
-    .length(6, "Verification code must be 6 digits")
-    .regex(/^\d{6}$/, "Verification code must be numeric"),
 });
 
 export const loginSchema = z.object({
@@ -110,6 +114,7 @@ export const changePasswordSchema = z
   });
 
 export type SendRegisterOtpBody = z.infer<typeof sendRegisterOtpSchema>;
+export type VerifyRegisterOtpBody = z.infer<typeof verifyRegisterOtpSchema>;
 export type RegisterTenantOwnerBody = z.infer<typeof registerTenantOwnerSchema>;
 export type LoginBody = z.infer<typeof loginSchema>;
 export type SelectTenantBody = z.infer<typeof selectTenantSchema>;

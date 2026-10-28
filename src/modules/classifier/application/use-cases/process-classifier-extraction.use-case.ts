@@ -4,6 +4,7 @@ import type {
   ClassifierAnswerResult,
   JevQuestionDef,
   ObjectiveOption,
+  CallMetricPersistenceItem,
 } from "../dto/classifier.dto";
 import type { ClassifierDisposition } from "@prisma/client";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -133,6 +134,16 @@ export class ProcessClassifierExtractionUseCase {
         outputTokens: evaluation.outputTokens,
         gatewayCost: evaluation.gatewayCost ?? undefined,
         processedAt: new Date(),
+      });
+
+      // 11. Materialize call metrics for flagged dispositions
+      await this.materializeCallMetrics({
+        callId,
+        tenantId,
+        campaignId: callData.campaignId,
+        batchId: callData.batchId,
+        dispositions,
+        results,
       });
 
       this.logger?.info("Classifier extraction completed", {
@@ -294,5 +305,96 @@ export class ProcessClassifierExtractionUseCase {
     }
 
     return results;
+  }
+
+  // ── Call Metrics Materializer ───────────────────────────────────────────
+
+  private async materializeCallMetrics(params: {
+    callId: string;
+    tenantId: string;
+    campaignId: string | null;
+    batchId: string | null;
+    dispositions: ClassifierDisposition[];
+    results: Record<string, ClassifierAnswerResult>;
+  }): Promise<void> {
+    const { callId, tenantId, campaignId, batchId, dispositions, results } =
+      params;
+
+    const metricDispositions = dispositions.filter((d) => d.isMetric);
+    if (metricDispositions.length === 0) {
+      // Clear any existing metrics for this call in case of re-processing
+      await this.repo.replaceCallMetrics({
+        callId,
+        tenantId,
+        campaignId,
+        batchId,
+        items: [],
+      });
+      return;
+    }
+
+    const items: CallMetricPersistenceItem[] = [];
+
+    for (const d of metricDispositions) {
+      const res = results[d.slug];
+      if (!res || res.value === null || res.value === undefined) continue;
+
+      if (Array.isArray(res.value)) {
+        for (const choice of res.value) {
+          if (this.isValidMetricValue(choice)) {
+            const conf =
+              typeof res.confidence === "object" && res.confidence !== null
+                ? (res.confidence as Record<string, number>)[choice] ?? null
+                : null;
+            items.push({
+              classifierDispositionId: d.id,
+              classifierSlug: d.slug,
+              classifierName: d.displayName || d.name,
+              metricValue: choice,
+              confidence: typeof conf === "number" ? conf : null,
+            });
+          }
+        }
+      } else if (this.isValidMetricValue(res.value)) {
+        items.push({
+          classifierDispositionId: d.id,
+          classifierSlug: d.slug,
+          classifierName: d.displayName || d.name,
+          metricValue: res.value,
+          confidence:
+            typeof res.confidence === "number" ? res.confidence : null,
+        });
+      }
+    }
+
+    await this.repo.replaceCallMetrics({
+      callId,
+      tenantId,
+      campaignId,
+      batchId,
+      items,
+    });
+  }
+
+  private isValidMetricValue(val: unknown): val is string {
+    if (typeof val !== "string") return false;
+    const trimmed = val.trim();
+    if (!trimmed) return false;
+
+    const lower = trimmed.toLowerCase();
+    const skippedValues = new Set([
+      "none",
+      "no_data",
+      "no-data",
+      "null",
+      "undefined",
+      "not_mentioned",
+      "not_shared",
+      "not_asked",
+      "—",
+      "-",
+    ]);
+
+    return !skippedValues.has(lower);
   }
 }

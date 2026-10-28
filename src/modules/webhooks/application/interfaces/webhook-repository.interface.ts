@@ -4,6 +4,8 @@ import {
   type BatchStatus,
   type CampaignStatus,
   type LeadStopReason,
+  type CallType,
+  type CallSource,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
@@ -11,10 +13,14 @@ export interface ResolvedCallContext {
   id: string;
   bolnaCallId: string | null;
   tenantId: string;
-  campaignId: string;
+  campaignId: string | null;
+  assistantId?: string | null;
   leadId: string;
   batchId: string | null;
+  type?: CallType;
+  source?: CallSource;
   status: CallStatus;
+  agentNumber?: string | null;
   duration: number | null;
   cost: number | null;
   recording: string | null;
@@ -83,11 +89,15 @@ export interface WebhookRepository {
   createCall(data: {
     bolnaCallId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId?: string | null;
+    assistantId?: string | null;
     leadId: string;
-    batchId: string | null;
+    batchId?: string | null;
+    type?: CallType;
+    source?: CallSource;
     status: CallStatus;
     startedAt: Date;
+    agentNumber?: string | null;
   }): Promise<ResolvedCallContext>;
 
   updateCallStatusAndHistory(
@@ -95,12 +105,14 @@ export interface WebhookRepository {
     bolnaCallId: string,
     status: CallStatus,
     history: CallHistoryItem[],
+    agentNumber?: string | null,
   ): Promise<ResolvedCallContext>;
 
   updateCallTerminalState(
     callId: string,
     data: {
       status: CallStatus;
+      agentNumber?: string | null;
       summary?: string | null;
       transcript?: string | null;
       transcriptMessages?: unknown | null;
@@ -127,6 +139,7 @@ export interface WebhookRepository {
 
   countActiveLeadsInBatch(batchId: string): Promise<number>;
   countActiveCallsInBatch(batchId: string): Promise<number>;
+  hasPendingRetriesInBatch(batchId: string): Promise<boolean>;
   countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number>;
   countActiveCallsInCampaignLegacy(campaignId: string): Promise<number>;
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;

@@ -7,8 +7,12 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 
 export interface ListCallsFilters {
   campaignId?: string;
+  assistantId?: string;
   leadId?: string;
   status?: string;
+  type?: "OUTBOUND" | "INBOUND";
+  source?: "CAMPAIGN" | "INBOUND" | "QUICK_DIAL";
+  agentNumber?: string;
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -30,6 +34,10 @@ export interface PaginatedCallsResult {
         phone: string;
       } | null;
       campaign: {
+        id: string;
+        name: string;
+      } | null;
+      assistant?: {
         id: string;
         name: string;
       } | null;
@@ -71,6 +79,10 @@ export interface DetailedCallResult extends CallEntityData {
     name: string;
     description: string | null;
   } | null;
+  assistant?: {
+    id: string;
+    name: string;
+  } | null;
   callAnalysis: {
     id: string;
     dynamicExtractions: string | null;
@@ -103,6 +115,16 @@ export interface CallStatsResult {
   avgDuration: number;
 }
 
+export interface CallCenterStatsResult {
+  todayInboundCalls: number;
+  todayInboundCompleted: number;
+  todayOutboundCalls: number;
+  todayOutboundCompleted: number;
+  todayAvgDurationSec: number;
+  todayTotalCostPaisa: number;
+  activeCallsCount: number;
+}
+
 export interface CallRepository {
   list(
     tenantId: string,
@@ -121,6 +143,8 @@ export interface CallRepository {
     filters: CallStatsFilters,
   ): Promise<CallStatsResult>;
 
+  getCallCenterStats(tenantId: string): Promise<CallCenterStatsResult>;
+
   getTenantCallOverview(tenantId: string): Promise<CallListOverview>;
 
   getAvailableFilters(
@@ -128,37 +152,23 @@ export interface CallRepository {
     campaignId: string,
   ): Promise<AvailableFiltersResponse>;
 
+  /** Create a quick-dial outbound call record */
+  createQuickDialCallRecord(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    assistantId: string;
+    leadId: string;
+    agentNumber: string | null;
+  }): Promise<{ id: string }>;
+
+  createInboundCallRecord(data: {
+    bolnaCallId: string;
+    tenantId: string;
+    assistantId: string;
+    leadId: string;
+  }): Promise<void>;
+
   softDelete(callId: string): Promise<void>;
 
   restore(callId: string): Promise<void>;
-
-  findInboundLeadContext(
-    agentId: string,
-    phone: string,
-  ): Promise<{
-    lead: {
-      id: string;
-      name: string | null;
-      phone: string;
-      email: string | null;
-      company: string | null;
-      batchId: string | null;
-      metadata: Record<string, unknown> | null;
-    };
-    campaign: {
-      id: string;
-      name: string;
-      variables: Record<string, string> | null;
-      tenantId: string;
-    };
-  } | null>;
-
-  createInboundCall(data: {
-    bolnaCallId: string;
-    tenantId: string;
-    campaignId: string;
-    leadId: string;
-    batchId?: string | null;
-  }): Promise<{ id: string }>;
-  
 }

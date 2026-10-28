@@ -4,6 +4,7 @@ import type {
   CreateClassifierDispositionDTO,
   UpdateClassifierDispositionDTO,
   ListClassifierDispositionsFilters,
+  CallMetricPersistenceItem,
 } from "../../application/dto/classifier.dto";
 import type { ClassifierExtractionStatus } from "@prisma/client";
 
@@ -20,6 +21,7 @@ export class PrismaClassifierRepository implements ClassifierRepository {
         questionType: data.questionType,
         objectiveOptions: data.objectiveOptions as any,
         industryPackId: data.industryPackId ?? null,
+        isMetric: data.isMetric ?? false,
       },
     });
   }
@@ -43,6 +45,7 @@ export class PrismaClassifierRepository implements ClassifierRepository {
           industryPackId: data.industryPackId,
         }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.isMetric !== undefined && { isMetric: data.isMetric }),
       },
     });
   }
@@ -78,6 +81,9 @@ export class PrismaClassifierRepository implements ClassifierRepository {
     }
     if (filters.isActive !== undefined) {
       where.isActive = filters.isActive;
+    }
+    if (filters.isMetric !== undefined) {
+      where.isMetric = filters.isMetric;
     }
     if (filters.search) {
       where.OR = [
@@ -183,12 +189,22 @@ export class PrismaClassifierRepository implements ClassifierRepository {
   async createCallResult(data: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     dispositionCount: number;
     transcriptLength: number;
   }) {
-    return prisma.classifierCallResult.create({ data });
+    return prisma.classifierCallResult.upsert({
+      where: { callId: data.callId },
+      create: data,
+      update: {
+        status: "PENDING",
+        dispositionCount: data.dispositionCount,
+        transcriptLength: data.transcriptLength,
+        errorMessage: null,
+        processedAt: null,
+      },
+    });
   }
 
   async updateCallResult(
@@ -279,6 +295,16 @@ export class PrismaClassifierRepository implements ClassifierRepository {
         tenantId: true,
         campaignId: true,
         batchId: true,
+        assistant: {
+          select: {
+            platformAgent: {
+              select: {
+                id: true,
+                industryPackId: true,
+              },
+            },
+          },
+        },
         campaign: {
           select: {
             assistant: {
@@ -298,14 +324,49 @@ export class PrismaClassifierRepository implements ClassifierRepository {
 
     if (!call) return null;
 
+    const agent =
+      call.assistant?.platformAgent ??
+      call.campaign?.assistant?.platformAgent;
+
     return {
       transcript: call.transcript,
       tenantId: call.tenantId,
       campaignId: call.campaignId,
       batchId: call.batchId,
-      platformAgentId: call.campaign?.assistant?.platformAgent?.id ?? null,
-      industryPackId:
-        call.campaign?.assistant?.platformAgent?.industryPackId ?? null,
+      platformAgentId: agent?.id ?? null,
+      industryPackId: agent?.industryPackId ?? null,
     };
+  }
+
+  // ── Call Metrics ──────────────────────────────────────────────────────────
+
+  async replaceCallMetrics(params: {
+    callId: string;
+    tenantId: string;
+    campaignId: string | null;
+    batchId: string | null;
+    items: CallMetricPersistenceItem[];
+  }) {
+    await prisma.$transaction(async (tx) => {
+      await tx.callMetric.deleteMany({
+        where: { callId: params.callId },
+      });
+
+      if (params.items.length > 0) {
+        await tx.callMetric.createMany({
+          data: params.items.map((item) => ({
+            callId: params.callId,
+            tenantId: params.tenantId,
+            campaignId: params.campaignId,
+            batchId: params.batchId,
+            classifierDispositionId: item.classifierDispositionId,
+            classifierSlug: item.classifierSlug,
+            classifierName: item.classifierName,
+            metricValue: item.metricValue,
+            confidence: item.confidence ?? null,
+          })),
+        });
+      }
+    });
   }
 }

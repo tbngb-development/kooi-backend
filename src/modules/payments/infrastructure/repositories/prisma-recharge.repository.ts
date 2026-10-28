@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Recharge, RechargeStatus } from "@prisma/client";
+import type { Recharge, RechargePurpose, RechargeStatus } from "@prisma/client";
 import type {
   RechargeRepository,
   CreateRechargeData,
@@ -83,13 +83,18 @@ export class PrismaRechargeRepository implements RechargeRepository {
   }
 
   async listWithTenant(
-    filter: { tenantId?: string; status?: RechargeStatus },
+    filter: {
+      tenantId?: string;
+      status?: RechargeStatus;
+      purpose?: RechargePurpose;
+    },
     pagination: { page: number; limit: number },
   ): Promise<{ items: RechargeWithTenant[]; total: number }> {
     const skip = (pagination.page - 1) * pagination.limit;
     const where = {
       ...(filter.tenantId && { tenantId: filter.tenantId }),
       ...(filter.status && { status: filter.status }),
+      ...(filter.purpose && { purpose: filter.purpose }),
     };
 
     const [items, total] = await prisma.$transaction([

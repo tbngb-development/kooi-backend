@@ -43,7 +43,9 @@ export interface TenantPlanResponse {
     perMinuteRateOverride: number | null;
   };
   activatedAt: string | null;
+  expiresAt: string | null;
   bonusExpiresAt: string | null;
+  contactsUsed: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +112,8 @@ export interface TenantUsageSnapshot {
   maxAgents: number | null;
   teamMembers: number;
   maxTeamMembers: number | null;
+  contactsUsed: number;
+  contactLimit: number | null;
 }
 
 export interface PlanSubscriberItem {
@@ -132,7 +136,9 @@ export interface PlanSubscriberItem {
   };
 
   activatedAt: string | null;
+  expiresAt: string | null;
   bonusExpiresAt: string | null;
+  contactsUsed: number;
   createdAt: string;
 
   usage: TenantUsageSnapshot;

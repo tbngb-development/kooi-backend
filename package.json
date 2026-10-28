@@ -5,19 +5,14 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "prisma generate && tsc",
+    "test": "vitest run src/",
     "start": "node dist/server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "seed:plans": "tsx src/seeds/plans.seed.ts",
     "seed:dispositions": "tsx  src/seeds/dispositions.seed.ts",
     "seed:classifiers": "tsx  src/seeds/classifier-dispositions.seed.ts",
-    "postinstall": "prisma generate",
-    "test": "cross-env NODE_ENV=test vitest run",
-    "test:watch": "cross-env NODE_ENV=test vitest",
-    "test:unit": "cross-env NODE_ENV=test vitest run tests/unit",
-    "test:integration": "cross-env NODE_ENV=test vitest run tests/integration",
-    "test:api": "cross-env NODE_ENV=test vitest run tests/api",
-    "test:coverage": "cross-env NODE_ENV=test vitest run --coverage"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -71,7 +66,6 @@
     "cross-env": "^10.1.0",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
-    "ioredis-mock": "^8.13.1",
     "nodemon": "^3.1.14",
     "prettier": "^3.9.6",
     "shx": "^0.4.0",

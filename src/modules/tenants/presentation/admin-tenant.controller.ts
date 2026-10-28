@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import type { AuthRequest } from "../../../shared/types";
 import { sendSuccess } from "../../../shared/utils/response";
 import { param } from "../../../shared/utils/paramHelper";
 import type { ListTenantsUseCase } from "../application/use-cases/list-tenants.use-case";
@@ -46,9 +47,12 @@ export class AdminTenantController {
     next: NextFunction,
   ): Promise<void> => {
     try {
+      const authReq = req as AuthRequest;
+      const adminUserId = authReq.user?.userId;
       const updated = await this.updateTenantUseCase.execute(
         param(req, "id"),
         req.body,
+        adminUserId,
       );
       sendSuccess(res, updated);
     } catch (err) {

@@ -71,6 +71,12 @@ export interface ParseLeadsOutput {
       durationMaxSec: number;
     };
   };
+  trialUsage?: {
+    isTrial: boolean;
+    contactsUsed: number;
+    contactLimit: number | null;
+    remaining: number | null;
+  };
 }
 
 // ── Campaign List ──────────────────────────────────────────────────────────
@@ -117,8 +123,10 @@ export interface CampaignDetailOverview {
   scheduledCalls: number;
   totalCostPaisa: number;
   totalCost?: number;
+  totalPlatformCostPaisa?: number;
   avgCostPaisa: number;
   avgCost?: number;
+  avgPlatformCostPaisa?: number;
   totalDurationSec: number;
   totalDuration?: number;
   avgDurationSec: number;
@@ -191,3 +199,33 @@ export interface ExtractionInsightResult {
   totalCalls: number;
   insights: ExtractionInsightDisposition[];
 }
+
+// ── Call Metrics ─────────────────────────────────────────────────────────────
+
+export interface CampaignCallMetricsInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+}
+
+export interface CampaignCallMetricValue {
+  value: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CampaignCallMetricItem {
+  classifierDispositionId: string;
+  classifierSlug: string;
+  classifierName: string;
+  questionType: string;
+  totalCount: number;
+  values: CampaignCallMetricValue[];
+}
+
+export interface CampaignCallMetricsResult {
+  campaignId: string;
+  totalCalls: number;
+  metrics: CampaignCallMetricItem[];
+}
+

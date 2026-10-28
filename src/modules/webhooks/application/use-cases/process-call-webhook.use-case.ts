@@ -6,7 +6,10 @@ import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/ap
 import type { CallResolverService } from "../services/call-resolver.service";
 import type { CallCompletionService } from "../services/call-completion.service";
 import type { CallTerminalService } from "../services/call-terminal.service";
-import { mapLastRetryToLeadStatus } from "../../domain/rules/call-retry.rules";
+import {
+  mapLastRetryToLeadStatus,
+  mapRetryStatusToCallStatus,
+} from "../../domain/rules/call-retry.rules";
 import { canTransitionCallStatus } from "../../domain/rules/call-state-machine.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
@@ -38,10 +41,21 @@ export class ProcessCallWebhookUseCase {
         this.logger?.warn("call scheduled: ", { payload });
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
         if (resolved) {
-          if (!canTransitionCallStatus(resolved.status, "SCHEDULED")) {
+          const lastRetry =
+            payload.retry_history?.[payload.retry_history.length - 1];
+
+          // Determine the actual call disposition of the executed attempt
+          const targetCallStatus = lastRetry?.status
+            ? mapRetryStatusToCallStatus(lastRetry.status)
+            : resolved.status === "PENDING"
+              ? "SCHEDULED"
+              : "NO_ANSWER";
+
+          if (!canTransitionCallStatus(resolved.status, targetCallStatus)) {
             this.logger?.warn("Ignored out-of-order scheduled event on terminal call", {
               callId: resolved.id,
               currentStatus: resolved.status,
+              targetCallStatus,
             });
             break;
           }
@@ -81,12 +95,12 @@ export class ProcessCallWebhookUseCase {
           }
 
           await this.webhookRepo.updateCallTerminalState(resolved.id, {
-            status: "SCHEDULED",
+            status: targetCallStatus,
+            duration: lastRetry?.duration ?? resolved.duration,
             callHistory: updatedHistory,
+            endedAt: new Date(),
           });
 
-          const lastRetry =
-            payload.retry_history?.[payload.retry_history.length - 1];
           if (lastRetry?.status) {
             const leadStatus = mapLastRetryToLeadStatus(lastRetry.status);
             await this.webhookRepo.updateLeadStatus(resolved.leadId, leadStatus);
@@ -109,10 +123,12 @@ export class ProcessCallWebhookUseCase {
             }
           }
 
-          await this.webhookRepo.updateCampaignStatus(
-            resolved.campaignId,
-            "RUNNING",
-          );
+          if (resolved.campaignId) {
+            await this.webhookRepo.updateCampaignStatus(
+              resolved.campaignId,
+              "RUNNING",
+            );
+          }
         }
         break;
       }
@@ -163,11 +179,13 @@ export class ProcessCallWebhookUseCase {
           }
         }
 
-        await this.webhookRepo.updateCampaignStatus(
-          resolved.campaignId,
-          "RUNNING",
-          new Date(),
-        );
+        if (resolved.campaignId) {
+          await this.webhookRepo.updateCampaignStatus(
+            resolved.campaignId,
+            "RUNNING",
+            new Date(),
+          );
+        }
 
         if (this.stopBatchesOnInsufficientBalance) {
           this.stopBatchesOnInsufficientBalance

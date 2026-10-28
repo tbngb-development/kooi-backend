@@ -22,7 +22,6 @@ export class InboundCallerMatchController {
         executionId,
       });
 
-      // Bolna expects a flat JSON object — send directly, not wrapped
       res.status(200).json(data);
     } catch (err) {
       next(err);

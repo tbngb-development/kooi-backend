@@ -31,12 +31,12 @@ export function canTransitionCallStatus(
     return false;
   }
 
-  // Non-answer, busy, or failed can only transition to SCHEDULED (if retried) or remain terminal
+  // Non-answer, busy, or failed cannot regress to in-flight or scheduled states
   if (
     (currentStatus === "NO_ANSWER" ||
       currentStatus === "BUSY" ||
       currentStatus === "FAILED") &&
-    (nextStatus === "CALLING" || nextStatus === "PENDING")
+    (nextStatus === "CALLING" || nextStatus === "PENDING" || nextStatus === "SCHEDULED")
   ) {
     return false;
   }

@@ -1,10 +1,12 @@
 import { PrismaAuthRepository } from "../modules/auth/infrastructure/repositories/prisma-auth.repository";
 import { JwtTokenService } from "../modules/auth/infrastructure/services/jwt-token.service";
 import { JwtPasswordResetTokenService } from "../modules/auth/infrastructure/services/jwt-password-reset-token.service";
+import { JwtEmailVerificationTokenService } from "../modules/auth/infrastructure/services/jwt-email-verification-token.service";
 import { BcryptPasswordService } from "../modules/auth/infrastructure/services/bcrypt-password.service";
 import { AuthenticateMiddleware } from "../shared/middleware/authenticate";
 import { AuthorizeMiddleware } from "../shared/middleware/authorize";
 import { EnforcePlanMiddleware } from "../shared/middleware/enforce-plan";
+import { EnforceTenantVerificationMiddleware } from "../shared/middleware/enforce-tenant-verification";
 import redis from "../shared/config/database/redis";
 import {
   BolnaClientFactory,
@@ -75,12 +77,26 @@ import {
   buildClassifierModule,
   type ClassifierModule,
 } from "../modules/classifier/container";
+import {
+  buildPhoneNumberModule,
+  type PhoneNumberModule,
+} from "../modules/phone-numbers/container";
+import {
+  buildContactModule,
+  type ContactModule,
+} from "../modules/contact/container";
+import {
+  buildTenantApiKeyModule,
+  type TenantApiKeyModule,
+} from "../modules/tenant-api-keys/container";
+import type { TenantApiKeyAuthMiddleware } from "../shared/middleware/tenant-api-key-auth";
 
 // Repository Concrete Implementations for DI Wiring
 import { PrismaRechargeRepository } from "../modules/payments/infrastructure/repositories/prisma-recharge.repository";
 import { PrismaBolnaApiKeyRepository } from "../modules/bolna-api-keys/infrastructure/repositories/prisma-bolna-api-key.repository";
 import { PrismaAssistantRepository } from "../modules/assistants/infrastructure/repositories/prisma-assistant.repository";
 import { PrismaPlatformAgentRepository } from "../modules/platform-agents/infrastructure/repositories/prisma-platform-agent.repository";
+import { PrismaPlanRepository } from "../modules/plans/infrastructure/repositories/prisma-plan.repository";
 import { BolnaTemplateProviderImpl } from "../modules/platform-agents/infrastructure/services/bolna-template.provider";
 
 // Logging
@@ -109,6 +125,10 @@ export interface AppContainer {
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
   classifier: ClassifierModule;
+  phoneNumbers: PhoneNumberModule;
+  contact: ContactModule;
+  tenantApiKeys: TenantApiKeyModule;
+  tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -118,6 +138,7 @@ export interface AppContainer {
   authenticate: AuthenticateMiddleware;
   authorize: AuthorizeMiddleware;
   enforcePlan: EnforcePlanMiddleware;
+  enforceTenantVerification: EnforceTenantVerificationMiddleware;
 
   bolnaClientFactory: IBolnaClientFactory;
 }
@@ -132,6 +153,7 @@ export function buildContainer(): AppContainer {
   const email = new ResendEmailService(logger.child({ module: "email" }));
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
+  const emailVerificationTokenService = new JwtEmailVerificationTokenService(redis);
 
   const apiKeyRepository = new PrismaBolnaApiKeyRepository();
   const bolnaClientFactory = new BolnaClientFactory(
@@ -155,21 +177,21 @@ export function buildContainer(): AppContainer {
     passwordService,
     otpService,
     passwordResetTokenService,
+    emailVerificationTokenService,
     emailService: email,
     logger,
   });
 
-  // 2. Plans Module
-  const plans = buildPlanModule();
+  // 2. Core Repositories & Platform Agents Module
+  const planRepo = new PrismaPlanRepository();
 
-  // 3. Platform Agents Module (depends only on core repositories and logger)
   const platformAgents = buildPlatformAgentModule({
     platformAgentRepo,
     templateProvider,
     logger,
   });
 
-  // 4. Bolna API Keys Module (requires cross-module cloning parameters)
+  // 3. Bolna API Keys Module (requires cross-module cloning parameters)
   const bolnaApiKeys = buildBolnaApiKeyModule({
     assistantRepo,
     platformAgentRepo,
@@ -178,20 +200,28 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  const enforcePlan = new EnforcePlanMiddleware(plans.repository);
+  const enforcePlan = new EnforcePlanMiddleware(planRepo);
 
-  // 5. Wallet Module
+  // 4. Wallet Module
   const wallet = buildWalletModule({
-    planRepository: plans.repository,
+    planRepository: planRepo,
     bolnaClientFactory,
     email,
+    logger,
+  });
+
+  // 5. Plans Module (with wallet and Bolna key auto-assignment for free trial onboarding)
+  const plans = buildPlanModule({
+    repository: planRepo,
+    walletRepository: wallet.repository,
+    autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     logger,
   });
 
   // 6. Payments Module
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
-    planRepository: plans.repository,
+    planRepository: planRepo,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
     logger,
@@ -224,16 +254,36 @@ export function buildContainer(): AppContainer {
 
   const calls = buildCallModule({
     bolnaClientFactory,
+    callWalletGuard: wallet.guards.callWalletGuard,
+    walletRepo: wallet.repository,
     debitWalletForCall: wallet.useCases.debitWalletForCall,
     classifierQueue: classifier.queue,
+    processClassifierExtractionUseCase:
+      classifier.useCases.processClassifierExtraction,
+    classifierRepo: classifier.repository,
     logger,
   });
+
+  const tenantApiKeys = buildTenantApiKeyModule(logger);
+
+  const tenants = buildTenantModule({
+    otpService,
+    emailService: email,
+    redis,
+    logger,
+  });
+
+  const enforceTenantVerification = new EnforceTenantVerificationMiddleware(
+    planRepo,
+    tenants.repository,
+    logger,
+  );
 
   return {
     logger,
     auth,
     assistants,
-    tenants: buildTenantModule(),
+    tenants,
     campaigns: buildCampaignModule({ logger }),
     batches: buildBatchModule({
       bolnaClientFactory,
@@ -256,6 +306,10 @@ export function buildContainer(): AppContainer {
     payments,
     invites,
     classifier,
+    phoneNumbers: buildPhoneNumberModule({ logger }),
+    contact: buildContactModule(logger),
+    tenantApiKeys,
+    tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
@@ -265,6 +319,7 @@ export function buildContainer(): AppContainer {
     authenticate: new AuthenticateMiddleware(tokenService, authRepository),
     authorize: new AuthorizeMiddleware(),
     enforcePlan,
+    enforceTenantVerification,
     bolnaClientFactory,
   };
 }

@@ -27,10 +27,23 @@ export interface BaseAuthContext {
   isPlatformAdmin: boolean;
 }
 
+export interface TenantApiKeyAuthContext {
+  type: "tenant_api_key";
+  authType: "api_key";
+  apiKeyId: string;
+  keyIdentifier: string;
+  tenantId: string;
+  tenantName: string;
+  userId: string;
+  createdByUserId: string;
+  isPlatformAdmin: false;
+}
+
 export type AuthContext =
   | TenantAuthContext
   | AdminAuthContext
-  | BaseAuthContext;
+  | BaseAuthContext
+  | TenantApiKeyAuthContext;
 
 export interface AuthRequest extends Request {
   user: AuthContext;

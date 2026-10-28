@@ -1,7 +1,7 @@
 import type { AgentDispositionLookupItem } from "../../domain/rules/dynamic-extraction-mapper.rules";
 
 export interface CallExtractionContext {
-  campaignId: string;
+  campaignId: string | null;
   batchId: string | null;
 }
 
@@ -44,7 +44,7 @@ export interface CallExtractionRepository {
   replaceExtractionOverview(params: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     items: OverviewPersistenceItem[];
   }): Promise<void>;
@@ -52,7 +52,7 @@ export interface CallExtractionRepository {
   replaceExtractionInsights(params: {
     callId: string;
     tenantId: string;
-    campaignId: string;
+    campaignId: string | null;
     batchId: string | null;
     items: InsightPersistenceItem[];
   }): Promise<void>;
