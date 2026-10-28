@@ -24,8 +24,9 @@ export interface RechargeRepository {
   findByRazorpayPaymentId(paymentId: string): Promise<Recharge | null>;
 
   /**
-   * Atomically marks a recharge as SUCCESS only if currently INITIATED.
-   * Returns null if already processed (idempotent guard).
+   * Atomically marks a recharge as SUCCESS if in a recoverable status
+   * (INITIATED, CANCELLED, EXPIRED, FAILED).
+   * Returns null if already SUCCESS or REFUNDED (idempotent guard).
    */
   markSuccess(
     rechargeId: string,
@@ -33,7 +34,23 @@ export interface RechargeRepository {
     razorpaySignature: string,
   ): Promise<Recharge | null>;
 
+  /**
+   * Atomically marks a recharge as CANCELLED only if currently INITIATED.
+   * Returns null if already transitioned or processed.
+   */
+  markCancelled(rechargeId: string, reason: string): Promise<Recharge | null>;
+
+  /**
+   * Atomically marks a recharge as EXPIRED only if currently INITIATED.
+   * Returns null if already transitioned or processed.
+   */
+  markExpired(rechargeId: string, reason: string): Promise<Recharge | null>;
+
   markFailed(rechargeId: string, reason: string): Promise<Recharge>;
+
+  updateFailureReason(rechargeId: string, reason: string): Promise<Recharge>;
+
+  findStaleInitiated(cutoffDate: Date, limit: number): Promise<Recharge[]>;
 
   listWithTenant(
     filter: {
