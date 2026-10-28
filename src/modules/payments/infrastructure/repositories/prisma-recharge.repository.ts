@@ -41,11 +41,12 @@ export class PrismaRechargeRepository implements RechargeRepository {
   }
 
   /**
-   * Atomically marks a recharge as SUCCESS only if it is still INITIATED.
+   * Atomically marks a recharge as SUCCESS if it is in a recoverable state
+   * (INITIATED, CANCELLED, EXPIRED, FAILED).
    *
    * Returns the updated Recharge on success, or null if the recharge was
-   * already processed (status !== INITIATED). This prevents double-credit
-   * on concurrent webhook retries.
+   * already processed as SUCCESS or REFUNDED.
+   * This supports late capture/webhook delivery while guaranteeing idempotency.
    */
   async markSuccess(
     rechargeId: string,
@@ -55,7 +56,7 @@ export class PrismaRechargeRepository implements RechargeRepository {
     const result = await prisma.recharge.updateMany({
       where: {
         id: rechargeId,
-        status: "INITIATED", // ← Conditional: only update if still pending
+        status: { in: ["INITIATED", "CANCELLED", "EXPIRED", "FAILED"] },
       },
       data: {
         status: "SUCCESS",
@@ -66,7 +67,59 @@ export class PrismaRechargeRepository implements RechargeRepository {
     });
 
     if (result.count === 0) {
-      return null; // Already processed by a concurrent request
+      return null; // Already SUCCESS, REFUNDED, or doesn't exist
+    }
+
+    return prisma.recharge.findUniqueOrThrow({ where: { id: rechargeId } });
+  }
+
+  /**
+   * Atomically marks a recharge as CANCELLED only if it is still INITIATED.
+   * Returns null if it was already processed or reached a terminal/success state.
+   */
+  async markCancelled(
+    rechargeId: string,
+    reason: string,
+  ): Promise<Recharge | null> {
+    const result = await prisma.recharge.updateMany({
+      where: {
+        id: rechargeId,
+        status: "INITIATED",
+      },
+      data: {
+        status: "CANCELLED",
+        failureReason: reason,
+      },
+    });
+
+    if (result.count === 0) {
+      return null;
+    }
+
+    return prisma.recharge.findUniqueOrThrow({ where: { id: rechargeId } });
+  }
+
+  /**
+   * Atomically marks a recharge as EXPIRED only if it is still INITIATED.
+   * Returns null if it was already processed or reached a terminal/success state.
+   */
+  async markExpired(
+    rechargeId: string,
+    reason: string,
+  ): Promise<Recharge | null> {
+    const result = await prisma.recharge.updateMany({
+      where: {
+        id: rechargeId,
+        status: "INITIATED",
+      },
+      data: {
+        status: "EXPIRED",
+        failureReason: reason,
+      },
+    });
+
+    if (result.count === 0) {
+      return null;
     }
 
     return prisma.recharge.findUniqueOrThrow({ where: { id: rechargeId } });
@@ -79,6 +132,32 @@ export class PrismaRechargeRepository implements RechargeRepository {
         status: "FAILED",
         failureReason: reason,
       },
+    });
+  }
+
+  async updateFailureReason(
+    rechargeId: string,
+    reason: string,
+  ): Promise<Recharge> {
+    return prisma.recharge.update({
+      where: { id: rechargeId },
+      data: {
+        failureReason: reason,
+      },
+    });
+  }
+
+  async findStaleInitiated(
+    cutoffDate: Date,
+    limit: number,
+  ): Promise<Recharge[]> {
+    return prisma.recharge.findMany({
+      where: {
+        status: "INITIATED",
+        createdAt: { lte: cutoffDate },
+      },
+      orderBy: { createdAt: "asc" },
+      take: limit,
     });
   }
 

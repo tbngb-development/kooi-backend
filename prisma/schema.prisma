@@ -694,6 +694,8 @@ enum RechargeStatus {
   SUCCESS
   FAILED
   REFUNDED
+  CANCELLED
+  EXPIRED
 }
 
 enum RechargePurpose {

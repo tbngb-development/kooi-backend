@@ -89,6 +89,7 @@ describe("Admin Payment Module — Unit Tests", () => {
       verifySignature: vi.fn(),
       verifyWebhookSignature: vi.fn(),
       getOrderPayments: vi.fn(),
+      capturePayment: vi.fn(),
     };
 
     mockCompletePayment = {

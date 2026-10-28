@@ -7,6 +7,7 @@ import { param } from "../../../shared/utils/paramHelper";
 import type { CreateOrderUseCase } from "../application/use-cases/create-order.use-case";
 import type { CreateOnboardingOrderUseCase } from "../application/use-cases/create-onboarding-order.use-case";
 import type { VerifyPaymentUseCase } from "../application/use-cases/verify-payment.use-case";
+import type { CancelPaymentUseCase } from "../application/use-cases/cancel-payment.use-case";
 import type { GetOrderStatusUseCase } from "../application/use-cases/get-order-status.use-case";
 import type { CreatePlanUpgradeOrderUseCase } from "../application/use-cases/create-plan-upgrade-order.use-case";
 import type { VerifyPaymentInput } from "../application/dto/payment.dto";
@@ -18,6 +19,7 @@ export class TenantPaymentController {
     private readonly createOnboardingOrder: CreateOnboardingOrderUseCase,
     private readonly createPlanUpgradeOrder: CreatePlanUpgradeOrderUseCase,
     private readonly verifyPaymentUseCase: VerifyPaymentUseCase,
+    private readonly cancelPaymentUseCase: CancelPaymentUseCase,
     private readonly getOrderStatusUseCase: GetOrderStatusUseCase,
   ) {}
 
@@ -84,6 +86,26 @@ export class TenantPaymentController {
       const input = req.body as VerifyPaymentInput;
 
       const result = await this.verifyPaymentUseCase.execute(input, tenantId);
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  cancel = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = getTenantContext(req);
+      const { razorpayOrderId, reason } = req.body;
+
+      const result = await this.cancelPaymentUseCase.execute({
+        tenantId,
+        razorpayOrderId,
+        reason,
+      });
       sendSuccess(res, result);
     } catch (err) {
       next(err);

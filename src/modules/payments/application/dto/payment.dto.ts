@@ -35,6 +35,28 @@ export interface CompletePaymentResult {
   purpose: RechargePurpose;
 }
 
+export interface CancelPaymentInput {
+  tenantId: string;
+  razorpayOrderId: string;
+  reason?: string;
+}
+
+export interface CancelPaymentResult {
+  rechargeId: string;
+  status: RechargeStatus;
+  message: string;
+  alreadyProcessed?: boolean;
+  razorpayPaymentId?: string | null;
+}
+
+export interface ReconcileStalePaymentsResult {
+  scannedCount: number;
+  reconciledSuccessCount: number;
+  reconciledFailedCount: number;
+  reconciledExpiredCount: number;
+  skippedCount: number;
+}
+
 export interface WebhookInput {
   rawBody: string;
   signature: string;
@@ -205,4 +227,3 @@ export interface ExtractedPaymentDetails {
   feePaisa: number | null;
   taxPaisa: number | null;
 }
-

@@ -20,7 +20,8 @@ export interface ReconcilePaymentInput {
  *  4. Query live gateway payments: provider.getOrderPayments(orderId)
  *  5. If a captured payment is found, complete the payment (credits wallet atomically)
  *  6. If all payment attempts are failed, mark recharge as FAILED with gateway reason
- *  7. If payment is still pending/attempted, return current gateway status
+ *  7. If 0 payment attempts and older than 30 mins, mark recharge as EXPIRED
+ *  8. If payment is still pending/attempted, return current gateway status
  */
 export class ReconcilePaymentUseCase {
   constructor(
@@ -120,16 +121,43 @@ export class ReconcilePaymentUseCase {
       };
     }
 
-    // 3. Still pending/unattempted on gateway
+    // 3. No payment attempts recorded: if older than 30m, mark EXPIRED
+    if (payments.length === 0) {
+      const isStale =
+        Date.now() - new Date(recharge.createdAt).getTime() > 30 * 60 * 1000;
+      if (isStale && recharge.status === "INITIATED") {
+        await this.rechargeRepo.markExpired(
+          recharge.id,
+          "Reconciled by admin: abandoned checkout (no payment attempts recorded)",
+        );
+        return {
+          rechargeId: recharge.id,
+          status: "EXPIRED",
+          previousStatus: recharge.status,
+          reconciled: true,
+          message:
+            "No payment attempts recorded on Razorpay. Order marked as EXPIRED.",
+          razorpayPaymentId: null,
+        };
+      }
+
+      return {
+        rechargeId: recharge.id,
+        status: recharge.status,
+        previousStatus: recharge.status,
+        reconciled: false,
+        message: "No payment attempts recorded on Razorpay for this order.",
+        razorpayPaymentId: null,
+      };
+    }
+
+    // 4. Still pending/unattempted on gateway
     return {
       rechargeId: recharge.id,
       status: recharge.status,
       previousStatus: recharge.status,
       reconciled: false,
-      message:
-        payments.length === 0
-          ? "No payment attempts recorded on Razorpay for this order."
-          : `Payment is still ${payments[0].status} on Razorpay.`,
+      message: `Payment is still ${payments[0].status} on Razorpay.`,
       razorpayPaymentId: payments[0]?.id ?? null,
     };
   }
