@@ -109,11 +109,14 @@ function validateDirectionVariables(
     definitions.filter((v) => !v.isEditable).map((v) => v.name),
   );
 
-  // Strip non-editable variables from user input
+  // Strip non-editable variables from user input and omit empty optional values
   const cleaned: Record<string, string> = {};
   for (const [key, value] of Object.entries(inputVars)) {
     if (!nonEditableNames.has(key)) {
-      cleaned[key] = String(value ?? "").trim();
+      const trimmed = String(value ?? "").trim();
+      if (trimmed !== "") {
+        cleaned[key] = trimmed;
+      }
     }
   }
 

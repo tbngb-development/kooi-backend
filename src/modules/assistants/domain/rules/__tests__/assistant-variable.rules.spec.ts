@@ -184,6 +184,16 @@ describe("assistant-variable.rules", () => {
       ).toThrow(/Missing required variables for outbound: companyName/);
     });
 
+    it("should throw error if required editable variable is provided as empty or whitespace", () => {
+      expect(() =>
+        validateAssistantVariables("OUTBOUND", requiredVars, {
+          outbound: {
+            variables: { companyName: "   ", agentName: "Sara" },
+          },
+        }),
+      ).toThrow(/Missing required variables for outbound: companyName/);
+    });
+
     it("should auto-fill defaultValue for required variable when left empty", () => {
       const result = validateAssistantVariables("OUTBOUND", requiredVars, {
         outbound: {
@@ -193,6 +203,78 @@ describe("assistant-variable.rules", () => {
 
       expect(result.outbound?.variables?.agentName).toBe("Sara");
       expect(result.outbound?.variables?.companyName).toBe("Sobha");
+    });
+
+    it("should allow optional variables to be omitted without error", () => {
+      const result = validateAssistantVariables("OUTBOUND", requiredVars, {
+        outbound: {
+          variables: { companyName: "Acme Corp" },
+        },
+      });
+
+      expect(result.outbound?.variables?.companyName).toBe("Acme Corp");
+      expect(result.outbound?.variables?.agentName).toBe("Sara"); // default applied
+      expect(result.outbound?.variables?.notes).toBeUndefined();
+    });
+
+    it("should omit optional variables provided as empty strings", () => {
+      const result = validateAssistantVariables("OUTBOUND", requiredVars, {
+        outbound: {
+          variables: { companyName: "Acme Corp", notes: "   " },
+        },
+      });
+
+      expect(result.outbound?.variables?.companyName).toBe("Acme Corp");
+      expect(result.outbound?.variables?.notes).toBeUndefined();
+    });
+
+    it("should retain optional variables when non-empty value is provided", () => {
+      const result = validateAssistantVariables("OUTBOUND", requiredVars, {
+        outbound: {
+          variables: { companyName: "Acme Corp", notes: "Important client instructions" },
+        },
+      });
+
+      expect(result.outbound?.variables?.notes).toBe("Important client instructions");
+    });
+
+    it("should validate dynamically using custom variable definitions without hardcoded assumptions", () => {
+      const dynamicDefs: RequiredVariable[] = [
+        {
+          name: "promo_code",
+          label: "Promotion Code",
+          required: true,
+          isEditable: true,
+          inputType: "text",
+          defaultValue: null,
+        },
+        {
+          name: "secondary_contact",
+          label: "Secondary Contact",
+          required: false,
+          isEditable: true,
+          inputType: "text",
+          defaultValue: null,
+        },
+      ];
+
+      // Missing required promo_code -> throws
+      expect(() =>
+        validateAssistantVariables("INBOUND", dynamicDefs, {
+          inbound: {
+            variables: { secondary_contact: "12345" },
+          },
+        }),
+      ).toThrow(/Missing required variables for inbound: promo_code/);
+
+      // Supplied promo_code, secondary_contact omitted -> succeeds
+      const valid = validateAssistantVariables("INBOUND", dynamicDefs, {
+        inbound: {
+          variables: { promo_code: "SUMMER2026" },
+        },
+      });
+      expect(valid.inbound?.variables?.promo_code).toBe("SUMMER2026");
+      expect(valid.inbound?.variables?.secondary_contact).toBeUndefined();
     });
   });
 });
