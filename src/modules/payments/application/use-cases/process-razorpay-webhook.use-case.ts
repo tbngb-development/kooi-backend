@@ -19,17 +19,15 @@ import type { Logger } from "../../../../shared/logging/logger.interface";
  * Supported Events:
  *  - `payment.captured`: Standard payment captured event across all methods (UPI, Card, Netbanking, Wallet).
  *  - `order.paid`: Order-level paid event firing concurrently with payment capture.
- *  - `payment.failed`: Acknowledged and logged with error diagnostics, without prematurely marking recharge as failed
- *    (per Razorpay documentation on user-initiated retries, e.g. UPI TPAP retry flows).
+ *  - `payment.authorized`: Automatically captures authorized payments and completes fulfillment.
+ *  - `payment.failed`: Records failure diagnostics on the recharge record, updating failureReason
+ *    and transitioning to FAILED if the checkout was already dismissed/expired.
  *
- * Signature Capturing:
- *  - Stores `webhook:${signature}` as the cryptographic proof of webhook fulfillment,
- *    while extracting banking reference codes (RRN, Bank Txn ID, Auth Code) into audit logs.
- *
- * Idempotency:
+ * Idempotency & Late Delivery:
  *  - CompletePaymentUseCase checks recharge status atomically before processing.
+ *  - markSuccess supports recovering from CANCELLED, EXPIRED, or FAILED if late capture arrives.
  *  - Wallet credits use idempotencyKey (`recharge:{id}`).
- *  - Safe to receive duplicate or retried webhooks.
+ *  - Safe to receive duplicate or out-of-order webhooks.
  */
 export class ProcessRazorpayWebhookUseCase {
   constructor(
@@ -65,13 +63,18 @@ export class ProcessRazorpayWebhookUseCase {
 
     const event = payload?.event;
 
-    // 3. Handle payment.failed diagnostics without invalidating pending order
+    // 3. Handle payment.failed diagnostics & failure state updates
     if (event === "payment.failed") {
-      this.handlePaymentFailedEvent(payload);
+      await this.handlePaymentFailedEvent(payload);
       return { handled: true };
     }
 
-    // 4. Filter for supported payment success events
+    // 4. Handle payment.authorized auto-capture
+    if (event === "payment.authorized") {
+      return await this.handlePaymentAuthorizedEvent(payload, input.signature);
+    }
+
+    // 5. Filter for supported payment success events
     if (event !== "payment.captured" && event !== "order.paid") {
       this.logger.debug("Razorpay webhook event filtered", {
         action: "webhook.filtered",
@@ -80,7 +83,7 @@ export class ProcessRazorpayWebhookUseCase {
       return { handled: false };
     }
 
-    // 5. Extract normalized payment details across payment methods
+    // 6. Extract normalized payment details across payment methods
     const paymentDetails = this.extractPaymentDetails(payload);
     if (!paymentDetails) {
       this.logger.warn("Razorpay webhook missing order or payment ID", {
@@ -90,7 +93,7 @@ export class ProcessRazorpayWebhookUseCase {
       return { handled: false };
     }
 
-    // 6. Validate captured amount against expected recharge amount (prevent partial/over crediting)
+    // 7. Validate captured amount against expected recharge amount
     if (this.rechargeRepo) {
       const recharge = await this.rechargeRepo.findByRazorpayOrderId(
         paymentDetails.orderId,
@@ -134,10 +137,10 @@ export class ProcessRazorpayWebhookUseCase {
       card: paymentDetails.card,
     });
 
-    // 7. Store the verified webhook HMAC signature as proof of webhook fulfillment
+    // 8. Store the verified webhook HMAC signature as proof of webhook fulfillment
     const webhookSignature = `webhook:${input.signature}`;
 
-    // 8. Delegate to CompletePayment (idempotent atomic processing)
+    // 9. Delegate to CompletePayment (idempotent atomic processing)
     await this.completePayment.execute({
       razorpayOrderId: paymentDetails.orderId,
       razorpayPaymentId: paymentDetails.paymentId,
@@ -158,10 +161,50 @@ export class ProcessRazorpayWebhookUseCase {
 
   // ── Private Extraction & Helper Methods ────────────────────────
 
+  private async handlePaymentAuthorizedEvent(
+    payload: RazorpayWebhookPayload,
+    signature: string,
+  ): Promise<{ handled: boolean }> {
+    const paymentDetails = this.extractPaymentDetails(payload);
+    if (!paymentDetails) {
+      return { handled: false };
+    }
+
+    this.logger.info("Razorpay payment authorized webhook received — auto-capturing", {
+      action: "webhook.payment_authorized",
+      orderId: paymentDetails.orderId,
+      paymentId: paymentDetails.paymentId,
+      amountPaisa: paymentDetails.amount,
+    });
+
+    try {
+      const captured = await this.payments.capturePayment(
+        paymentDetails.paymentId,
+        paymentDetails.amount,
+        paymentDetails.currency,
+      );
+
+      await this.completePayment.execute({
+        razorpayOrderId: paymentDetails.orderId,
+        razorpayPaymentId: captured.id,
+        razorpaySignature: `webhook_autocapture:${signature}`,
+      });
+
+      return { handled: true };
+    } catch (err) {
+      this.logger.warn("Auto-capture of payment.authorized failed or already captured", {
+        action: "webhook.autocapture_error",
+        orderId: paymentDetails.orderId,
+        paymentId: paymentDetails.paymentId,
+        error: err,
+      });
+      return { handled: false };
+    }
+  }
+
   /**
    * Extracts normalized payment details regardless of whether the event was
-   * `payment.captured` or `order.paid`, and across all payment methods
-   * (UPI, Netbanking, Card, Wallet).
+   * `payment.captured`, `payment.authorized`, or `order.paid`.
    */
   private extractPaymentDetails(
     payload: RazorpayWebhookPayload,
@@ -210,13 +253,19 @@ export class ProcessRazorpayWebhookUseCase {
   }
 
   /**
-   * Logs payment failure diagnostics according to Razorpay error structure.
-   * Does NOT prematurely mark the recharge as failed in DB to allow for user-initiated
-   * retries (especially common in UPI TPAP apps like Google Pay or PhonePe).
+   * Logs payment failure diagnostics and updates failure details on the recharge record.
+   * Avoids immediately marking as FAILED if still in active retry flow, but transitions
+   * if already dismissed or expired.
    */
-  private handlePaymentFailedEvent(payload: RazorpayWebhookPayload): void {
+  private async handlePaymentFailedEvent(
+    payload: RazorpayWebhookPayload,
+  ): Promise<void> {
     const paymentEntity = payload.payload?.payment?.entity;
     const orderId = paymentEntity?.order_id ?? payload.payload?.order?.entity?.id;
+    const errorDescription =
+      paymentEntity?.error_description ||
+      paymentEntity?.error_reason ||
+      "Payment failed on gateway";
 
     this.logger.warn("Razorpay payment failed webhook received", {
       action: "webhook.payment_failed",
@@ -224,11 +273,23 @@ export class ProcessRazorpayWebhookUseCase {
       paymentId: paymentEntity?.id,
       method: paymentEntity?.method,
       errorCode: paymentEntity?.error_code,
-      errorDescription: paymentEntity?.error_description,
+      errorDescription,
       errorSource: paymentEntity?.error_source,
       errorStep: paymentEntity?.error_step,
       errorReason: paymentEntity?.error_reason,
     });
+
+    if (orderId && this.rechargeRepo) {
+      const recharge = await this.rechargeRepo.findByRazorpayOrderId(orderId);
+      if (recharge) {
+        await this.rechargeRepo.updateFailureReason(
+          recharge.id,
+          errorDescription,
+        );
+        if (recharge.status === "CANCELLED" || recharge.status === "EXPIRED") {
+          await this.rechargeRepo.markFailed(recharge.id, errorDescription);
+        }
+      }
+    }
   }
 }
-

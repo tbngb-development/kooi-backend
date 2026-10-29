@@ -23,6 +23,7 @@ import type { RemoveDispositionFromAgentUseCase } from "../application/use-cases
 import type { GetAgentExtractionsUseCase } from "../application/use-cases/get-agent-extractions.use-case";
 import type { SyncExtractionsToBolnaUseCase } from "../application/use-cases/sync-extractions-to-bolna.use-case";
 import type { UpdatePlatformAgentVariablesUseCase } from "../application/use-cases/update_platform-agent-variables";
+import type { UpdatePlatformAgentVariableUseCase } from "../application/use-cases/update-platform-agent-variable.use-case";
 
 import type { CreateAgentFromScratchUseCase } from "../application/use-cases/create-agent-from-scratch.use-case";
 import type { ClonePlatformAgentUseCase } from "../application/use-cases/clone-platform-agent.use-case";
@@ -54,6 +55,7 @@ export class AdminPlatformAgentController {
     private readonly getAgentExtractions: GetAgentExtractionsUseCase,
     private readonly syncExtractionsToBolna: SyncExtractionsToBolnaUseCase,
     private readonly updatePlatformAgentUseCase: UpdatePlatformAgentVariablesUseCase,
+    private readonly updatePlatformAgentVariableUseCase: UpdatePlatformAgentVariableUseCase,
     // Inject New Use Cases
     private readonly createFromScratchUseCase: CreateAgentFromScratchUseCase,
     private readonly clonePlatformAgentUseCase: ClonePlatformAgentUseCase,
@@ -308,6 +310,23 @@ export class AdminPlatformAgentController {
         message: "Platform agent variables updated successfully",
         data,
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateVariableHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const result = await this.updatePlatformAgentVariableUseCase.execute(
+        param(req, "id"),
+        param(req, "variableName"),
+        req.body,
+      );
+      sendSuccess(res, result);
     } catch (err) {
       next(err);
     }

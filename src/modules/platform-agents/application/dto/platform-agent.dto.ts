@@ -1,5 +1,5 @@
 import type { AgentGender, PlatformAgentType } from "@prisma/client";
-import type { RequiredVariable } from "../../../../shared/types/bolna.types";
+import type { RequiredVariable, VariableInputType } from "../../../../shared/types/bolna.types";
 
 export interface RegisterPlatformAgentDTO {
   bolnaId: string;
@@ -35,6 +35,15 @@ export interface UpdatePlatformAgentDTO {
 
 export interface UpdatePlatformAgentVariablesDto {
   requiredVariables?: RequiredVariable[] | null;
+}
+
+export interface UpdatePlatformAgentIndividualVariableDTO {
+  name?: string;
+  label?: string;
+  required?: boolean;
+  isEditable?: boolean;
+  inputType?: VariableInputType;
+  defaultValue?: string | null;
 }
 
 export interface ListPlatformAgentsFilters {

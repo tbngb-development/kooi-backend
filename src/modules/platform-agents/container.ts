@@ -23,6 +23,7 @@ import { RemoveDispositionFromAgentUseCase } from "./application/use-cases/remov
 import { GetAgentExtractionsUseCase } from "./application/use-cases/get-agent-extractions.use-case";
 import { SyncExtractionsToBolnaUseCase } from "./application/use-cases/sync-extractions-to-bolna.use-case";
 import { UpdatePlatformAgentVariablesUseCase } from "./application/use-cases/update_platform-agent-variables";
+import { UpdatePlatformAgentVariableUseCase } from "./application/use-cases/update-platform-agent-variable.use-case";
 import { CloneAgentToWorkspaceUseCase } from "./application/use-cases/clone-agent-to-workspace.use-case";
 
 // NEW Use Cases
@@ -133,6 +134,7 @@ export function buildPlatformAgentModule(
     new GetAgentExtractionsUseCase(repository),
     syncExtractionsToBolnaUseCase,
     new UpdatePlatformAgentVariablesUseCase(repository),
+    new UpdatePlatformAgentVariableUseCase(repository),
     createFromScratchUseCase,
     clonePlatformAgentUseCase,
     listAssignmentsUseCase,

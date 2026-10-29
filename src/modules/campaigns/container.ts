@@ -18,7 +18,7 @@ import { GetCampaignCallMetricsUseCase } from "./application/use-cases/get-campa
 import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
 import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
-import { UpdateDraftCampaignUseCase } from "./application/use-cases/update-draft-campaign.use-case";
+import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
 export interface CampaignModuleDeps {
@@ -76,7 +76,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     batchRepo,
     log,
   );
-  const updateDraftCampaign = new UpdateDraftCampaignUseCase(
+  const updateCampaign = new UpdateCampaignUseCase(
     campaignRepo,
     log,
   );
@@ -102,7 +102,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       archiveCampaign,
       restoreCampaign,
       updateCampaignStatus,
-      updateDraftCampaign,
+      updateCampaign,
     ),
   };
 }

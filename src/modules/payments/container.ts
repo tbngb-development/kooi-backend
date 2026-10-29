@@ -16,13 +16,18 @@ import { CreateOrderUseCase } from "./application/use-cases/create-order.use-cas
 import { CreateOnboardingOrderUseCase } from "./application/use-cases/create-onboarding-order.use-case";
 import { VerifyPaymentUseCase } from "./application/use-cases/verify-payment.use-case";
 import { CompletePaymentUseCase } from "./application/use-cases/complete-payment.use-case";
+import { CancelPaymentUseCase } from "./application/use-cases/cancel-payment.use-case";
 import { GetOrderStatusUseCase } from "./application/use-cases/get-order-status.use-case";
 import { ProcessRazorpayWebhookUseCase } from "./application/use-cases/process-razorpay-webhook.use-case";
 import { GetPaymentSummaryUseCase } from "./application/use-cases/get-payment-summary.use-case";
 import { ListAdminPaymentsUseCase } from "./application/use-cases/list-admin-payments.use-case";
 import { ActivateFreeOnboardingUseCase } from "./application/use-cases/activate-free-onboarding.use-case";
 import { ReconcilePaymentUseCase } from "./application/use-cases/reconcile-payment.use-case";
+import { ReconcileStalePaymentsUseCase } from "./application/use-cases/reconcile-stale-payments.use-case";
 import { CreatePlanUpgradeOrderUseCase } from "./application/use-cases/create-plan-upgrade-order.use-case";
+
+// Schedulers & Controllers
+import { PaymentReconciliationScheduler } from "./infrastructure/jobs/payment-reconciliation.scheduler";
 import { TenantPaymentController } from "./presentation/tenant-payment.controller";
 import { AdminPaymentController } from "./presentation/admin-payment.controller";
 import { RazorpayWebhookController } from "./presentation/razorpay-webhook.controller";
@@ -44,6 +49,11 @@ export interface PaymentModule {
   useCases: {
     completePayment: CompletePaymentUseCase;
     activateFreeOnboarding: ActivateFreeOnboardingUseCase;
+    cancelPayment: CancelPaymentUseCase;
+    reconcileStalePayments: ReconcileStalePaymentsUseCase;
+  };
+  schedulers: {
+    paymentReconciliation: PaymentReconciliationScheduler;
   };
 }
 
@@ -99,6 +109,13 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
     log,
   );
 
+  const cancelPayment = new CancelPaymentUseCase(
+    rechargeRepo,
+    provider,
+    completePayment,
+    log,
+  );
+
   const getOrderStatus = new GetOrderStatusUseCase(rechargeRepo, provider, log);
 
   const processWebhook = new ProcessRazorpayWebhookUseCase(
@@ -125,15 +142,37 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
     log,
   );
 
+  const reconcileStalePayments = new ReconcileStalePaymentsUseCase(
+    rechargeRepo,
+    provider,
+    completePayment,
+    log,
+  );
+
+  // ── Schedulers ────────────────────────────────────────────
+  const paymentReconciliation = new PaymentReconciliationScheduler(
+    reconcileStalePayments,
+    log,
+  );
+
   // ── Assemble ──────────────────────────────────────────────
   return {
     provider,
-    useCases: { completePayment, activateFreeOnboarding },
+    useCases: {
+      completePayment,
+      activateFreeOnboarding,
+      cancelPayment,
+      reconcileStalePayments,
+    },
+    schedulers: {
+      paymentReconciliation,
+    },
     tenantController: new TenantPaymentController(
       createTopupOrder,
       createOnboardingOrder,
       createPlanUpgradeOrder,
       verifyPayment,
+      cancelPayment,
       getOrderStatus,
     ),
     adminController: new AdminPaymentController(

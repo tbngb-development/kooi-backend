@@ -33,6 +33,11 @@ export const verifyPaymentSchema = z.object({
   razorpaySignature: z.string().min(1),
 });
 
+export const cancelPaymentSchema = z.object({
+  razorpayOrderId: z.string().min(1, "razorpayOrderId is required"),
+  reason: z.string().trim().max(255).optional(),
+});
+
 export const activateFreeOnboardingSchema = z.object({
   tenantId: z.string().uuid("Invalid tenant ID"),
   waiverReason: z
@@ -45,7 +50,16 @@ export const activateFreeOnboardingSchema = z.object({
 
 export const listAdminPaymentsQuerySchema = z.object({
   tenantId: z.string().uuid().optional(),
-  status: z.enum(["INITIATED", "SUCCESS", "FAILED", "REFUNDED"]).optional(),
+  status: z
+    .enum([
+      "INITIATED",
+      "SUCCESS",
+      "FAILED",
+      "REFUNDED",
+      "CANCELLED",
+      "EXPIRED",
+    ])
+    .optional(),
   purpose: z.enum(["ONBOARDING", "WALLET_TOPUP", "PLAN_UPGRADE"]).optional(),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(20),

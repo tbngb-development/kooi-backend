@@ -33,4 +33,9 @@ export interface IPaymentProvider {
   verifySignature(input: VerifyPaymentInput): boolean;
   verifyWebhookSignature(rawBody: string, signature: string): boolean;
   getOrderPayments(orderId: string): Promise<OrderPayment[]>;
+  capturePayment(
+    paymentId: string,
+    amountPaisa: number,
+    currency?: string,
+  ): Promise<OrderPayment>;
 }

@@ -144,6 +144,39 @@ export class RazorpayProvider implements IPaymentProvider {
     }));
   }
 
+  async capturePayment(
+    paymentId: string,
+    amountPaisa: number,
+    currency = "INR",
+  ): Promise<OrderPayment> {
+    this.logger?.debug("Capturing payment via Razorpay", {
+      action: "razorpay.capture_payment_start",
+      paymentId,
+      amountPaisa,
+      currency,
+    });
+
+    const payment = await this.withRetry(() =>
+      this.client.payments.capture(paymentId, amountPaisa, currency),
+    );
+
+    this.logger?.info("Payment captured successfully via Razorpay", {
+      action: "razorpay.capture_payment_success",
+      paymentId: payment.id,
+      amount: Number(payment.amount),
+    });
+
+    return {
+      id: payment.id,
+      status: payment.status,
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      method: payment.method ?? null,
+      captured: Boolean(payment.captured),
+      createdAt: payment.created_at,
+    };
+  }
+
   // ── internals ────────────────────────────────────────────────────────
 
   private timingSafeEqualHex(a: string, b: string): boolean {

@@ -3,7 +3,11 @@ import { Router } from "express";
 import type { TenantPaymentController } from "./tenant-payment.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import { validate } from "../../../shared/middleware/validate";
-import { createOrderSchema, verifyPaymentSchema } from "./payment.schema";
+import {
+  createOrderSchema,
+  verifyPaymentSchema,
+  cancelPaymentSchema,
+} from "./payment.schema";
 
 export function buildTenantPaymentRoutes(
   controller: TenantPaymentController,
@@ -19,6 +23,7 @@ export function buildTenantPaymentRoutes(
     controller.createOrder,
   );
   router.post("/verify", validate(verifyPaymentSchema), controller.verify);
+  router.post("/cancel", validate(cancelPaymentSchema), controller.cancel);
   router.get("/order-status/:orderId", controller.orderStatus);
 
   return router;
