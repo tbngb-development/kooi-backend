@@ -69,7 +69,7 @@ export const campaignRetryConfigSchema = z.object({
   retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
 });
 
-export const updateDraftCampaignSchema = z.object({
+export const updateCampaignSchema = z.object({
   name: z.string().trim().min(1, "Campaign name cannot be empty").max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   platformAgentId: z.string().uuid("Invalid platform agent ID").optional(),
@@ -80,13 +80,16 @@ export const updateDraftCampaignSchema = z.object({
   retry: campaignRetryConfigSchema.nullable().optional(),
 });
 
+export const updateDraftCampaignSchema = updateCampaignSchema;
+
 export const updateCampaignStatusSchema = z.object({
   status: z.enum(["DRAFT", "RUNNING", "COMPLETED", "FAILED"]),
   cascadeToBatches: z.boolean().optional().default(true),
 });
 
+export type UpdateCampaignBody = z.infer<typeof updateCampaignSchema>;
+export type UpdateDraftCampaignBody = UpdateCampaignBody;
 export type UpdateCampaignStatusBody = z.infer<typeof updateCampaignStatusSchema>;
-export type UpdateDraftCampaignBody = z.infer<typeof updateDraftCampaignSchema>;
 
 export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
 
