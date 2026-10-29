@@ -10,6 +10,7 @@ import {
   assignCategoriesSchema,
   assignDispositionsSchema,
   updateExtractionConfigSchema,
+  updatePlatformAgentVariableSchema,
   createAgentFromScratchSchema,
   clonePlatformAgentSchema,
   testAgentExtractionSchema,
@@ -84,6 +85,12 @@ export function buildAdminPlatformAgentRoutes(
     "/:id/extraction-config",
     validate(updateExtractionConfigSchema),
     controller.updatePlatformAgentVariablesHandler,
+  );
+
+  router.patch(
+    "/:id/variables/:variableName",
+    validate(updatePlatformAgentVariableSchema),
+    controller.updateVariableHandler,
   );
 
   // ── Test Extraction Endpoints ──────────────────────────────────────────────
