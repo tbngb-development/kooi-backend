@@ -61,6 +61,19 @@ export const updateExtractionConfigSchema = z.object({
   gender: genderSchema.nullable().optional(),
 });
 
+export const updatePlatformAgentVariableSchema = z.object({
+  name: z.string().min(1).max(50).optional(),
+  label: z.string().min(1).max(100).optional(),
+  required: z.boolean().optional(),
+  isEditable: z.boolean().optional(),
+  inputType: z.enum(["text", "textarea"]).optional(),
+  defaultValue: z.string().max(2000).nullable().optional(),
+});
+
+export type UpdatePlatformAgentVariableInput = z.infer<
+  typeof updatePlatformAgentVariableSchema
+>;
+
 export const listPlatformAgentsQuerySchema = z.object({
   industryPackId: z.string().uuid().optional(),
   type: platformAgentTypeSchema.optional(),

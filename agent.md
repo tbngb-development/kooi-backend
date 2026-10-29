@@ -273,14 +273,14 @@ The database schema (`prisma/schema.prisma`) comprises 25+ models structured int
 
 ### 5.1 Multi-Tenancy & Identity
 
-| Model               | Fields & Purpose                                                                                                 | Key Constraints & Relations                                                                  |
-| :------------------ | :--------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
+| Model               | Fields & Purpose                                                                                                 | Key Constraints & Relations                                                                                  |
+| :------------------ | :--------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
 | **`Tenant`**        | Multi-tenant organization account (`id`, `name`, `email`, `isActive`, `termsAccepted`, `workspaceSwitchStatus`). | Unique `email`. Relations to `Wallet`, `TenantPlan`, `Campaign`, `Assistant`, `BolnaApiKey`, `TenantApiKey`. |
 | **`User`**          | Global user identity (`id`, `email`, `password`, `name`, `isActive`).                                            | Unique `email`. Relations to `TenantUser` (memberships), `PlatformAdmin`, `RefreshToken`, `TenantApiKey`.    |
-| **`TenantUser`**    | Junction table mapping User to Tenant with RBAC role (`OWNER`, `ADMIN`, `USER`).                                 | Unique composite `[userId, tenantId]`. Cascade delete on User/Tenant deletion.               |
-| **`TenantApiKey`**  | Developer API key (`id`, `name`, `keyIdentifier`, `secretHash`, `tenantId`, `createdBy`, `lastAccessedAt`).      | Unique `keyIdentifier`, index on `tenantId`. Cascade delete on Tenant/User deletion.         |
-| **`PlatformAdmin`** | Superuser flag mapping to a `User`. Grants platform admin API rights.                                            | Unique `userId`.                                                                             |
-| **`RefreshToken`**  | Refresh token rotation tracker (`id`, `tokenHash`, `familyId`, `expiresAt`, `revokedAt`).                        | Unique `tokenHash`. Indexed by `[userId]` and `[familyId]`.                                  |
+| **`TenantUser`**    | Junction table mapping User to Tenant with RBAC role (`OWNER`, `ADMIN`, `USER`).                                 | Unique composite `[userId, tenantId]`. Cascade delete on User/Tenant deletion.                               |
+| **`TenantApiKey`**  | Developer API key (`id`, `name`, `keyIdentifier`, `secretHash`, `tenantId`, `createdBy`, `lastAccessedAt`).      | Unique `keyIdentifier`, index on `tenantId`. Cascade delete on Tenant/User deletion.                         |
+| **`PlatformAdmin`** | Superuser flag mapping to a `User`. Grants platform admin API rights.                                            | Unique `userId`.                                                                                             |
+| **`RefreshToken`**  | Refresh token rotation tracker (`id`, `tokenHash`, `familyId`, `expiresAt`, `revokedAt`).                        | Unique `tokenHash`. Indexed by `[userId]` and `[familyId]`.                                                  |
 
 ### 5.2 Voice Agents & Campaigns
 
@@ -698,8 +698,8 @@ All configuration is parsed and validated in `src/shared/config/env.ts`:
 PORT=5001
 NODE_ENV=production                  # 'development' | 'production'
 LOG_LEVEL=info                       # 'debug' | 'info' | 'warn' | 'error'
-CORS_ORIGINS=http://localhost:3001,https://app.kooi.ai
-FRONTEND_URL=https://app.kooi.ai
+CORS_ORIGINS=http://localhost:3001,https://app.kooi.in
+FRONTEND_URL=https://app.kooi.in
 
 # Database & Redis
 DATABASE_URL=postgresql://user:pass@localhost:5432/kooi_db?schema=public
@@ -720,7 +720,7 @@ BOLNA_INBOUND_AUTH_TOKEN=inbound-secret-bearer-token
 BOLNA_TEST_INBOUND_NUMBER=+91XXXXXXXXXX
 
 # Webhooks
-WEBHOOK_BASE_URL=https://api.kooi.ai
+WEBHOOK_BASE_URL=https://api.kooi.in
 WEBHOOK_SECRET=bolna-webhook-shared-secret-header
 
 # Google Gemini AI (Campaign PDF Variable Extraction)
@@ -748,7 +748,7 @@ CLOUDINARY_API_SECRET=...
 
 # Transactional Email (Resend)
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=notifications@kooi.ai
+RESEND_FROM_EMAIL=notifications@kooi.in
 
 # Feature Flags
 SKIP_CROSS_BATCH_DEDUP=false

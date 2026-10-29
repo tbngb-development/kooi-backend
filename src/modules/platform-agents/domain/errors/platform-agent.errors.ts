@@ -60,3 +60,23 @@ export class PlatformAgentBolnaIdRequiredError extends AppError {
     );
   }
 }
+
+export class PlatformAgentVariableNotFoundError extends AppError {
+  constructor(variableName: string, agentId: string) {
+    super(
+      HttpStatus.NOT_FOUND,
+      `Variable '${variableName}' not found in platform agent '${agentId}'`,
+      "PLATFORM_AGENT_VARIABLE_NOT_FOUND",
+    );
+  }
+}
+
+export class PlatformAgentVariableMismatchError extends AppError {
+  constructor(bodyName: string, pathName: string) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      `Variable name in body '${bodyName}' does not match route parameter '${pathName}'`,
+      "PLATFORM_AGENT_VARIABLE_MISMATCH",
+    );
+  }
+}
