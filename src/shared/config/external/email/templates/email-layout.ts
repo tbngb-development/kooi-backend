@@ -90,7 +90,7 @@ export function emailLayout(options: EmailLayoutOptions): string {
           <!-- Brand Header / Dark Logo Banner -->
           <tr>
             <td align="center" style="padding:12px 0 28px 0;text-align:center;">
-              <a href="https://kooi.ai" target="_blank" style="text-decoration:none;display:inline-block;">
+              <a href="https://kooi.in" target="_blank" style="text-decoration:none;display:inline-block;">
                 <img src="${BRAND_LOGO_URL}" 
                      alt="Kooi" 
                      height="40" 
@@ -113,7 +113,7 @@ export function emailLayout(options: EmailLayoutOptions): string {
                 This is an automated operational notification from Kooi.
               </p>
               <p style="margin:0;font-size:12px;color:${COLORS.textMuted};line-height:1.5;">
-                Need assistance? <a href="mailto:support@kooi.ai" style="color:${COLORS.primary};text-decoration:none;font-weight:600;">Contact Support</a>
+                Need assistance? <a href="mailto:support@kooi.in" style="color:${COLORS.primary};text-decoration:none;font-weight:600;">Contact Support</a>
               </p>
             </td>
           </tr>

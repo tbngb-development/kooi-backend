@@ -159,7 +159,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
         tenantId: "t-1",
         leadId: "l-1",
         adminUserId: "admin-user-42",
-        adminEmail: "admin@kooi.ai",
+        adminEmail: "admin@kooi.in",
         reason: "Compliance dispute investigation",
       });
 
@@ -170,7 +170,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
           tenantId: "t-1",
           leadId: "l-1",
           adminUserId: "admin-user-42",
-          adminEmail: "admin@kooi.ai",
+          adminEmail: "admin@kooi.in",
           reason: "Compliance dispute investigation",
         }),
       );
@@ -205,7 +205,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
           doNotCall: true,
           reason: "Explicit customer opt-out",
         },
-        user: { userId: "admin-1", email: "admin@kooi.ai" },
+        user: { userId: "admin-1", email: "admin@kooi.in" },
       } as unknown as Request;
 
       await controller.toggleDnc(req, mockRes, mockNext);
@@ -235,7 +235,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
         body: {
           reason: "Customer support inquiry",
         },
-        user: { id: "admin-1", email: "admin@kooi.ai" },
+        user: { id: "admin-1", email: "admin@kooi.in" },
       } as unknown as Request;
 
       await controller.revealPii(req, mockRes, mockNext);
@@ -269,7 +269,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
         params: { id: "l-1" },
         query: {},
         body: {},
-        user: { userId: "admin-1", email: "admin@kooi.ai" },
+        user: { userId: "admin-1", email: "admin@kooi.in" },
       } as unknown as Request;
 
       await controller.revealPii(req, mockRes, mockNext);
@@ -289,7 +289,7 @@ describe("Admin Lead Module & DNC / PII Masking Controls", () => {
         params: { id: "l-1" },
         query: { tenantId: "t-1" },
         body: { doNotCall: true, reason: "Valid reason" },
-        user: { userId: "admin-1", email: "admin@kooi.ai" },
+        user: { userId: "admin-1", email: "admin@kooi.in" },
       } as unknown as Request;
 
       await controller.toggleDnc(req, mockRes, mockNext);
