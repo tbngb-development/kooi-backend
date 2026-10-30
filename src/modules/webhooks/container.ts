@@ -68,7 +68,11 @@ export function buildWebhookModule(
     log,
   );
 
-  const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo, log);
+  const processBatchWebhook = new ProcessBatchWebhookUseCase(
+    webhookRepo,
+    callLifecycle,
+    log,
+  );
 
   const controller = new WebhookController(
     processCallWebhook,

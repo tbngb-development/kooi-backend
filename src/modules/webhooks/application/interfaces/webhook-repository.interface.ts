@@ -143,6 +143,9 @@ export interface WebhookRepository {
   countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number>;
   countActiveCallsInCampaignLegacy(campaignId: string): Promise<number>;
   getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;
+  getBatchesByCampaignId(
+    campaignId: string,
+  ): Promise<Array<{ id: string; status: BatchStatus }>>;
 
   updateBatchStatus(
     batchId: string,

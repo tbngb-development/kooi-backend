@@ -66,6 +66,44 @@ export function evaluateCallRetry(
   };
 }
 
+export interface IsRetryPermittedInput {
+  isBatchStopped: boolean;
+  retryConfig?: RetryConfig | null;
+  attemptsExecuted: number;
+  lastAttemptStatus?: string | null;
+}
+
+/**
+ * Pure domain rule evaluating whether scheduling a retry attempt is permitted.
+ * Validates that retries are enabled, the batch is not stopped, the total attempts
+ * executed so far do not exceed total allowed attempts (1 initial + max_retries),
+ * and the last attempt disposition matches configured retry_on_statuses.
+ */
+export function isRetryPermitted(input: IsRetryPermittedInput): boolean {
+  const { isBatchStopped, retryConfig, attemptsExecuted, lastAttemptStatus } = input;
+  if (isBatchStopped) return false;
+  if (!retryConfig?.enabled) return false;
+  const maxRetries = retryConfig.max_retries ?? 0;
+  if (maxRetries <= 0) return false;
+
+  const maxAllowedAttempts = 1 + maxRetries;
+  if (attemptsExecuted >= maxAllowedAttempts) return false;
+
+  if (lastAttemptStatus) {
+    const normalized = lastAttemptStatus.toLowerCase().replace("_", "-");
+    const retryStatuses = (retryConfig.retry_on_statuses ?? [
+      "no-answer",
+      "busy",
+      "failed",
+    ]).map((s) => s.toLowerCase().replace("_", "-"));
+    if (!retryStatuses.includes(normalized)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Maps the last retry status from a scheduled webhook into the appropriate LeadStatus.
  */

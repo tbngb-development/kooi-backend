@@ -7,8 +7,8 @@ import type { CallResolverService } from "../services/call-resolver.service";
 import type { CallCompletionService } from "../services/call-completion.service";
 import type { CallTerminalService } from "../services/call-terminal.service";
 import {
+  isRetryPermitted,
   mapLastRetryToLeadStatus,
-  mapRetryStatusToCallStatus,
 } from "../../domain/rules/call-retry.rules";
 import { canTransitionCallStatus } from "../../domain/rules/call-state-machine.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -44,27 +44,55 @@ export class ProcessCallWebhookUseCase {
           const lastRetry =
             payload.retry_history?.[payload.retry_history.length - 1];
 
-          // Determine the actual call disposition of the executed attempt
-          const targetCallStatus = lastRetry?.status
-            ? mapRetryStatusToCallStatus(lastRetry.status)
-            : resolved.status === "PENDING"
-              ? "SCHEDULED"
-              : "NO_ANSWER";
+          const existingHistory: CallHistoryItem[] = Array.isArray(resolved.callHistory)
+            ? [...(resolved.callHistory as CallHistoryItem[])]
+            : [];
+          const bolnaRetryHistory = Array.isArray(payload.retry_history)
+            ? payload.retry_history
+            : [];
 
-          if (!canTransitionCallStatus(resolved.status, targetCallStatus)) {
-            this.logger?.warn("Ignored out-of-order scheduled event on terminal call", {
+          let isBatchStopped = false;
+          if (resolved.batchId) {
+            const batchStatus = await this.webhookRepo.findBatchStatusById(
+              resolved.batchId,
+            );
+            if (batchStatus === "STOPPED") {
+              isBatchStopped = true;
+            }
+          }
+
+          const attemptsExecuted = Math.max(
+            existingHistory.length,
+            bolnaRetryHistory.length,
+            payload.retry_count ?? 0,
+          );
+
+          const retryConfig =
+            resolved.retryConfig ?? resolved.campaignDefaultRetryConfig;
+
+          const isRetryScheduled = isRetryPermitted({
+            isBatchStopped,
+            retryConfig,
+            attemptsExecuted: attemptsExecuted > 0 ? attemptsExecuted : 1,
+            lastAttemptStatus: lastRetry?.status ?? resolved.status,
+          });
+
+          if (
+            !canTransitionCallStatus(resolved.status, "SCHEDULED", {
+              isRetryScheduled,
+            })
+          ) {
+            this.logger?.warn("Ignored out-of-order scheduled event on call", {
               callId: resolved.id,
               currentStatus: resolved.status,
-              targetCallStatus,
+              isRetryScheduled,
             });
             break;
           }
 
-          const updatedHistory: CallHistoryItem[] = [
-            ...((resolved.callHistory as CallHistoryItem[]) ?? []),
-          ];
-          if (payload.retry_history && Array.isArray(payload.retry_history)) {
-            const mappedBolnaHistory: CallHistoryItem[] = payload.retry_history.map(
+          const updatedHistory: CallHistoryItem[] = [...existingHistory];
+          if (bolnaRetryHistory.length > 0) {
+            const mappedBolnaHistory: CallHistoryItem[] = bolnaRetryHistory.map(
               (rh, idx) => ({
                 attempt: rh.attempt ?? idx + 1,
                 bolnaCallId: callId,
@@ -94,12 +122,12 @@ export class ProcessCallWebhookUseCase {
             }
           }
 
-          await this.webhookRepo.updateCallTerminalState(resolved.id, {
-            status: targetCallStatus,
-            duration: lastRetry?.duration ?? resolved.duration,
-            callHistory: updatedHistory,
-            endedAt: new Date(),
-          });
+          await this.webhookRepo.updateCallStatusAndHistory(
+            resolved.id,
+            callId,
+            "SCHEDULED",
+            updatedHistory,
+          );
 
           if (lastRetry?.status) {
             const leadStatus = mapLastRetryToLeadStatus(lastRetry.status);

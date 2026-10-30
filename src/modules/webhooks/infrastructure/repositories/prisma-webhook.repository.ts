@@ -407,9 +407,13 @@ export class PrismaWebhookRepository implements WebhookRepository {
   async hasPendingRetriesInBatch(batchId: string): Promise<boolean> {
     const batch = await prisma.leadBatch.findUnique({
       where: { id: batchId },
-      select: { retryConfig: true },
+      select: { retryConfig: true, status: true },
     });
-    const config = (batch?.retryConfig as unknown as RetryConfig) ?? null;
+    if (!batch || batch.status === "STOPPED") {
+      return false;
+    }
+
+    const config = (batch.retryConfig as unknown as RetryConfig) ?? null;
     if (!config?.enabled || !config?.max_retries || config.max_retries <= 0) {
       return false;
     }
@@ -419,28 +423,58 @@ export class PrismaWebhookRepository implements WebhookRepository {
       "busy",
       "failed",
     ];
-    const leadStatusesToCheck: LeadStatus[] = [];
-    if (retryStatuses.includes("busy")) leadStatusesToCheck.push("BUSY");
+    const callStatusesToCheck: CallStatus[] = [];
+    if (retryStatuses.includes("busy")) callStatusesToCheck.push("BUSY");
     if (retryStatuses.includes("no-answer") || retryStatuses.includes("no_answer")) {
-      leadStatusesToCheck.push("NO_ANSWER");
+      callStatusesToCheck.push("NO_ANSWER");
     }
-    if (retryStatuses.includes("failed")) leadStatusesToCheck.push("FAILED");
+    if (retryStatuses.includes("failed")) callStatusesToCheck.push("FAILED");
 
-    if (leadStatusesToCheck.length === 0) return false;
-
-    const candidateLeads = await prisma.lead.findMany({
+    // 1. Any call currently in SCHEDULED status in this batch means retries are actively pending
+    const scheduledCallsCount = await prisma.call.count({
       where: {
         batchId,
-        status: { in: leadStatusesToCheck },
+        status: "SCHEDULED",
+        isDeleted: false,
+      },
+    });
+    if (scheduledCallsCount > 0) {
+      return true;
+    }
+
+    if (callStatusesToCheck.length === 0) return false;
+
+    // 2. Bolna records retry attempts within the same aggregate Call row's callHistory.
+    // Check candidate calls with retryable dispositions that haven't exhausted max attempts.
+    const candidateCalls = await prisma.call.findMany({
+      where: {
+        batchId,
+        status: { in: callStatusesToCheck },
+        isDeleted: false,
       },
       select: {
         id: true,
-        _count: { select: { calls: true } },
+        callHistory: true,
       },
     });
 
-    const maxAttempts = 1 + config.max_retries;
-    return candidateLeads.some((l) => l._count.calls < maxAttempts);
+    const maxAllowedAttempts = 1 + config.max_retries;
+    return candidateCalls.some((c) => {
+      const history = Array.isArray(c.callHistory)
+        ? (c.callHistory as unknown as CallHistoryItem[])
+        : [];
+      const attemptsExecuted = history.length > 0 ? history.length : 1;
+      return attemptsExecuted < maxAllowedAttempts;
+    });
+  }
+
+  async getBatchesByCampaignId(
+    campaignId: string,
+  ): Promise<Array<{ id: string; status: BatchStatus }>> {
+    return prisma.leadBatch.findMany({
+      where: { campaignId },
+      select: { id: true, status: true },
+    });
   }
 
   async countActiveLeadsInCampaignLegacy(campaignId: string): Promise<number> {
