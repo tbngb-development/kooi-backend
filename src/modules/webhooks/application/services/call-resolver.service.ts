@@ -46,7 +46,7 @@ export class CallResolverService {
          payload.user_number)
       : (payload.telephony_data?.from_number ??
          payload.user_number);
-    const retried = payload.batch_run_details?.retried ?? 0;
+    const _retried = payload.batch_run_details?.retried ?? 0;
 
     if (!bolnaBatchId && payload.agent_id && phone) {
       // Non-batch call fallback (Quick Dial or Inbound)

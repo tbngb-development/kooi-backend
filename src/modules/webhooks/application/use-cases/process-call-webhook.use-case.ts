@@ -10,6 +10,10 @@ import {
   isRetryPermitted,
   mapLastRetryToLeadStatus,
 } from "../../domain/rules/call-retry.rules";
+import {
+  parseBolnaTimestamp,
+  resolveAttemptStartTime,
+} from "../../domain/rules/call-timestamp.rules";
 import { canTransitionCallStatus } from "../../domain/rules/call-state-machine.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
@@ -103,6 +107,13 @@ export class ProcessCallWebhookUseCase {
                   rh.created_at ??
                   rh.at ??
                   new Date().toISOString(),
+                startedAt: rh.started_at ?? null,
+                endedAt:
+                  rh.ended_at ??
+                  rh.updated_at ??
+                  rh.created_at ??
+                  rh.at ??
+                  null,
                 errorMessage: rh.error_message ?? null,
                 hangupReason: rh.hangup_reason ?? null,
               }),
@@ -115,6 +126,14 @@ export class ProcessCallWebhookUseCase {
                 updatedHistory[existingIdx] = {
                   ...updatedHistory[existingIdx],
                   ...item,
+                  startedAt:
+                    item.startedAt ??
+                    updatedHistory[existingIdx].startedAt ??
+                    null,
+                  endedAt:
+                    item.endedAt ??
+                    updatedHistory[existingIdx].endedAt ??
+                    null,
                 };
               } else {
                 updatedHistory.push(item);
@@ -122,6 +141,7 @@ export class ProcessCallWebhookUseCase {
             }
           }
 
+          // Do NOT pass timestamps here: preserves previous attempt's startedAt & endedAt during SCHEDULED
           await this.webhookRepo.updateCallStatusAndHistory(
             resolved.id,
             callId,
@@ -178,13 +198,121 @@ export class ProcessCallWebhookUseCase {
           break;
         }
 
-        const currentHistory =
-          (resolved.callHistory as CallHistoryItem[]) ?? [];
+        const isNewAttempt = resolved.status !== "CALLING" || !resolved.startedAt;
+        const currentHistory: CallHistoryItem[] = [
+          ...((resolved.callHistory as CallHistoryItem[]) ?? []),
+        ];
+
+        // Guard against out-of-order in-flight event from an earlier attempt
+        let incomingAttempt: number | null = null;
+        if (
+          payload.batch_run_details?.retried !== undefined &&
+          payload.batch_run_details.retried !== null
+        ) {
+          incomingAttempt = payload.batch_run_details.retried + 1;
+        } else if (
+          payload.retry_count !== undefined &&
+          payload.retry_count !== null
+        ) {
+          incomingAttempt = payload.retry_count + 1;
+        }
+
+        const latestRecordedAttempt =
+          currentHistory.length > 0
+            ? Math.max(...currentHistory.map((h) => h.attempt ?? 0))
+            : 0;
+
+        if (incomingAttempt !== null && incomingAttempt < latestRecordedAttempt) {
+          this.logger?.warn("Ignored out-of-order in-flight event from earlier attempt", {
+            callId: resolved.id,
+            incomingAttempt,
+            latestRecordedAttempt,
+            incomingState: state,
+          });
+          break;
+        }
+
+        const eventTimestamp = parseBolnaTimestamp(
+          payload.initiated_at ??
+            payload.telephony_data?.start_time ??
+            payload.created_at ??
+            payload.at,
+        );
+
+        if (
+          resolved.status === "SCHEDULED" &&
+          resolved.endedAt &&
+          eventTimestamp &&
+          eventTimestamp.getTime() <= resolved.endedAt.getTime()
+        ) {
+          this.logger?.warn(
+            "Ignored out-of-order in-flight event timestamped before last attempt ended",
+            {
+              callId: resolved.id,
+              eventTimestamp: eventTimestamp.toISOString(),
+              lastAttemptEndedAt: resolved.endedAt.toISOString(),
+            },
+          );
+          break;
+        }
+
+        const attemptStartTime = resolveAttemptStartTime(
+          payload,
+          resolved.startedAt,
+          isNewAttempt,
+        );
+
+        let attemptNumber: number;
+        if (incomingAttempt !== null) {
+          attemptNumber = incomingAttempt;
+        } else if (
+          !isNewAttempt &&
+          currentHistory.length > 0 &&
+          currentHistory[currentHistory.length - 1].status === "CALLING"
+        ) {
+          attemptNumber = currentHistory[currentHistory.length - 1].attempt;
+        } else {
+          attemptNumber = currentHistory.length + 1;
+        }
+
+        const existingAttemptIdx = currentHistory.findIndex(
+          (h) => h.attempt === attemptNumber,
+        );
+        if (existingAttemptIdx >= 0) {
+          currentHistory[existingAttemptIdx] = {
+            ...currentHistory[existingAttemptIdx],
+            status: "CALLING",
+            startedAt:
+              currentHistory[existingAttemptIdx].startedAt ??
+              attemptStartTime.toISOString(),
+            endedAt: null,
+          };
+        } else {
+          currentHistory.push({
+            attempt: attemptNumber,
+            bolnaCallId: callId,
+            status: "CALLING",
+            startedAt: attemptStartTime.toISOString(),
+            endedAt: null,
+            timestamp: attemptStartTime.toISOString(),
+          });
+        }
+
+        const agentNumber =
+          payload.agent_number ??
+          payload.telephony_data?.from_number ??
+          null;
+
         await this.webhookRepo.updateCallStatusAndHistory(
           resolved.id,
           callId,
           "CALLING",
           currentHistory,
+          agentNumber,
+          {
+            startedAt: attemptStartTime,
+            endedAt: null,
+          },
         );
 
         await this.webhookRepo.updateLeadStatus(resolved.leadId, "CALLING");

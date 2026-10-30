@@ -715,6 +715,33 @@ export class PrismaBatchRepository implements BatchRepository {
     return result.count;
   }
 
+  async getBatchSequenceNumber(
+    campaignId: string,
+    batchId: string,
+  ): Promise<number> {
+    const targetBatch = await prisma.leadBatch.findUnique({
+      where: { id: batchId },
+      select: { createdAt: true },
+    });
+    if (!targetBatch) return 1;
+
+    // Count all batches created for this campaign before this batch (or at same instant with lower/equal ID)
+    const count = await prisma.leadBatch.count({
+      where: {
+        campaignId,
+        OR: [
+          { createdAt: { lt: targetBatch.createdAt } },
+          {
+            createdAt: targetBatch.createdAt,
+            id: { lte: batchId },
+          },
+        ],
+      },
+    });
+
+    return Math.max(1, count);
+  }
+
   private toEntityData(
     batch: {
       id: string;

@@ -130,6 +130,8 @@ export interface CallHistoryItem {
   duration?: number | null;
   cost?: number | null;
   timestamp: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
   errorMessage?: string | null;
   hangupReason?: string | null;
 }

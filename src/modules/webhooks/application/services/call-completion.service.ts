@@ -4,6 +4,10 @@ import type {
 } from "../interfaces/webhook-repository.interface";
 import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
+import {
+  parseBolnaTimestamp,
+  resolveAttemptEndTime,
+} from "../../domain/rules/call-timestamp.rules";
 import type { MaterializeCallExtractionsUseCase } from "../../../extractions/application/use-cases/materialize-call-extractions.use-case";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
@@ -72,24 +76,79 @@ export class CallCompletionService {
       ? [...(call.callHistory as CallHistoryItem[])]
       : [];
 
-    let attemptNumber = historyList.length + 1;
+    const isDuplicate = call.status === "COMPLETED";
+
+    let attemptNumber: number;
     if (
       payload?.batch_run_details?.retried !== undefined &&
       payload.batch_run_details.retried !== null
     ) {
-      attemptNumber = Math.max(attemptNumber, payload.batch_run_details.retried + 1);
+      attemptNumber = payload.batch_run_details.retried + 1;
     } else if (
       payload?.retry_count !== undefined &&
       payload.retry_count !== null
     ) {
-      attemptNumber = Math.max(attemptNumber, payload.retry_count + 1);
+      attemptNumber = payload.retry_count + 1;
+    } else if (
+      historyList.length > 0 &&
+      (historyList[historyList.length - 1].status === "CALLING" ||
+        historyList[historyList.length - 1].status === "COMPLETED" ||
+        isDuplicate)
+    ) {
+      attemptNumber = historyList[historyList.length - 1].attempt;
+    } else {
+      attemptNumber = historyList.length + 1;
+    }
+
+    const latestHistoryAttempt =
+      historyList.length > 0
+        ? Math.max(...historyList.map((h) => h.attempt ?? 0))
+        : 0;
+
+    // Guard against out-of-order completion event from an earlier attempt
+    if (attemptNumber < latestHistoryAttempt) {
+      this.logger?.warn("Ignored out-of-order completion event from earlier attempt", {
+        callId: call.id,
+        attemptNumber,
+        latestHistoryAttempt,
+      });
+      return;
     }
 
     const existingIdx = historyList.findIndex(
       (h) =>
         h.attempt === attemptNumber ||
-        (bolnaCallId && h.bolnaCallId === String(bolnaCallId)),
+        (historyList.length === 1 &&
+          !h.attempt &&
+          bolnaCallId &&
+          h.bolnaCallId === String(bolnaCallId)),
     );
+
+    const existingStartedAt =
+      (existingIdx >= 0 ? historyList[existingIdx].startedAt : null) ??
+      (call.startedAt ? call.startedAt.toISOString() : null);
+
+    const existingEndedAt =
+      (existingIdx >= 0 ? historyList[existingIdx].endedAt : null) ??
+      (call.endedAt ? call.endedAt.toISOString() : null);
+
+    const attemptEndTime =
+      existingIdx >= 0 &&
+      historyList[existingIdx].status !== "CALLING" &&
+      existingEndedAt
+        ? parseBolnaTimestamp(existingEndedAt) ?? resolveAttemptEndTime(payload)
+        : resolveAttemptEndTime(payload);
+
+    const attemptStartTime = existingStartedAt
+      ? parseBolnaTimestamp(existingStartedAt) ?? call.startedAt ?? attemptEndTime
+      : parseBolnaTimestamp(
+          payload?.initiated_at ??
+            payload?.telephony_data?.start_time ??
+            payload?.created_at ??
+            payload?.at,
+        ) ??
+        call.startedAt ??
+        attemptEndTime;
 
     const historyEntry: CallHistoryItem = {
       attempt:
@@ -100,10 +159,9 @@ export class CallCompletionService {
       status: "COMPLETED",
       duration: duration ?? 0,
       cost: payload?.total_cost ?? null,
-      timestamp:
-        payload?.created_at ??
-        (payload as any)?.at ??
-        new Date().toISOString(),
+      timestamp: attemptEndTime.toISOString(),
+      startedAt: attemptStartTime.toISOString(),
+      endedAt: attemptEndTime.toISOString(),
       errorMessage: null,
       hangupReason: payload?.telephony_data?.hangup_reason ?? null,
     };
@@ -125,14 +183,15 @@ export class CallCompletionService {
       cost: payload.total_cost ?? null,
       extracted_data: payload.extracted_data,
       callHistory: historyList,
-      endedAt: new Date(),
+      startedAt: attemptStartTime,
+      endedAt: attemptEndTime,
     });
 
     // 3. Mark lead as CALLED
     await this.webhookRepo.updateLeadStatus(call.leadId, "CALLED");
 
     // 4. Debit wallet for call usage (deterministic billing)
-    if (this.debitWalletForCall && duration && duration > 0) {
+    if (!isDuplicate && this.debitWalletForCall && duration && duration > 0) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
           tenantId: call.tenantId,

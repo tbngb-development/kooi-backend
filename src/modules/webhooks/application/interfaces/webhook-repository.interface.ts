@@ -27,6 +27,8 @@ export interface ResolvedCallContext {
   transcript: string | null;
   summary: string | null;
   callHistory: CallHistoryItem[];
+  startedAt: Date | null;
+  endedAt: Date | null;
   updatedAt: Date;
   retryConfig?: RetryConfig | null;
   campaignDefaultRetryConfig?: RetryConfig | null;
@@ -106,6 +108,10 @@ export interface WebhookRepository {
     status: CallStatus,
     history: CallHistoryItem[],
     agentNumber?: string | null,
+    timestamps?: {
+      startedAt?: Date | null;
+      endedAt?: Date | null;
+    },
   ): Promise<ResolvedCallContext>;
 
   updateCallTerminalState(
@@ -121,7 +127,8 @@ export interface WebhookRepository {
       cost?: number | null;
       extracted_data?: Record<string, any> | null;
       callHistory?: unknown[] | null;
-      endedAt?: Date;
+      startedAt?: Date | null;
+      endedAt?: Date | null;
     },
   ): Promise<void>;
 

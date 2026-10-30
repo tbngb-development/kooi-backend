@@ -17,6 +17,7 @@ import {
   deduplicateCrossBatchLeads,
 } from "../../../leads/domain/rules/lead-dedup.rules";
 import { transformToBolnaCSV } from "../csv-transformer";
+import { generateBolnaBatchFilename } from "../../domain/rules/batch-filename.rules";
 import { env } from "../../../../shared/config/env";
 import {
   toBolnaISO,
@@ -312,10 +313,20 @@ export class BatchProcessingWorker {
         });
       }
 
+      const batchSequence = await this.batchRepo.getBatchSequenceNumber(
+        campaignId,
+        batchId,
+      );
+      const bolnaFileName = generateBolnaBatchFilename({
+        batchSequence,
+        batchId,
+        campaignId,
+      });
+
       const bolnaResult = await this.bolnaProvider.createBatch(tenantId, {
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
-        fileName: `bolna-${batchId}.csv`,
+        fileName: bolnaFileName,
         retryConfig: retryConfig ?? undefined,
         fromPhoneNumbers:
           outboundPhones.length > 0 ? outboundPhones : undefined,

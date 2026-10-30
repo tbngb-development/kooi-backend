@@ -27,6 +27,7 @@ import {
   deduplicateCrossBatchLeads,
 } from "../../../leads/domain/rules/lead-dedup.rules";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
+import { generateBolnaBatchFilename } from "../../domain/rules/batch-filename.rules";
 import { env } from "../../../../shared/config/env";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import {
@@ -266,11 +267,21 @@ export class CreateBatchUseCase {
       ? `${env.webhook.baseUrl}/api/webhooks/bolna-batch`
       : undefined;
 
+    const batchSequence = await this.batchRepo.getBatchSequenceNumber(
+      input.campaignId,
+      batch.id,
+    );
+    const bolnaFileName = generateBolnaBatchFilename({
+      batchSequence,
+      batchId: batch.id,
+      campaignId: input.campaignId,
+    });
+
     try {
       const result = await this.bolnaProvider.createBatch(input.tenantId, {
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
-        fileName: `bolna-${batch.id}.csv`,
+        fileName: bolnaFileName,
         retryConfig: resolvedRetryConfig,
         webhookUrl,
       });

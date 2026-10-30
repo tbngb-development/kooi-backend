@@ -121,4 +121,10 @@ export interface BatchRepository {
     batchId: string,
   ): Promise<void>;
   restore(tenantId: string, campaignId: string, batchId: string): Promise<void>;
+
+  /**
+   * Calculates the 1-based sequential batch number for a batch within its campaign.
+   * Monotonically ordered by createdAt ASC, id ASC to ensure determinism and concurrency safety.
+   */
+  getBatchSequenceNumber(campaignId: string, batchId: string): Promise<number>;
 }

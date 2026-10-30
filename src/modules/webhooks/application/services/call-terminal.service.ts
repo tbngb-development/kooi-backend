@@ -6,7 +6,10 @@ import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallLifecycleService } from "./call-lifecycle.service";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import { evaluateCallRetry } from "../../domain/rules/call-retry.rules";
-import { isTerminalCallStatus } from "../../domain/rules/call-state-machine.rules";
+import {
+  parseBolnaTimestamp,
+  resolveAttemptEndTime,
+} from "../../domain/rules/call-timestamp.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class CallTerminalService {
@@ -38,24 +41,77 @@ export class CallTerminalService {
       call.bolnaCallId ??
       "unknown";
 
-    let attemptNumber = historyList.length + 1;
+    let attemptNumber: number;
     if (
       payload?.batch_run_details?.retried !== undefined &&
       payload.batch_run_details.retried !== null
     ) {
-      attemptNumber = Math.max(attemptNumber, payload.batch_run_details.retried + 1);
+      attemptNumber = payload.batch_run_details.retried + 1;
     } else if (
       payload?.retry_count !== undefined &&
       payload.retry_count !== null
     ) {
-      attemptNumber = Math.max(attemptNumber, payload.retry_count + 1);
+      attemptNumber = payload.retry_count + 1;
+    } else if (
+      historyList.length > 0 &&
+      (historyList[historyList.length - 1].status === "CALLING" ||
+        historyList[historyList.length - 1].status === status ||
+        call.status === status)
+    ) {
+      attemptNumber = historyList[historyList.length - 1].attempt;
+    } else {
+      attemptNumber = historyList.length + 1;
+    }
+
+    const latestHistoryAttempt =
+      historyList.length > 0
+        ? Math.max(...historyList.map((h) => h.attempt ?? 0))
+        : 0;
+
+    // Guard against out-of-order terminal event from an earlier attempt
+    if (attemptNumber < latestHistoryAttempt) {
+      this.logger?.warn("Ignored out-of-order terminal event from earlier attempt", {
+        callId: call.id,
+        attemptNumber,
+        latestHistoryAttempt,
+      });
+      return;
     }
 
     const existingIdx = historyList.findIndex(
       (h) =>
         h.attempt === attemptNumber ||
-        (executionId !== "unknown" && h.bolnaCallId === executionId),
+        (historyList.length === 1 &&
+          !h.attempt &&
+          executionId !== "unknown" &&
+          h.bolnaCallId === executionId),
     );
+
+    const existingStartedAt =
+      (existingIdx >= 0 ? historyList[existingIdx].startedAt : null) ??
+      (call.startedAt ? call.startedAt.toISOString() : null);
+
+    const existingEndedAt =
+      (existingIdx >= 0 ? historyList[existingIdx].endedAt : null) ??
+      (call.endedAt ? call.endedAt.toISOString() : null);
+
+    const attemptEndTime =
+      existingIdx >= 0 &&
+      historyList[existingIdx].status !== "CALLING" &&
+      existingEndedAt
+        ? parseBolnaTimestamp(existingEndedAt) ?? resolveAttemptEndTime(payload)
+        : resolveAttemptEndTime(payload);
+
+    const attemptStartTime = existingStartedAt
+      ? parseBolnaTimestamp(existingStartedAt) ?? call.startedAt ?? attemptEndTime
+      : parseBolnaTimestamp(
+          payload?.initiated_at ??
+            payload?.telephony_data?.start_time ??
+            payload?.created_at ??
+            payload?.at,
+        ) ??
+        call.startedAt ??
+        attemptEndTime;
 
     const duration =
       typeof payload?.telephony_data?.duration === "string"
@@ -74,10 +130,9 @@ export class CallTerminalService {
       status,
       duration: duration ?? 0,
       cost: payload?.total_cost ?? 0,
-      timestamp:
-        payload?.created_at ??
-        (payload as any)?.at ??
-        new Date().toISOString(),
+      timestamp: attemptEndTime.toISOString(),
+      startedAt: attemptStartTime.toISOString(),
+      endedAt: attemptEndTime.toISOString(),
       errorMessage: payload?.error_message ?? null,
       hangupReason: payload?.telephony_data?.hangup_reason ?? null,
     };
@@ -117,7 +172,8 @@ export class CallTerminalService {
         payload?.recording_url ??
         call.recording,
       callHistory: historyList,
-      endedAt: new Date(),
+      startedAt: attemptStartTime,
+      endedAt: attemptEndTime,
     });
 
     await this.webhookRepo.updateLeadStatus(call.leadId, leadStatus);
@@ -131,6 +187,8 @@ export class CallTerminalService {
       willRetry,
       attempt: historyEntry.attempt,
       retriesCompleted,
+      startedAt: attemptStartTime.toISOString(),
+      endedAt: attemptEndTime.toISOString(),
     });
 
     if (call.campaignId && !willRetry) {
@@ -148,22 +206,47 @@ export class CallTerminalService {
       ? [...(call.callHistory as CallHistoryItem[])]
       : [];
 
+    const cancelTime = new Date();
+    const existingIdx =
+      historyList.length > 0 &&
+      historyList[historyList.length - 1].status === "CALLING"
+        ? historyList.length - 1
+        : -1;
+
+    const attemptStartTime =
+      existingIdx >= 0 && historyList[existingIdx].startedAt
+        ? parseBolnaTimestamp(historyList[existingIdx].startedAt) ??
+          call.startedAt ??
+          cancelTime
+        : call.startedAt ?? cancelTime;
+
     const historyEntry: CallHistoryItem = {
-      attempt: historyList.length + 1,
+      attempt:
+        existingIdx >= 0
+          ? historyList[existingIdx].attempt
+          : historyList.length + 1,
       bolnaCallId: call.bolnaCallId ?? "unknown",
       status: "STOPPED",
       duration: call.duration ?? 0,
       cost: call.cost ?? 0,
-      timestamp: new Date().toISOString(),
+      timestamp: cancelTime.toISOString(),
+      startedAt: attemptStartTime.toISOString(),
+      endedAt: cancelTime.toISOString(),
       errorMessage: "Call stopped / canceled",
       hangupReason: "stopped",
     };
-    historyList.push(historyEntry);
+
+    if (existingIdx >= 0) {
+      historyList[existingIdx] = historyEntry;
+    } else {
+      historyList.push(historyEntry);
+    }
 
     await this.webhookRepo.updateCallTerminalState(call.id, {
       status: "STOPPED",
       callHistory: historyList,
-      endedAt: new Date(),
+      startedAt: attemptStartTime,
+      endedAt: cancelTime,
     });
 
     await this.webhookRepo.updateLeadStatus(call.leadId, "STOPPED");
@@ -172,6 +255,8 @@ export class CallTerminalService {
       action: "webhook.call.canceled",
       callId: call.id,
       tenantId: call.tenantId,
+      startedAt: attemptStartTime.toISOString(),
+      endedAt: cancelTime.toISOString(),
     });
 
     if (call.campaignId) {

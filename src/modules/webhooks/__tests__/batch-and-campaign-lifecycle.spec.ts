@@ -248,6 +248,8 @@ describe("Batch and Campaign Lifecycle Reconciliation", () => {
         batchId: "batch-1",
         status: "COMPLETED",
         callHistory: [],
+        startedAt: null,
+        endedAt: null,
         updatedAt: new Date(),
         duration: 30,
         cost: 1,

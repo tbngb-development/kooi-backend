@@ -37,6 +37,8 @@ const callSelectFields = {
   transcript: true,
   summary: true,
   callHistory: true,
+  startedAt: true,
+  endedAt: true,
   updatedAt: true,
   batch: {
     select: {
@@ -70,6 +72,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
     transcript: string | null;
     summary: string | null;
     callHistory: unknown;
+    startedAt: Date | null;
+    endedAt: Date | null;
     updatedAt: Date;
     batch?: {
       retryConfig: unknown;
@@ -185,6 +189,10 @@ export class PrismaWebhookRepository implements WebhookRepository {
     status: CallStatus,
     callHistory: unknown[],
     agentNumber?: string | null,
+    timestamps?: {
+      startedAt?: Date | null;
+      endedAt?: Date | null;
+    },
   ): Promise<ResolvedCallContext> {
     const call = await prisma.call.update({
       where: { id: callId },
@@ -193,6 +201,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
         status,
         callHistory: callHistory as any,
         ...(agentNumber ? { agentNumber } : {}),
+        ...(timestamps?.startedAt !== undefined && { startedAt: timestamps.startedAt }),
+        ...(timestamps?.endedAt !== undefined && { endedAt: timestamps.endedAt }),
       },
       select: callSelectFields,
     });
@@ -212,7 +222,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
       cost?: number | null;
       extracted_data?: unknown;
       callHistory?: unknown[] | null;
-      endedAt?: Date;
+      startedAt?: Date | null;
+      endedAt?: Date | null;
     },
   ): Promise<void> {
     await prisma.call.update({
@@ -230,7 +241,8 @@ export class PrismaWebhookRepository implements WebhookRepository {
         ...(data.callHistory !== undefined && {
           callHistory: data.callHistory as any,
         }),
-        endedAt: data.endedAt,
+        ...(data.startedAt !== undefined && { startedAt: data.startedAt }),
+        ...(data.endedAt !== undefined && { endedAt: data.endedAt }),
       },
     });
   }

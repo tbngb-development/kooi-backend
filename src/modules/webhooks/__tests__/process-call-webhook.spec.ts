@@ -45,6 +45,8 @@ describe("ProcessCallWebhookUseCase - Retry & Lifecycle", () => {
         hangupReason: "no-answer",
       },
     ],
+    startedAt: new Date("2026-10-30T10:00:00.000Z"),
+    endedAt: new Date("2026-10-30T10:00:15.000Z"),
     updatedAt: new Date(),
     retryConfig: {
       enabled: true,
@@ -317,7 +319,21 @@ describe("ProcessCallWebhookUseCase - Retry & Lifecycle", () => {
         "call-uuid-1",
         "bolna-call-1",
         "CALLING",
-        mockResolvedCall.callHistory,
+        expect.arrayContaining([
+          expect.objectContaining({ attempt: 1, status: "NO_ANSWER" }),
+          expect.objectContaining({
+            attempt: 2,
+            bolnaCallId: "bolna-call-1",
+            status: "CALLING",
+            startedAt: expect.any(String),
+            endedAt: null,
+          }),
+        ]),
+        null,
+        expect.objectContaining({
+          startedAt: expect.any(Date),
+          endedAt: null,
+        }),
       );
       expect(webhookRepo.updateLeadStatus).toHaveBeenCalledWith("lead-uuid-1", "CALLING");
     });
