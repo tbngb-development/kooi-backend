@@ -44,7 +44,7 @@ export class VerifyPaymentUseCase {
       throw new RechargeNotFoundError(input.razorpayOrderId);
     }
 
-    // 2. Verify Razorpay HMAC signature
+    // 3. Verify Razorpay HMAC signature
     const isValid = this.payments.verifySignature({
       orderId: input.razorpayOrderId,
       paymentId: input.razorpayPaymentId,
@@ -66,7 +66,24 @@ export class VerifyPaymentUseCase {
       tenantId: recharge.tenantId,
     });
 
-    // 3. Delegate to CompletePayment (idempotent)
-    return this.completePayment.execute(input);
+    // 4. Try fetching payment method from provider (best-effort)
+    let paymentMethod: string | null = null;
+    try {
+      const orderPayments = await this.payments.getOrderPayments(
+        input.razorpayOrderId,
+      );
+      const matched = orderPayments.find((p) => p.id === input.razorpayPaymentId);
+      if (matched?.method) {
+        paymentMethod = matched.method;
+      }
+    } catch {
+      // Non-fatal if gateway query fails; completion proceeds
+    }
+
+    // 5. Delegate to CompletePayment (idempotent)
+    return this.completePayment.execute({
+      ...input,
+      paymentMethod,
+    });
   }
 }

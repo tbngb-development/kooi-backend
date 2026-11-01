@@ -23,6 +23,10 @@ export class ListTransactionsUseCase {
       limit,
       type: query.type,
       sourceType: query.sourceType,
+      ...(query.search !== undefined && { search: query.search }),
+      ...(query.excludeRecharge !== undefined && {
+        excludeRecharge: query.excludeRecharge,
+      }),
       startDate,
       endDate,
     });

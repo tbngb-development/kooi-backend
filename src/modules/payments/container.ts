@@ -25,6 +25,8 @@ import { ActivateFreeOnboardingUseCase } from "./application/use-cases/activate-
 import { ReconcilePaymentUseCase } from "./application/use-cases/reconcile-payment.use-case";
 import { ReconcileStalePaymentsUseCase } from "./application/use-cases/reconcile-stale-payments.use-case";
 import { CreatePlanUpgradeOrderUseCase } from "./application/use-cases/create-plan-upgrade-order.use-case";
+import { ListTenantPaymentsUseCase } from "./application/use-cases/list-tenant-payments.use-case";
+import { GetTenantPaymentDetailUseCase } from "./application/use-cases/get-tenant-payment-detail.use-case";
 
 // Schedulers & Controllers
 import { PaymentReconciliationScheduler } from "./infrastructure/jobs/payment-reconciliation.scheduler";
@@ -58,16 +60,14 @@ export interface PaymentModule {
 }
 
 export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
-  const log = deps.logger.child({ module: "payment" });
-  const provider =
-    deps.paymentProvider ??
-    new RazorpayProvider(log.child({ module: "razorpay-provider" }));
+  const log = deps.logger.child({ module: "payments" });
+  const provider = deps.paymentProvider ?? new RazorpayProvider(log);
 
   // ── Repositories ──────────────────────────────────────────
   const rechargeRepo = new PrismaRechargeRepository();
   const tenantEmailRepo = new PrismaTenantEmailRepository();
 
-  // ── Use cases ─────────────────────────────────────────────
+  // ── Use Cases ─────────────────────────────────────────────
   const completePayment = new CompletePaymentUseCase(
     rechargeRepo,
     deps.walletRepository,
@@ -127,6 +127,8 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
 
   const getPaymentSummary = new GetPaymentSummaryUseCase(rechargeRepo);
   const listAdminPayments = new ListAdminPaymentsUseCase(rechargeRepo);
+  const listTenantPayments = new ListTenantPaymentsUseCase(rechargeRepo);
+  const getTenantPaymentDetail = new GetTenantPaymentDetailUseCase(rechargeRepo);
 
   const activateFreeOnboarding = new ActivateFreeOnboardingUseCase(
     deps.planRepository,
@@ -174,6 +176,8 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
       verifyPayment,
       cancelPayment,
       getOrderStatus,
+      listTenantPayments,
+      getTenantPaymentDetail,
     ),
     adminController: new AdminPaymentController(
       listAdminPayments,

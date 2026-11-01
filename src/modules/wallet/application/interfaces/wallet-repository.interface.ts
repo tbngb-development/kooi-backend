@@ -44,6 +44,15 @@ export interface ListTransactionsOptions {
   sourceType?: WalletTxSourceType;
   startDate?: Date;
   endDate?: Date;
+  search?: string;
+  excludeRecharge?: boolean;
+}
+
+export interface WalletTransactionSummary {
+  totalCreditsAddedPaisa: number;
+  totalCreditsUsedPaisa: number;
+  cashBalance: number;
+  bonusBalance: number;
 }
 
 export interface ExpiredBonusWallet {
@@ -71,6 +80,13 @@ export interface WalletRepository {
     opts: ListTransactionsOptions,
   ): Promise<{ items: WalletTransaction[]; total: number }>;
 
+  getTransactionSummary(tenantId: string): Promise<WalletTransactionSummary>;
+
+  findTransactionByIdAndTenant(
+    id: string,
+    tenantId: string,
+  ): Promise<WalletTransaction | null>;
+
   /**
    * Finds all wallets with expired, non-zero bonus balances
    * belonging to active tenants with active plans.
@@ -85,7 +101,7 @@ export interface WalletRepository {
   expireBonus(tenantId: string): Promise<WalletTransaction | null>;
 
   findTransactionByIdempotencyKey(
-  walletId: string,
-  idempotencyKey: string,
-): Promise<WalletTransaction | null>;
+    walletId: string,
+    idempotencyKey: string,
+  ): Promise<WalletTransaction | null>;
 }

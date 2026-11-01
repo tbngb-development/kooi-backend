@@ -1,9 +1,10 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Recharge, RechargePurpose, RechargeStatus } from "@prisma/client";
+import type { Prisma, Recharge, RechargePurpose, RechargeStatus } from "@prisma/client";
 import type {
   RechargeRepository,
   CreateRechargeData,
   RechargeWithTenant,
+  ListTenantRechargesOptions,
 } from "../../application/interfaces/recharge-repository.interface";
 
 export class PrismaRechargeRepository implements RechargeRepository {
@@ -17,6 +18,7 @@ export class PrismaRechargeRepository implements RechargeRepository {
         purpose: data.purpose,
         status: data.status,
         provider: data.provider ?? "razorpay",
+        paymentMethod: data.paymentMethod ?? null,
         razorpayOrderId: data.razorpayOrderId ?? null,
         tenantPlanId: data.tenantPlanId ?? null,
         targetPlanVersionId: data.targetPlanVersionId ?? null,
@@ -26,6 +28,15 @@ export class PrismaRechargeRepository implements RechargeRepository {
 
   async findById(id: string): Promise<Recharge | null> {
     return prisma.recharge.findUnique({ where: { id } });
+  }
+
+  async findByIdAndTenantId(id: string, tenantId: string): Promise<Recharge | null> {
+    return prisma.recharge.findFirst({
+      where: { id, tenantId },
+      include: {
+        tenantPlan: true,
+      },
+    });
   }
 
   async findByRazorpayOrderId(orderId: string): Promise<Recharge | null> {
@@ -52,6 +63,7 @@ export class PrismaRechargeRepository implements RechargeRepository {
     rechargeId: string,
     razorpayPaymentId: string,
     razorpaySignature: string,
+    paymentMethod?: string | null,
   ): Promise<Recharge | null> {
     const result = await prisma.recharge.updateMany({
       where: {
@@ -62,6 +74,7 @@ export class PrismaRechargeRepository implements RechargeRepository {
         status: "SUCCESS",
         razorpayPaymentId,
         razorpaySignature,
+        ...(paymentMethod !== undefined ? { paymentMethod } : {}),
         completedAt: new Date(),
       },
     });
@@ -159,6 +172,48 @@ export class PrismaRechargeRepository implements RechargeRepository {
       orderBy: { createdAt: "asc" },
       take: limit,
     });
+  }
+
+  async listTenantRecharges(
+    tenantId: string,
+    opts: ListTenantRechargesOptions,
+  ): Promise<{ items: Recharge[]; total: number }> {
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.RechargeWhereInput = {
+      tenantId,
+      ...(opts.status && { status: opts.status }),
+      ...(opts.purpose && { purpose: opts.purpose }),
+      ...((opts.startDate || opts.endDate) && {
+        createdAt: {
+          ...(opts.startDate && { gte: opts.startDate }),
+          ...(opts.endDate && { lte: opts.endDate }),
+        },
+      }),
+    };
+
+    if (opts.search && opts.search.trim()) {
+      const term = opts.search.trim();
+      where.OR = [
+        { id: { contains: term, mode: "insensitive" } },
+        { razorpayOrderId: { contains: term, mode: "insensitive" } },
+        { razorpayPaymentId: { contains: term, mode: "insensitive" } },
+      ];
+    }
+
+    const [items, total] = await prisma.$transaction([
+      prisma.recharge.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: opts.limit,
+        include: {
+          tenantPlan: true,
+        },
+      }),
+      prisma.recharge.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   async listWithTenant(

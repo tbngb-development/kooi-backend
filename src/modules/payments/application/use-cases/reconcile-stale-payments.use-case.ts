@@ -79,6 +79,7 @@ export class ReconcileStalePaymentsUseCase {
             razorpayOrderId: recharge.razorpayOrderId,
             razorpayPaymentId: captured.id,
             razorpaySignature: "reconciled_stale_batch",
+            paymentMethod: captured.method,
           });
           result.reconciledSuccessCount++;
           continue;
@@ -99,6 +100,7 @@ export class ReconcileStalePaymentsUseCase {
               razorpayOrderId: recharge.razorpayOrderId,
               razorpayPaymentId: capturedResult.id,
               razorpaySignature: "reconciled_stale_autocapture",
+              paymentMethod: capturedResult.method ?? authorized.method,
             });
             result.reconciledSuccessCount++;
             continue;
