@@ -6,7 +6,16 @@ export const scheduleBatchSchema = z.object({
     .min(1, "scheduledAt is required (ISO 8601 with timezone)"),
 });
 
+export const updateBatchNameBodySchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Batch name is required")
+    .max(100, "Batch name cannot exceed 100 characters"),
+});
+
 export const createBatchBodySchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
   termsAccepted: z
     .string()
     .transform((val) => val === "true")
@@ -42,6 +51,7 @@ export const manualLeadSchema = z.object({
 });
 
 export const createManualBatchBodySchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
   termsAccepted: z.literal(true, {
     message: "You must accept the Terms & Conditions to submit leads.",
   }),
@@ -60,3 +70,5 @@ export type CreateManualBatchBody = z.infer<typeof createManualBatchBodySchema>;
 export type CreateBatchBody = z.infer<typeof createBatchBodySchema>;
 
 export type RetryConfigBody = z.infer<typeof retryConfigSchema>;
+
+export type UpdateBatchNameBody = z.infer<typeof updateBatchNameBodySchema>;

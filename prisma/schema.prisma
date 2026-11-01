@@ -210,6 +210,7 @@ enum CampaignStatus {
 
 model LeadBatch {
   id                String      @id @default(uuid())
+  name              String?
   bolnaBatchId      String?     @unique
   campaignId        String
   tenantId          String
@@ -1227,4 +1228,4 @@ enum PhoneCapability {
   INBOUND
   OUTBOUND
   BOTH
-}
+}

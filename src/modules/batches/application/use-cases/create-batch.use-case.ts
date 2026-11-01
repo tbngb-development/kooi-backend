@@ -27,6 +27,9 @@ import {
   deduplicateCrossBatchLeads,
 } from "../../../leads/domain/rules/lead-dedup.rules";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
+import {
+  generateBatchDisplayName,
+} from "../../domain/rules/bolna-filename.rules";
 import { env } from "../../../../shared/config/env";
 import { type RetryConfig } from "../../../../shared/types/bolna.types";
 import {
@@ -211,6 +214,7 @@ export class CreateBatchUseCase {
 
     // 10. Create batch initially as CREATED
     const batch = await this.batchRepo.create({
+      name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
       fileName: input.fileName,
@@ -266,11 +270,24 @@ export class CreateBatchUseCase {
       ? `${env.webhook.baseUrl}/api/webhooks/bolna-batch`
       : undefined;
 
+    const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
+      input.campaignId,
+      batch.id,
+    );
+    const autoBatchName = generateBatchDisplayName({
+      sequenceNumber,
+      batchId: batch.id,
+      campaignName: campaign.name,
+      campaignId: input.campaignId,
+    });
+    const resolvedName = input.name?.trim() || autoBatchName;
+    const bolnaFileName = `${autoBatchName}.csv`;
+
     try {
       const result = await this.bolnaProvider.createBatch(input.tenantId, {
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
-        fileName: `bolna-${batch.id}.csv`,
+        fileName: bolnaFileName,
         retryConfig: resolvedRetryConfig,
         webhookUrl,
       });
@@ -310,6 +327,7 @@ export class CreateBatchUseCase {
 
     // 15. Complete the batch creation and apply transitions
     const updatedBatch = await this.batchRepo.update(batch.id, {
+      name: resolvedName,
       bolnaBatchId,
       originalFileUrl,
       status: finalStatus,

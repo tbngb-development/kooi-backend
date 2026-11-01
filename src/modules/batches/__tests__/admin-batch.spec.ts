@@ -4,12 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminBatchController } from "../presentation/admin-batch.controller";
 import { RetryFailedBatchUseCase } from "../application/use-cases/retry-failed-batch.use-case";
 import { CampaignNotFoundError } from "../../campaigns/domain/errors/campaign.errors";
-import { BatchNotFoundError } from "../domain/errors/batch.errors";
+import { BatchNotFoundError, BatchOperationError } from "../domain/errors/batch.errors";
+import { UpdateBatchNameUseCase } from "../application/use-cases/update-batch-name.use-case";
 import prisma from "../../../shared/config/database/prisma";
 import type { Request, Response } from "express";
 
 vi.mock("../../../shared/config/database/prisma", () => ({
   default: {
+    tenant: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     leadBatch: {
       findUnique: vi.fn(),
     },
@@ -68,6 +72,10 @@ describe("Admin Batch Module & Operational Controls", () => {
     execute: vi.fn(),
   };
 
+  const mockUpdateBatchNameUseCase = {
+    execute: vi.fn(),
+  };
+
   let controller: AdminBatchController;
 
   beforeEach(() => {
@@ -81,6 +89,7 @@ describe("Admin Batch Module & Operational Controls", () => {
       mockStopBatchUseCase as any,
       mockResumeBatchUseCase as any,
       mockRetryFailedBatchUseCase as any,
+      mockUpdateBatchNameUseCase as any,
     );
   });
 
@@ -302,6 +311,152 @@ describe("Admin Batch Module & Operational Controls", () => {
       );
       expect(result.retriedCount).toBe(2);
       expect(result.message).toContain("Successfully queued 2 failed leads");
+    });
+  });
+
+  describe("AdminBatchController.updateName", () => {
+    it("successfully updates batch name via controller", async () => {
+      mockUpdateBatchNameUseCase.execute.mockResolvedValueOnce({
+        id: "batch-1",
+        name: "Renamed Lead Batch",
+      });
+
+      const req = {
+        query: { tenantId: "tenant-1", campaignId: "camp-1" },
+        params: { id: "batch-1" },
+        body: { name: "Renamed Lead Batch" },
+      } as unknown as Request;
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      const next = vi.fn();
+
+      await controller.updateName(req, res, next);
+
+      expect(mockUpdateBatchNameUseCase.execute).toHaveBeenCalledWith({
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        name: "Renamed Lead Batch",
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          message: "Batch name updated successfully",
+        }),
+      );
+    });
+  });
+
+  describe("UpdateBatchNameUseCase", () => {
+    let useCase: UpdateBatchNameUseCase;
+
+    beforeEach(() => {
+      useCase = new UpdateBatchNameUseCase(
+        mockBatchRepo as any,
+        mockCampaignRepo as any,
+      );
+    });
+
+    it("successfully updates the batch name", async () => {
+      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockBatchRepo.findById.mockResolvedValueOnce({
+        id: "batch-1",
+        name: "Old Name",
+      });
+      mockBatchRepo.update.mockResolvedValueOnce({
+        id: "batch-1",
+        name: "New Name",
+      });
+
+      const result = await useCase.execute({
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        name: "  New Name  ",
+      });
+
+      expect(mockBatchRepo.update).toHaveBeenCalledWith("batch-1", {
+        name: "New Name",
+      });
+      expect(result.name).toBe("New Name");
+    });
+
+    it("successfully updates batch name when initial name is null", async () => {
+      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockBatchRepo.findById.mockResolvedValueOnce({
+        id: "batch-1",
+        name: null,
+      });
+      mockBatchRepo.update.mockResolvedValueOnce({
+        id: "batch-1",
+        name: "First Custom Name",
+      });
+
+      const result = await useCase.execute({
+        tenantId: "tenant-1",
+        campaignId: "camp-1",
+        batchId: "batch-1",
+        name: "First Custom Name",
+      });
+
+      expect(mockBatchRepo.update).toHaveBeenCalledWith("batch-1", {
+        name: "First Custom Name",
+      });
+      expect(result.name).toBe("First Custom Name");
+    });
+
+    it("throws BatchOperationError when name is empty or whitespace", async () => {
+      await expect(
+        useCase.execute({
+          tenantId: "tenant-1",
+          campaignId: "camp-1",
+          batchId: "batch-1",
+          name: "   ",
+        }),
+      ).rejects.toThrow(BatchOperationError);
+    });
+
+    it("throws BatchOperationError when name exceeds 100 characters", async () => {
+      await expect(
+        useCase.execute({
+          tenantId: "tenant-1",
+          campaignId: "camp-1",
+          batchId: "batch-1",
+          name: "a".repeat(101),
+        }),
+      ).rejects.toThrow(BatchOperationError);
+    });
+
+    it("throws CampaignNotFoundError when campaign is not found", async () => {
+      mockCampaignRepo.findById.mockResolvedValueOnce(null);
+
+      await expect(
+        useCase.execute({
+          tenantId: "tenant-1",
+          campaignId: "camp-missing",
+          batchId: "batch-1",
+          name: "Valid Name",
+        }),
+      ).rejects.toThrow(CampaignNotFoundError);
+    });
+
+    it("throws BatchNotFoundError when batch is not found", async () => {
+      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockBatchRepo.findById.mockResolvedValueOnce(null);
+
+      await expect(
+        useCase.execute({
+          tenantId: "tenant-1",
+          campaignId: "camp-1",
+          batchId: "batch-missing",
+          name: "Valid Name",
+        }),
+      ).rejects.toThrow(BatchNotFoundError);
     });
   });
 });
