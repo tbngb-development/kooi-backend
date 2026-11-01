@@ -11,6 +11,7 @@ import { type RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface LeadBatchEntityData {
   id: string;
+  name: string | null;
   bolnaBatchId: string | null;
   tenantId: string;
   campaignId: string;
@@ -45,6 +46,9 @@ export class LeadBatchEntity {
 
   get id(): string {
     return this.data.id;
+  }
+  get name(): string | null {
+    return this.data.name;
   }
   get status(): BatchStatus {
     return this.data.status;

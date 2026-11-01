@@ -26,6 +26,7 @@ import { RestoreBatchUseCase } from "./application/use-cases/restore-batch.use-c
 import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue-manual-batch-upload.use-case";
 import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 import { RetryFailedBatchUseCase } from "./application/use-cases/retry-failed-batch.use-case";
+import { UpdateBatchNameUseCase } from "./application/use-cases/update-batch-name.use-case";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -68,6 +69,11 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     batchRepo,
     campaignRepo,
     resumeBatch,
+    log,
+  );
+  const updateBatchName = new UpdateBatchNameUseCase(
+    batchRepo,
+    campaignRepo,
     log,
   );
 
@@ -132,6 +138,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       stopBatch,
       resumeBatch,
       retryFailedBatch,
+      updateBatchName,
     ),
     schedulers: { batchProcessing: batchProcessingScheduler },
   };

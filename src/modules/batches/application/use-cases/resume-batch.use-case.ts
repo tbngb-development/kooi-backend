@@ -11,6 +11,7 @@ import {
 } from "../../domain/errors/batch.errors";
 import { CampaignNotFoundError } from "../../../campaigns/domain/errors/campaign.errors";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
+import { generateBolnaBatchFilename } from "../../domain/rules/bolna-filename.rules";
 import { env } from "../../../../shared/config/env";
 import type { LeadRow } from "../../../leads/infrastructure/leadParser";
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
@@ -67,6 +68,7 @@ export class ResumeBatchUseCase {
 
     // Create new batch
     const newBatch = await this.batchRepo.create({
+      name: `Resume - ${batchData.name || batchData.fileName || "Untitled"}`,
       campaignId,
       tenantId,
       fileName: `resume-${batchData.fileName ?? batchId}`,
@@ -105,10 +107,21 @@ export class ResumeBatchUseCase {
 
     let bolnaBatchId: string;
     try {
+      const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
+        campaignId,
+        newBatch.id,
+      );
+      const bolnaFileName = generateBolnaBatchFilename({
+        sequenceNumber,
+        batchId: newBatch.id,
+        campaignName: campaign.name,
+        campaignId,
+      });
+
       const result = await this.bolnaProvider.createBatch(tenantId, {
         agentId: campaign.assistant.platformAgent.bolnaId,
         csvBuffer: transformedBuffer,
-        fileName: `resume-${newBatch.id}.csv`,
+        fileName: bolnaFileName,
         retryConfig: retryConfig as unknown as RetryConfig,
         webhookUrl,
       });

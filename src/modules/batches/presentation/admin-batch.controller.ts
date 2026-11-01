@@ -13,6 +13,7 @@ import type { RestoreBatchUseCase } from "../application/use-cases/restore-batch
 import type { StopBatchUseCase } from "../application/use-cases/stop-batch.use-case";
 import type { ResumeBatchUseCase } from "../application/use-cases/resume-batch.use-case";
 import type { RetryFailedBatchUseCase } from "../application/use-cases/retry-failed-batch.use-case";
+import type { UpdateBatchNameUseCase } from "../application/use-cases/update-batch-name.use-case";
 import prisma from "../../../shared/config/database/prisma";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
 
@@ -26,6 +27,7 @@ export class AdminBatchController {
     private readonly stopBatchUseCase: StopBatchUseCase,
     private readonly resumeBatchUseCase: ResumeBatchUseCase,
     private readonly retryFailedBatchUseCase: RetryFailedBatchUseCase,
+    private readonly updateBatchNameUseCase: UpdateBatchNameUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -95,6 +97,22 @@ export class AdminBatchController {
       const campaignId = await this.resolveCampaignId(req, batchId);
       await this.restoreBatchUseCase.execute(tenantId, campaignId, batchId);
       sendSuccess(res, { id: batchId }, 200, "Batch restored by Admin");
+    } catch (err) { next(err); }
+  };
+
+  updateName = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const batchId = param(req, "id");
+      const campaignId = await this.resolveCampaignId(req, batchId);
+      const { name } = req.body;
+      const data = await this.updateBatchNameUseCase.execute({
+        tenantId,
+        campaignId,
+        batchId,
+        name,
+      });
+      sendSuccess(res, data, 200, "Batch name updated successfully");
     } catch (err) { next(err); }
   };
 

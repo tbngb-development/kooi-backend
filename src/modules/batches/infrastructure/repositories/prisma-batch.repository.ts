@@ -287,6 +287,7 @@ export class PrismaBatchRepository implements BatchRepository {
   async create(data: CreateBatchData): Promise<LeadBatchEntityData> {
     const batch = await prisma.leadBatch.create({
       data: {
+        name: data.name ?? null,
         campaignId: data.campaignId,
         tenantId: data.tenantId,
         status: "CREATED",
@@ -376,6 +377,8 @@ export class PrismaBatchRepository implements BatchRepository {
   async update(
     batchId: string,
     data: {
+      name?: string;
+      fileName?: string;
       status?: BatchStatus;
       bolnaBatchId?: string;
       originalFileUrl?: string;
@@ -685,6 +688,44 @@ export class PrismaBatchRepository implements BatchRepository {
     await this.recalculateCampaignStats(campaignId);
   }
 
+  async getBatchSequenceNumber(
+    campaignId: string,
+    batchId: string,
+  ): Promise<number> {
+    const targetBatch = await prisma.leadBatch.findUnique({
+      where: { id: batchId },
+      select: { id: true, createdAt: true, campaignId: true },
+    });
+
+    if (!targetBatch) {
+      const totalCount = await prisma.leadBatch.count({
+        where: { campaignId },
+      });
+      return totalCount + 1;
+    }
+
+    const count = await prisma.leadBatch.count({
+      where: {
+        campaignId: targetBatch.campaignId,
+        OR: [
+          {
+            createdAt: {
+              lt: targetBatch.createdAt,
+            },
+          },
+          {
+            createdAt: targetBatch.createdAt,
+            id: {
+              lte: targetBatch.id,
+            },
+          },
+        ],
+      },
+    });
+
+    return Math.max(1, count);
+  }
+
   async cascadeStatusFromCampaign(
     campaignId: string,
     targetStatus: BatchStatus,
@@ -718,6 +759,7 @@ export class PrismaBatchRepository implements BatchRepository {
   private toEntityData(
     batch: {
       id: string;
+      name?: string | null;
       bolnaBatchId: string | null;
       tenantId: string;
       campaignId: string;
@@ -751,6 +793,7 @@ export class PrismaBatchRepository implements BatchRepository {
   ): LeadBatchEntityData {
     return {
       id: batch.id,
+      name: batch.name ?? null,
       bolnaBatchId: batch.bolnaBatchId,
       tenantId: batch.tenantId,
       campaignId: batch.campaignId,

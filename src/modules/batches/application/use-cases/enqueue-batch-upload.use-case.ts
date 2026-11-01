@@ -20,6 +20,7 @@ import {
   TrialExpiredError,
 } from "../../../plans/domain/errors/plan.errors";
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
+import { generateBatchDisplayName } from "../../domain/rules/bolna-filename.rules";
 
 export interface EnqueueBatchResult {
   batchId: string;
@@ -156,6 +157,7 @@ export class EnqueueBatchUploadUseCase {
 
     // 7. Create batch record with PROCESSING status
     const batch = await this.batchRepo.create({
+      name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
       fileName: input.fileName,
@@ -166,8 +168,25 @@ export class EnqueueBatchUploadUseCase {
       termsVersion: input.termsVersion,
     });
 
+    // Auto-generate standardized batch name if not explicitly provided
+    const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
+      input.campaignId,
+      batch.id,
+    );
+    const autoBatchName = generateBatchDisplayName({
+      sequenceNumber,
+      batchId: batch.id,
+      campaignName: campaign.name,
+      campaignId: input.campaignId,
+    });
+    const resolvedName = input.name?.trim() || autoBatchName;
+    const isManualBatch = input.fileName.startsWith("batch-manual-");
+    const finalFileName = isManualBatch ? `${autoBatchName}.csv` : input.fileName;
+
     // Set status to PROCESSING and store raw file URL
     await this.batchRepo.update(batch.id, {
+      name: resolvedName,
+      fileName: finalFileName,
       status: "PROCESSING",
     });
     await this.batchRepo.updateRawFileUrl(batch.id, rawFileUrl);
@@ -180,7 +199,7 @@ export class EnqueueBatchUploadUseCase {
         tenantId: input.tenantId,
         campaignId: input.campaignId,
         rawFileUrl,
-        fileName: input.fileName,
+        fileName: finalFileName,
         scheduledAt: input.scheduledAt ?? null,
         runImmediately: input.runImmediately ?? false,
         retryConfig: input.retryConfig ?? null,

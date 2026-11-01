@@ -51,6 +51,8 @@ export interface BatchRepository {
   update(
     batchId: string,
     data: {
+      name?: string;
+      fileName?: string;
       status?: BatchStatus;
       bolnaBatchId?: string;
       originalFileUrl?: string;
@@ -100,6 +102,11 @@ export interface BatchRepository {
     campaignId: string,
     phones: string[],
   ): Promise<Set<string>>;
+
+  getBatchSequenceNumber(
+    campaignId: string,
+    batchId: string,
+  ): Promise<number>;
 
   updateProgress(
     batchId: string,
