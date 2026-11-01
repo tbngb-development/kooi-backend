@@ -2,6 +2,7 @@ import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import { type LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 
 export interface CreateBatchData {
+  name?: string | null;
   campaignId: string;
   tenantId: string;
   fileName: string;
@@ -13,6 +14,7 @@ export interface CreateBatchData {
 }
 
 export interface CreateBatchInput {
+  name?: string | null;
   tenantId: string;
   campaignId: string;
   fileBuffer: Buffer;
@@ -90,6 +92,13 @@ export interface ResumeBatchOutput {
   message: string;
 }
 
+export interface UpdateBatchNameInput {
+  tenantId: string;
+  campaignId: string;
+  batchId: string;
+  name: string;
+}
+
 // ── Manual Batch Entry ─────────────────────────────────────────────────────
 
 export interface ManualLeadInput {
@@ -98,6 +107,7 @@ export interface ManualLeadInput {
 }
 
 export interface CreateManualBatchInput {
+  name?: string | null;
   tenantId: string;
   campaignId: string;
   leads: ManualLeadInput[];

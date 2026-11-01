@@ -36,6 +36,7 @@ export class EnqueueManualBatchUploadUseCase {
     });
 
     return this.enqueueBatchUpload.execute({
+      name: input.name?.trim() || undefined,
       tenantId: input.tenantId,
       campaignId: input.campaignId,
       fileBuffer: csvBuffer,

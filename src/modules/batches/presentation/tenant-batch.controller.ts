@@ -105,6 +105,7 @@ export class TenantBatchController {
         }
       }
 
+      const name = req.body.name as string | undefined;
       const scheduledAt = req.body.scheduledAt as string | undefined;
       const runImmediately =
         req.body.runImmediately === "true" || req.body.runImmediately === true;
@@ -127,6 +128,7 @@ export class TenantBatchController {
       }
 
       const data = await this.enqueueBatchUploadUseCase.execute({
+        name: name?.trim() || undefined,
         tenantId,
         campaignId,
         fileBuffer: req.file.buffer,
@@ -154,6 +156,7 @@ export class TenantBatchController {
       const campaignId = param(req, "campaignId");
 
       const data = await this.enqueueManualBatchUploadUseCase.execute({
+        name: req.body.name,
         tenantId,
         campaignId,
         leads: req.body.leads,

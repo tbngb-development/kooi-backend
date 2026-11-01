@@ -4,6 +4,8 @@ import { Router } from "express";
 import type { AdminBatchController } from "./admin-batch.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
+import { validate } from "../../../shared/middleware/validate";
+import { updateBatchNameBodySchema } from "./batch.schema";
 
 export function buildAdminBatchRoutes(
   controller: AdminBatchController,
@@ -18,6 +20,7 @@ export function buildAdminBatchRoutes(
   router.get("/", controller.list);
   router.get("/:id", controller.get);
   router.get("/:id/stats", controller.stats);
+  router.patch("/:id/name", validate(updateBatchNameBodySchema), controller.updateName);
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);
 
