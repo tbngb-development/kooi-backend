@@ -60,6 +60,7 @@ export class CompletePaymentUseCase {
       recharge.id,
       input.razorpayPaymentId,
       input.razorpaySignature,
+      input.paymentMethod,
     );
 
     if (!updated) {

@@ -7,6 +7,7 @@ import type {
   DebitWalletData,
   ListTransactionsOptions,
   ExpiredBonusWallet,
+  WalletTransactionSummary,
 } from "../../application/interfaces/wallet-repository.interface";
 import {
   computeBonusFirstDeduction,
@@ -247,6 +248,7 @@ export class PrismaWalletRepository implements WalletRepository {
       tenantId,
       ...(opts.type && { type: opts.type }),
       ...(opts.sourceType && { sourceType: opts.sourceType }),
+      ...(opts.excludeRecharge && { NOT: { sourceType: "RECHARGE" } }),
       ...((opts.startDate || opts.endDate) && {
         createdAt: {
           ...(opts.startDate && { gte: opts.startDate }),
@@ -254,6 +256,15 @@ export class PrismaWalletRepository implements WalletRepository {
         },
       }),
     };
+
+    if (opts.search && opts.search.trim()) {
+      const term = opts.search.trim();
+      where.OR = [
+        { id: { contains: term, mode: "insensitive" } },
+        { description: { contains: term, mode: "insensitive" } },
+        { sourceId: { contains: term, mode: "insensitive" } },
+      ];
+    }
 
     const [items, total] = await prisma.$transaction([
       prisma.walletTransaction.findMany({
@@ -378,6 +389,62 @@ export class PrismaWalletRepository implements WalletRepository {
   ): Promise<WalletTransaction | null> {
     return prisma.walletTransaction.findFirst({
       where: { walletId, idempotencyKey },
+    });
+  }
+
+  async getTransactionSummary(
+    tenantId: string,
+  ): Promise<WalletTransactionSummary> {
+    const wallet = await this.findByTenantId(tenantId);
+    const cashBalance = wallet?.cashBalance ?? 0;
+    const bonusBalance = wallet?.bonusBalance ?? 0;
+
+    // 1. Total positive credits added, strictly excluding RECHARGE
+    const creditsAddedAgg = await prisma.walletTransaction.aggregate({
+      where: {
+        tenantId,
+        NOT: { sourceType: "RECHARGE" },
+        OR: [
+          { cashDelta: { gt: 0 } },
+          { bonusDelta: { gt: 0 } },
+        ],
+      },
+      _sum: {
+        cashDelta: true,
+        bonusDelta: true,
+      },
+    });
+
+    const cashAdded = Math.max(creditsAddedAgg._sum.cashDelta ?? 0, 0);
+    const bonusAdded = Math.max(creditsAddedAgg._sum.bonusDelta ?? 0, 0);
+    const totalCreditsAddedPaisa = cashAdded + bonusAdded;
+
+    // 2. Total credits used: All-time wallet debit activity (type = 'DEBIT')
+    const debitsAgg = await prisma.walletTransaction.aggregate({
+      where: {
+        tenantId,
+        type: "DEBIT",
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+    const totalCreditsUsedPaisa = debitsAgg._sum.amount ?? 0;
+
+    return {
+      totalCreditsAddedPaisa,
+      totalCreditsUsedPaisa,
+      cashBalance,
+      bonusBalance,
+    };
+  }
+
+  async findTransactionByIdAndTenant(
+    id: string,
+    tenantId: string,
+  ): Promise<WalletTransaction | null> {
+    return prisma.walletTransaction.findFirst({
+      where: { id, tenantId },
     });
   }
 }

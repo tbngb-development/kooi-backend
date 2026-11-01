@@ -18,6 +18,8 @@ export function buildTenantWalletRoutes(
     validateQuery(listTransactionsQuerySchema),
     controller.listTransactions,
   );
+  router.get("/transactions/summary", controller.summary);
+  router.get("/transactions/:id", controller.getTransaction);
 
   return router;
 }

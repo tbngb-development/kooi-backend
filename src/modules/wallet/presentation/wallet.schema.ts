@@ -28,4 +28,5 @@ export const listTransactionsQuerySchema = z.object({
     .optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
+  search: z.string().trim().optional(),
 });

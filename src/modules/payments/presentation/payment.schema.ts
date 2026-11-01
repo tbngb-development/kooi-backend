@@ -64,3 +64,22 @@ export const listAdminPaymentsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(20),
 });
+
+export const listTenantPaymentsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+  status: z
+    .enum([
+      "INITIATED",
+      "SUCCESS",
+      "FAILED",
+      "REFUNDED",
+      "CANCELLED",
+      "EXPIRED",
+    ])
+    .optional(),
+  purpose: z.enum(["ONBOARDING", "WALLET_TOPUP"]).optional(),
+  search: z.string().trim().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+});

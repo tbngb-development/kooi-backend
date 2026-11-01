@@ -23,6 +23,7 @@ describe("ProcessRazorpayWebhookUseCase — Lifecycle & Webhook Events", () => {
     purpose: "WALLET_TOPUP",
     status: "INITIATED",
     provider: "razorpay",
+    paymentMethod: null,
     razorpayOrderId: "order_wh_123",
     razorpayPaymentId: null,
     razorpaySignature: null,
@@ -55,6 +56,8 @@ describe("ProcessRazorpayWebhookUseCase — Lifecycle & Webhook Events", () => {
       findStaleInitiated: vi.fn(),
       listWithTenant: vi.fn(),
       getSummary: vi.fn(),
+      findByIdAndTenantId: vi.fn(),
+      listTenantRecharges: vi.fn(),
     };
 
     mockPayments = {
@@ -200,6 +203,7 @@ describe("ProcessRazorpayWebhookUseCase — Lifecycle & Webhook Events", () => {
       razorpayOrderId: "order_wh_123",
       razorpayPaymentId: "pay_late_capture_777",
       razorpaySignature: "webhook:valid_sig_late",
+      paymentMethod: "upi",
     });
   });
 });

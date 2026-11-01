@@ -13,6 +13,8 @@ import { CheckLowBalanceUseCase } from "./application/use-cases/check-low-balanc
 import { StopBatchesOnInsufficientBalanceUseCase } from "./application/use-cases/stop-batches-on-insufficient-balance.use-case";
 import { GetWalletUseCase } from "./application/use-cases/get-wallet.use-case";
 import { ListTransactionsUseCase } from "./application/use-cases/list-transactions.use-case";
+import { GetWalletSummaryUseCase } from "./application/use-cases/get-wallet-summary.use-case";
+import { GetTransactionDetailUseCase } from "./application/use-cases/get-transaction-detail.use-case";
 import { AdjustWalletUseCase } from "./application/use-cases/adjust-wallet.use-case";
 import { DebitWalletForCallUseCase } from "./application/use-cases/debit-wallet.use-case";
 import { ExpireBonusCreditsUseCase } from "./application/use-cases/expire-bonus-credits.use-case";
@@ -57,6 +59,8 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
 
   const getWallet = new GetWalletUseCase(repository);
   const listTransactions = new ListTransactionsUseCase(repository);
+  const getWalletSummary = new GetWalletSummaryUseCase(repository);
+  const getTransactionDetail = new GetTransactionDetailUseCase(repository);
   const adjustWallet = new AdjustWalletUseCase(repository, log);
 
   const checkLowBalance = new CheckLowBalanceUseCase(
@@ -100,7 +104,12 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
 
   return {
     repository,
-    tenantController: new TenantWalletController(getWallet, listTransactions),
+    tenantController: new TenantWalletController(
+      getWallet,
+      listTransactions,
+      getWalletSummary,
+      getTransactionDetail,
+    ),
     adminController: new AdminWalletController(
       getWallet,
       listTransactions,
