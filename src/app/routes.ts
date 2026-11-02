@@ -20,6 +20,7 @@ import { buildAdminBatchRoutes } from "../modules/batches/presentation/admin-bat
 import { buildAdminPlanRoutes } from "../modules/plans/presentation/admin-plan.routes";
 import { buildTenantPlanRoutes } from "../modules/plans/presentation/tenant-plan.routes";
 import { buildAdminBolnaApiKeyRoutes } from "../modules/bolna-api-keys/presentation/admin-bolna-api-key.routes";
+import { buildAdminSarvamConfigurationRoutes } from "../modules/sarvam-configurations/presentation/admin-sarvam-configuration.routes";
 import { buildTenantPaymentRoutes } from "../modules/payments/presentation/tenant-payment.routes";
 import { buildTenantWalletRoutes } from "../modules/wallet/presentation/tenant-wallet.routes";
 import {
@@ -288,6 +289,15 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+
+  const sarvamRoutes = buildAdminSarvamConfigurationRoutes(
+    c.sarvamConfigurations.adminController,
+    c.authenticate,
+    c.authorize,
+  );
+  router.use("/v1/admin/sarvam-configurations", sarvamRoutes);
+  router.use("/v1/platform-admin/sarvam-configurations", sarvamRoutes);
+  router.use("/platform-admin/sarvam-configurations", sarvamRoutes);
 
   router.use(
     "/v1/admin/wallet",

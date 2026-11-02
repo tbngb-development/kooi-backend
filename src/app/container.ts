@@ -46,6 +46,11 @@ import {
 } from "../modules/webhooks/container";
 import { buildPlanModule, type PlanModule } from "../modules/plans/container";
 import {
+  buildSarvamConfigurationModule,
+  type SarvamConfigurationModule,
+} from "../modules/sarvam-configurations/container";
+import { env } from "../shared/config/env";
+import {
   buildBolnaApiKeyModule,
   type BolnaApiKeyModule,
 } from "../modules/bolna-api-keys/container";
@@ -128,6 +133,7 @@ export interface AppContainer {
   phoneNumbers: PhoneNumberModule;
   contact: ContactModule;
   tenantApiKeys: TenantApiKeyModule;
+  sarvamConfigurations: SarvamConfigurationModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
@@ -309,6 +315,10 @@ export function buildContainer(): AppContainer {
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),
     tenantApiKeys,
+    sarvamConfigurations: buildSarvamConfigurationModule({
+      encryptionSecret: env.sarvam.encryptionSecret,
+      logger,
+    }),
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture

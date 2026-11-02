@@ -48,6 +48,10 @@ export const env = {
     bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
   },
 
+  sarvam: {
+    encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
+  },
+
   webhook: {
     baseUrl: process.env.WEBHOOK_BASE_URL || "",
     webhookSecret: process.env.WEBHOOK_SECRET || "",
