@@ -51,7 +51,7 @@ model Tenant {
   callAnalyses  CallAnalysis[]
   phoneNumbers  PhoneNumber[]
   apiKeys       TenantApiKey[]
-  sarvamConfiguration SarvamConfiguration?
+  sarvamApiKey  SarvamApiKey?
 
   @@index([email])
 }
@@ -448,32 +448,6 @@ enum PricingModel {
   CUSTOM
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model SarvamConfiguration {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  apiKeyEncrypted String
-  workspaceId     String
-  organizationId  String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String
-  updatedBy       String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([isActive])
-}
-
-enum PlaceholderRemoved {
-  NONE
-}
-
 enum CallingChannel {
   SHARED
   DEDICATED
@@ -487,32 +461,6 @@ enum DashboardTier {
   CUSTOM
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model SarvamConfiguration {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  apiKeyEncrypted String
-  workspaceId     String
-  organizationId  String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String
-  updatedBy       String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([isActive])
-}
-
-enum PlaceholderRemoved {
-  NONE
-}
-
 enum AgentCapability {
   BASIC
   BASIC_KNOWLEDGE
@@ -520,63 +468,11 @@ enum AgentCapability {
   CUSTOM
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model SarvamConfiguration {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  apiKeyEncrypted String
-  workspaceId     String
-  organizationId  String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String
-  updatedBy       String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([isActive])
-}
-
-enum PlaceholderRemoved {
-  NONE
-}
-
 enum IntegrationTier {
   NONE
   BASIC
   API_SELECTED
   CUSTOM
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model SarvamConfiguration {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  apiKeyEncrypted String
-  workspaceId     String
-  organizationId  String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String
-  updatedBy       String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([isActive])
-}
-
-enum PlaceholderRemoved {
-  NONE
 }
 
 enum SupportTier {
@@ -872,10 +768,10 @@ enum BolnaApiKeyType {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
+// SARVAM AI API KEYS
 // ─────────────────────────────────────────────────────────────────────────────
 
-model SarvamConfiguration {
+model SarvamApiKey {
   id              String   @id @default(uuid())
   tenantId        String   @unique
   apiKeyEncrypted String
@@ -891,32 +787,6 @@ model SarvamConfiguration {
 
   @@index([tenantId])
   @@index([isActive])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SARVAM AI CREDENTIALS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model SarvamConfiguration {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  apiKeyEncrypted String
-  workspaceId     String
-  organizationId  String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String
-  updatedBy       String?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([isActive])
-}
-
-enum PlaceholderRemoved {
-  NONE
 }
 
 model TenantInvite {

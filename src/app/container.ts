@@ -46,9 +46,9 @@ import {
 } from "../modules/webhooks/container";
 import { buildPlanModule, type PlanModule } from "../modules/plans/container";
 import {
-  buildSarvamConfigurationModule,
-  type SarvamConfigurationModule,
-} from "../modules/sarvam-configurations/container";
+  buildSarvamApiKeyModule,
+  type SarvamApiKeyModule,
+} from "../modules/sarvam-api-keys/container";
 import { env } from "../shared/config/env";
 import {
   buildBolnaApiKeyModule,
@@ -133,7 +133,8 @@ export interface AppContainer {
   phoneNumbers: PhoneNumberModule;
   contact: ContactModule;
   tenantApiKeys: TenantApiKeyModule;
-  sarvamConfigurations: SarvamConfigurationModule;
+  sarvamApiKeys: SarvamApiKeyModule;
+  sarvamConfigurations: SarvamApiKeyModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
@@ -285,6 +286,11 @@ export function buildContainer(): AppContainer {
     logger,
   );
 
+  const sarvamApiKeys = buildSarvamApiKeyModule({
+    encryptionSecret: env.sarvam.encryptionSecret,
+    logger,
+  });
+
   return {
     logger,
     auth,
@@ -315,10 +321,8 @@ export function buildContainer(): AppContainer {
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),
     tenantApiKeys,
-    sarvamConfigurations: buildSarvamConfigurationModule({
-      encryptionSecret: env.sarvam.encryptionSecret,
-      logger,
-    }),
+    sarvamApiKeys,
+    sarvamConfigurations: sarvamApiKeys,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture

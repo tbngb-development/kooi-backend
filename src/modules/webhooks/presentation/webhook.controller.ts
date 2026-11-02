@@ -20,6 +20,9 @@ export class WebhookController {
   ): Promise<void> => {
     // Stateless response received immediately to prevent timeout blocks
     res.json({ received: true });
+    this.logger?.debug("sarvam webhook payload", {
+      data: req.body
+    })
 
     try {
       await this.processCallWebhook.execute(req.body);
