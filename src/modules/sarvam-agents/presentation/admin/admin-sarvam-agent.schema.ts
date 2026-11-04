@@ -16,6 +16,55 @@ export const sarvamOutputVariableSchema = z.object({
   description: z.string().trim().min(1, "Output variable description is required"),
 });
 
+export const sarvamConnectionConfigSchema = z
+  .object({
+    connection_id: z.string().trim().min(1, "Connection ID is required"),
+    agent_phone_number: z.string().trim().min(1, "Agent phone number is required"),
+  })
+  .strict();
+
+export const sarvamRetryConditionSchema = z
+  .object({
+    enabled: z.boolean(),
+    threshold_seconds: z
+      .number()
+      .int("threshold_seconds must be an integer")
+      .min(0, "threshold_seconds must be non-negative")
+      .optional(),
+  })
+  .strict();
+
+export const sarvamRetryConfigSchema = z
+  .object({
+    max_retries: z
+      .number()
+      .int("max_retries must be an integer")
+      .min(0, "max_retries must be at least 0")
+      .max(20, "max_retries cannot exceed 20")
+      .default(0),
+    retry_on: z
+      .record(
+        z.string().min(1, "Condition key cannot be empty"),
+        sarvamRetryConditionSchema,
+      )
+      .optional(),
+    retry_interval_minutes: z
+      .union([
+        z
+          .number()
+          .int("retry_interval_minutes must be an integer")
+          .min(0, "retry_interval_minutes must be non-negative"),
+        z.array(
+          z
+            .number()
+            .int("retry_interval_minutes array items must be integers")
+            .min(0, "retry_interval_minutes items must be non-negative"),
+        ),
+      ])
+      .optional(),
+  })
+  .strict();
+
 export const createSarvamAgentSchema = z.object({
   name: z.string().trim().min(1, "Agent name is required").max(255),
   apiKeyId: z.string().uuid("A valid Sarvam API Key ID is required"),
@@ -32,6 +81,10 @@ export const createSarvamAgentSchema = z.object({
   agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
   welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "" }),
   outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
+  connectionConfigs: z
+    .array(sarvamConnectionConfigSchema)
+    .min(1, "At least one telephony connection configuration is required"),
+  retryConfig: sarvamRetryConfigSchema.optional().default({ max_retries: 0 }),
   allowTenantVisible: z.boolean().optional().default(false),
 });
 
@@ -50,6 +103,11 @@ export const updateSarvamAgentSchema = z.object({
   agentVariables: z.array(sarvamAgentVariableSchema).optional(),
   welcomeMessage: welcomeMessageConfigSchema.optional(),
   outputVariables: z.array(sarvamOutputVariableSchema).optional(),
+  connectionConfigs: z
+    .array(sarvamConnectionConfigSchema)
+    .min(1, "At least one telephony connection configuration is required")
+    .optional(),
+  retryConfig: sarvamRetryConfigSchema.optional(),
   allowTenantVisible: z.boolean().optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
 });

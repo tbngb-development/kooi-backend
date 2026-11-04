@@ -39,6 +39,7 @@ model Tenant {
 
   classifierResults ClassifierCallResult[]
   memberships   TenantUser[]
+  voiceProvider VoiceProvider  @default(BOLNA)
   bolnaApiKeyId String?
   bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
   tenantPlan    TenantPlan?
@@ -55,6 +56,11 @@ model Tenant {
   sarvamAgentOverrides SarvamAgentTenantOverride[]
 
   @@index([email])
+}
+
+enum VoiceProvider {
+  BOLNA
+  SARVAM
 }
 
 enum WorkspaceSwitchStatus {
@@ -807,6 +813,8 @@ model SarvamAgent {
   agentVariables     Json              @default("[]")
   welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
   outputVariables    Json              @default("[]")
+  connectionConfigs  Json              @default("[]")
+  retryConfig        Json              @default("{\"max_retries\":0}")
   allowTenantVisible Boolean           @default(false)
   status             SarvamAgentStatus @default(ACTIVE)
   createdBy          String

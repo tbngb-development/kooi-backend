@@ -8,6 +8,8 @@ import type {
   SarvamAgentVariable,
   WelcomeMessageConfig,
   SarvamOutputVariable,
+  SarvamConnectionConfig,
+  SarvamRetryConfig,
 } from "../../domain/types/sarvam-agent.types";
 
 export type SarvamAgentWithApiKeyAndTenant = SarvamAgent & {
@@ -26,6 +28,8 @@ export interface CreateSarvamAgentRecord {
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
+  connectionConfigs: SarvamConnectionConfig[];
+  retryConfig: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
   createdBy: string;
@@ -40,6 +44,8 @@ export interface UpdateSarvamAgentRecord {
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
+  connectionConfigs?: SarvamConnectionConfig[];
+  retryConfig?: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
 }

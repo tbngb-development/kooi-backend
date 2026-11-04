@@ -5,6 +5,9 @@ import type {
   WelcomeMessageConfig,
   SarvamOutputVariable,
   EffectiveSarvamVariable,
+  SarvamConnectionConfig,
+  SarvamRetryConfig,
+  SarvamRetryCondition,
 } from "../../domain/types/sarvam-agent.types";
 import type {
   SarvamAgentAdminResponseDTO,
@@ -81,6 +84,94 @@ export class SarvamAgentMapper {
     return {};
   }
 
+  parseConnectionConfigs(data: unknown): SarvamConnectionConfig[] {
+    let items = data;
+    if (typeof items === "string") {
+      try {
+        items = JSON.parse(items);
+      } catch {
+        return [];
+      }
+    }
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((item): item is SarvamConnectionConfig => {
+        return (
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as any).connection_id === "string" &&
+          typeof (item as any).agent_phone_number === "string"
+        );
+      })
+      .map((item) => ({
+        connection_id: item.connection_id.trim(),
+        agent_phone_number: item.agent_phone_number.trim(),
+      }));
+  }
+
+  parseRetryConfig(data: unknown): SarvamRetryConfig {
+    let raw = data;
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        return { max_retries: 0 };
+      }
+    }
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return { max_retries: 0 };
+    }
+
+    const rawObj = raw as Record<string, unknown>;
+    const max_retries =
+      typeof rawObj.max_retries === "number" && !isNaN(rawObj.max_retries)
+        ? Math.max(0, Math.min(20, Math.floor(rawObj.max_retries)))
+        : 0;
+
+    const result: SarvamRetryConfig = { max_retries };
+
+    if (
+      typeof rawObj.retry_on === "object" &&
+      rawObj.retry_on !== null &&
+      !Array.isArray(rawObj.retry_on)
+    ) {
+      const retryOn: Record<string, SarvamRetryCondition> = {};
+      for (const [key, val] of Object.entries(rawObj.retry_on)) {
+        if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+          const condition = val as Record<string, unknown>;
+          if (typeof condition.enabled === "boolean") {
+            const parsedCond: SarvamRetryCondition = {
+              enabled: condition.enabled,
+            };
+            if (
+              typeof condition.threshold_seconds === "number" &&
+              !isNaN(condition.threshold_seconds) &&
+              condition.threshold_seconds >= 0
+            ) {
+              parsedCond.threshold_seconds = Math.floor(condition.threshold_seconds);
+            }
+            retryOn[key] = parsedCond;
+          }
+        }
+      }
+      result.retry_on = retryOn;
+    }
+
+    if (
+      typeof rawObj.retry_interval_minutes === "number" &&
+      !isNaN(rawObj.retry_interval_minutes) &&
+      rawObj.retry_interval_minutes >= 0
+    ) {
+      result.retry_interval_minutes = Math.floor(rawObj.retry_interval_minutes);
+    } else if (Array.isArray(rawObj.retry_interval_minutes)) {
+      result.retry_interval_minutes = rawObj.retry_interval_minutes
+        .filter((x): x is number => typeof x === "number" && !isNaN(x) && x >= 0)
+        .map((x) => Math.floor(x));
+    }
+
+    return result;
+  }
+
   toAdminDTO(agent: SarvamAgentWithApiKeyAndTenant): SarvamAgentAdminResponseDTO {
     return {
       id: agent.id,
@@ -93,6 +184,8 @@ export class SarvamAgentMapper {
       agentVariables: this.parseAgentVariables(agent.agentVariables),
       welcomeMessage: this.parseWelcomeMessage(agent.welcomeMessage),
       outputVariables: this.parseOutputVariables(agent.outputVariables),
+      connectionConfigs: this.parseConnectionConfigs(agent.connectionConfigs),
+      retryConfig: this.parseRetryConfig(agent.retryConfig),
       allowTenantVisible: agent.allowTenantVisible,
       status: agent.status as "ACTIVE" | "ARCHIVED",
       createdBy: agent.createdBy,

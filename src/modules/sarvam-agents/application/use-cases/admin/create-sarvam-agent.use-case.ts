@@ -11,7 +11,16 @@ import {
   SarvamAgentDuplicateAppIdError,
   SarvamAgentInvalidOverrideError,
 } from "../../../domain/errors/sarvam-agent.errors";
+import { ValidationError } from "../../../../../shared/errors/validation.error";
 import type { Logger } from "../../../../../shared/logging/logger.interface";
+import type {
+  SarvamConnectionConfig,
+  SarvamRetryConfig,
+} from "../../../domain/types/sarvam-agent.types";
+import {
+  validateConnectionConfigs,
+  validateRetryConfig,
+} from "../../../domain/rules/sarvam-agent-config.rules";
 
 export class CreateSarvamAgentUseCase {
   constructor(
@@ -76,6 +85,9 @@ export class CreateSarvamAgentUseCase {
       outNames.add(name);
     }
 
+    const connectionConfigs = validateConnectionConfigs(dto.connectionConfigs);
+    const retryConfig = validateRetryConfig(dto.retryConfig);
+
     const created = await this.repository.create({
       name: dto.name.trim(),
       apiKeyId: dto.apiKeyId,
@@ -86,6 +98,8 @@ export class CreateSarvamAgentUseCase {
       agentVariables,
       welcomeMessage: dto.welcomeMessage ?? { defaultMessage: "" },
       outputVariables,
+      connectionConfigs,
+      retryConfig,
       allowTenantVisible: dto.allowTenantVisible ?? false,
       status: "ACTIVE",
       createdBy: dto.createdBy,

@@ -278,11 +278,18 @@ export function buildContainer(): AppContainer {
 
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
+  const sarvamApiKeys = buildSarvamApiKeyModule({
+    encryptionSecret: env.sarvam.encryptionSecret,
+    logger,
+  });
+
   const tenants = buildTenantModule({
     otpService,
     emailService: email,
     redis,
     logger,
+    bolnaApiKeyRepository: bolnaApiKeys.repository,
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
   });
 
   const enforceTenantVerification = new EnforceTenantVerificationMiddleware(
@@ -290,11 +297,6 @@ export function buildContainer(): AppContainer {
     tenants.repository,
     logger,
   );
-
-  const sarvamApiKeys = buildSarvamApiKeyModule({
-    encryptionSecret: env.sarvam.encryptionSecret,
-    logger,
-  });
 
   const authenticate = new AuthenticateMiddleware(tokenService, authRepository);
   const authorize = new AuthorizeMiddleware();

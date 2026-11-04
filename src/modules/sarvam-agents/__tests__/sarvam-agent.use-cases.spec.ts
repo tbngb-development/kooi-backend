@@ -89,6 +89,19 @@ describe("Sarvam Agent Use Cases", () => {
         description: "Customer overall call sentiment",
       },
     ],
+    connectionConfigs: [
+      {
+        connection_id: "conn_123",
+        agent_phone_number: "+1234567890",
+      },
+    ],
+    retryConfig: {
+      max_retries: 2,
+      retry_on: {
+        busy: { enabled: true, threshold_seconds: 30 },
+      },
+      retry_interval_minutes: [5, 10],
+    },
     allowTenantVisible: true,
     status: "ACTIVE",
     createdBy: "admin-1",
@@ -148,6 +161,7 @@ describe("Sarvam Agent Use Cases", () => {
           appId: "app-1",
           appVersion: 1,
           createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
         }),
       ).rejects.toThrow(SarvamAgentInvalidApiKeyError);
     });
@@ -170,6 +184,7 @@ describe("Sarvam Agent Use Cases", () => {
           appId: "app-1",
           appVersion: 1,
           createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
         }),
       ).rejects.toThrow(SarvamAgentInactiveApiKeyError);
     });
@@ -190,6 +205,7 @@ describe("Sarvam Agent Use Cases", () => {
           appId: "sarvam_app_01",
           appVersion: 1,
           createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
         }),
       ).rejects.toThrow(SarvamAgentDuplicateAppIdError);
     });
@@ -210,6 +226,7 @@ describe("Sarvam Agent Use Cases", () => {
           appId: "app-1",
           appVersion: 1,
           createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
           agentVariables: [
             {
               key: "dup_key",
@@ -245,12 +262,339 @@ describe("Sarvam Agent Use Cases", () => {
         appId: "sarvam_app_01",
         appVersion: 1,
         createdBy: "admin-1",
+        connectionConfigs: [
+          {
+            connection_id: "conn_123",
+            agent_phone_number: "+1234567890",
+          },
+        ],
       });
 
       expect(result.id).toBe("agent-uuid-1");
       expect(result.name).toBe("Customer Support Agent");
       expect(result.apiKey?.tenant.name).toBe("Acme Corp");
       expect(result.status).toBe("ACTIVE");
+      expect(result.connectionConfigs).toHaveLength(1);
+      expect(result.connectionConfigs[0].connection_id).toBe("conn_123");
+      expect(result.retryConfig.max_retries).toBe(2);
+    });
+
+    it("rejects creation when connectionConfigs is empty or omitted", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rejects creation when connectionConfigs entries are malformed", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      // Missing connection_id
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [
+            { connection_id: "", agent_phone_number: "+1234567890" },
+          ],
+        }),
+      ).rejects.toThrow();
+
+      // Missing agent_phone_number
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [
+            { connection_id: "conn_1", agent_phone_number: "   " },
+          ],
+        }),
+      ).rejects.toThrow();
+
+      // Unrecognized property
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [
+            {
+              connection_id: "conn_1",
+              agent_phone_number: "+1234567890",
+              extra_property: "disallowed",
+            } as any,
+          ],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("accepts multiple valid connections on creation", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+      vi.mocked(mockAgentRepo.create).mockResolvedValue({
+        ...sampleAgentWithApiKey,
+        connectionConfigs: [
+          { connection_id: "c1", agent_phone_number: "+111" },
+          { connection_id: "c2", agent_phone_number: "+222" },
+        ],
+      });
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      const result = await useCase.execute({
+        name: "Multi Connection Agent",
+        apiKeyId: "key-uuid-1",
+        appId: "multi_app",
+        appVersion: 1,
+        createdBy: "admin-1",
+        connectionConfigs: [
+          { connection_id: "c1", agent_phone_number: "+111" },
+          { connection_id: "c2", agent_phone_number: "+222" },
+        ],
+      });
+
+      expect(result.connectionConfigs).toHaveLength(2);
+      expect(result.connectionConfigs[1].connection_id).toBe("c2");
+    });
+
+    it("validates retryConfig max_retries boundary rules", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      // Negative max_retries
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: { max_retries: -1 },
+        }),
+      ).rejects.toThrow();
+
+      // Greater than 20
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: { max_retries: 21 },
+        }),
+      ).rejects.toThrow();
+
+      // Non-integer
+      await expect(
+        useCase.execute({
+          name: "Test Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "test_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: { max_retries: 2.5 as any },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("accepts dynamic retry_on condition keys and validates condition structure", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+      vi.mocked(mockAgentRepo.create).mockImplementation(async (data) => ({
+        ...sampleAgentWithApiKey,
+        retryConfig: data.retryConfig as any,
+      }));
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      // Custom dynamic keys accepted
+      const result = await useCase.execute({
+        name: "Dynamic Retry Agent",
+        apiKeyId: "key-uuid-1",
+        appId: "dynamic_retry_app",
+        appVersion: 1,
+        createdBy: "admin-1",
+        connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+        retryConfig: {
+          max_retries: 3,
+          retry_on: {
+            custom_telephony_error: { enabled: true, threshold_seconds: 45 },
+            unreachable: { enabled: false },
+          },
+        },
+      });
+
+      expect(result.retryConfig.retry_on).toBeDefined();
+      expect(result.retryConfig.retry_on?.custom_telephony_error).toEqual({
+        enabled: true,
+        threshold_seconds: 45,
+      });
+      expect(result.retryConfig.retry_on?.unreachable).toEqual({
+        enabled: false,
+      });
+
+      // Malformed condition: missing enabled
+      await expect(
+        useCase.execute({
+          name: "Invalid Retry Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "invalid_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: {
+            max_retries: 3,
+            retry_on: {
+              broken: { threshold_seconds: 10 } as any,
+            },
+          },
+        }),
+      ).rejects.toThrow();
+
+      // Negative threshold_seconds
+      await expect(
+        useCase.execute({
+          name: "Invalid Retry Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "invalid_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: {
+            max_retries: 3,
+            retry_on: {
+              broken: { enabled: true, threshold_seconds: -5 },
+            },
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("preserves retry_interval_minutes data type as scalar integer or array of integers", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+      vi.mocked(mockAgentRepo.create).mockImplementation(async (data) => ({
+        ...sampleAgentWithApiKey,
+        retryConfig: data.retryConfig as any,
+      }));
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      // Scalar integer preserved
+      const singleRes = await useCase.execute({
+        name: "Single Interval Agent",
+        apiKeyId: "key-uuid-1",
+        appId: "single_interval_app",
+        appVersion: 1,
+        createdBy: "admin-1",
+        connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+        retryConfig: {
+          max_retries: 2,
+          retry_interval_minutes: 15,
+        },
+      });
+      expect(singleRes.retryConfig.retry_interval_minutes).toBe(15);
+      expect(Array.isArray(singleRes.retryConfig.retry_interval_minutes)).toBe(false);
+
+      // Array preserved
+      const arrayRes = await useCase.execute({
+        name: "Array Interval Agent",
+        apiKeyId: "key-uuid-1",
+        appId: "array_interval_app",
+        appVersion: 1,
+        createdBy: "admin-1",
+        connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+        retryConfig: {
+          max_retries: 3,
+          retry_interval_minutes: [5, 10, 20],
+        },
+      });
+      expect(arrayRes.retryConfig.retry_interval_minutes).toEqual([5, 10, 20]);
+      expect(Array.isArray(arrayRes.retryConfig.retry_interval_minutes)).toBe(true);
+
+      // Negative interval rejected
+      await expect(
+        useCase.execute({
+          name: "Invalid Interval Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "invalid_interval_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: {
+            max_retries: 2,
+            retry_interval_minutes: -10,
+          },
+        }),
+      ).rejects.toThrow();
+
+      // Negative interval in array rejected
+      await expect(
+        useCase.execute({
+          name: "Invalid Interval Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "invalid_interval_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: {
+            max_retries: 2,
+            retry_interval_minutes: [5, -2, 10],
+          },
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -279,6 +623,120 @@ describe("Sarvam Agent Use Cases", () => {
     });
   });
 
+  describe("UpdateSarvamAgentUseCase", () => {
+    it("updates existing connections successfully", async () => {
+      vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+      vi.mocked(mockAgentRepo.update).mockImplementation(async (id, data) => ({
+        ...sampleAgentWithApiKey,
+        ...(data.connectionConfigs && {
+          connectionConfigs: data.connectionConfigs as any,
+        }),
+      }));
+
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const res = await useCase.execute({
+        id: "agent-uuid-1",
+        connectionConfigs: [
+          { connection_id: "new_conn", agent_phone_number: "+999999" },
+        ],
+      });
+
+      expect(res.connectionConfigs).toHaveLength(1);
+      expect(res.connectionConfigs[0].connection_id).toBe("new_conn");
+    });
+
+    it("rejects saving an empty connection list on update", async () => {
+      vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      await expect(
+        useCase.execute({
+          id: "agent-uuid-1",
+          connectionConfigs: [],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("enforces strict connection requirement when updating existing incomplete record", async () => {
+      const incompleteRecord = {
+        ...sampleAgentWithApiKey,
+        connectionConfigs: [],
+      };
+      vi.mocked(mockAgentRepo.findById).mockResolvedValue(
+        incompleteRecord as any,
+      );
+
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+
+      // Omitting connectionConfigs on incomplete record fails
+      await expect(
+        useCase.execute({
+          id: "agent-uuid-1",
+          name: "Updated Name",
+        }),
+      ).rejects.toThrow();
+
+      // Supplying valid connection on incomplete record succeeds
+      vi.mocked(mockAgentRepo.update).mockResolvedValue({
+        ...incompleteRecord,
+        name: "Updated Name",
+        connectionConfigs: [
+          { connection_id: "fixed_conn", agent_phone_number: "+111222" },
+        ],
+      });
+
+      const updated = await useCase.execute({
+        id: "agent-uuid-1",
+        name: "Updated Name",
+        connectionConfigs: [
+          { connection_id: "fixed_conn", agent_phone_number: "+111222" },
+        ],
+      });
+
+      expect(updated.name).toBe("Updated Name");
+      expect(updated.connectionConfigs).toHaveLength(1);
+      expect(updated.connectionConfigs[0].connection_id).toBe("fixed_conn");
+    });
+
+    it("preserves existing configuration when connectionConfigs and retryConfig are omitted on complete record", async () => {
+      vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+      vi.mocked(mockAgentRepo.update).mockImplementation(async (id, data) => ({
+        ...sampleAgentWithApiKey,
+        ...(data.name && { name: data.name }),
+      }));
+
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const res = await useCase.execute({
+        id: "agent-uuid-1",
+        name: "Renamed Complete Agent",
+      });
+
+      expect(res.name).toBe("Renamed Complete Agent");
+      expect(res.connectionConfigs).toHaveLength(1);
+      expect(res.retryConfig.max_retries).toBe(2);
+    });
+
+    it("updates retryConfig and preserves data type", async () => {
+      vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+      vi.mocked(mockAgentRepo.update).mockImplementation(async (id, data) => ({
+        ...sampleAgentWithApiKey,
+        ...(data.retryConfig && { retryConfig: data.retryConfig as any }),
+      }));
+
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const res = await useCase.execute({
+        id: "agent-uuid-1",
+        retryConfig: {
+          max_retries: 5,
+          retry_interval_minutes: 10,
+        },
+      });
+
+      expect(res.retryConfig.max_retries).toBe(5);
+      expect(res.retryConfig.retry_interval_minutes).toBe(10);
+    });
+  });
+
   describe("Tenant Operations & Effective Value Resolution", () => {
     const rawAgent: SarvamAgent = {
       id: "agent-uuid-1",
@@ -291,6 +749,8 @@ describe("Sarvam Agent Use Cases", () => {
       agentVariables: sampleAgentWithApiKey.agentVariables,
       welcomeMessage: sampleAgentWithApiKey.welcomeMessage,
       outputVariables: sampleAgentWithApiKey.outputVariables,
+      connectionConfigs: sampleAgentWithApiKey.connectionConfigs,
+      retryConfig: sampleAgentWithApiKey.retryConfig,
       allowTenantVisible: true,
       status: "ACTIVE",
       createdBy: "admin-1",

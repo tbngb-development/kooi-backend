@@ -3,6 +3,8 @@ import type {
   WelcomeMessageConfig,
   SarvamOutputVariable,
   EffectiveSarvamVariable,
+  SarvamConnectionConfig,
+  SarvamRetryConfig,
 } from "../../domain/types/sarvam-agent.types";
 
 export interface CreateSarvamAgentDTO {
@@ -15,6 +17,8 @@ export interface CreateSarvamAgentDTO {
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
+  connectionConfigs: SarvamConnectionConfig[];
+  retryConfig?: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   createdBy: string;
 }
@@ -29,6 +33,8 @@ export interface UpdateSarvamAgentDTO {
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
+  connectionConfigs?: SarvamConnectionConfig[];
+  retryConfig?: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
   updatedBy?: string;
@@ -54,6 +60,8 @@ export interface SarvamAgentAdminResponseDTO {
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
+  connectionConfigs: SarvamConnectionConfig[];
+  retryConfig: SarvamRetryConfig;
   allowTenantVisible: boolean;
   status: "ACTIVE" | "ARCHIVED";
   createdBy: string;

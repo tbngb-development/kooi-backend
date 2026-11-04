@@ -12,6 +12,22 @@ import type { GetTenantStatsUseCase } from "../application/use-cases/get-tenant-
 import type { SendTenantMobileOtpUseCase } from "../application/use-cases/send-tenant-mobile-otp.use-case";
 import type { VerifyTenantMobileOtpUseCase } from "../application/use-cases/verify-tenant-mobile-otp.use-case";
 
+/**
+ * Sanitizes tenant data for tenant-facing API endpoints.
+ * Provider configuration (BOLNA/SARVAM) and internal credential mappings
+ * are platform-internal and must never be exposed to tenant users.
+ */
+function sanitizeTenantForTenantUser<T extends Record<string, any>>(tenant: T): Omit<T, "voiceProvider" | "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey"> {
+  const {
+    voiceProvider: _vp,
+    bolnaApiKeyId: _bkid,
+    bolnaApiKey: _bk,
+    sarvamApiKey: _sk,
+    ...sanitized
+  } = tenant;
+  return sanitized as Omit<T, "voiceProvider" | "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey">;
+}
+
 export class TenantWorkspaceController {
   constructor(
     private readonly getTenantUseCase: GetTenantUseCase,
@@ -29,7 +45,7 @@ export class TenantWorkspaceController {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
       const tenant = await this.getTenantUseCase.execute(tenantId);
-      sendSuccess(res, tenant);
+      sendSuccess(res, sanitizeTenantForTenantUser(tenant));
     } catch (err) {
       next(err);
     }
@@ -45,7 +61,7 @@ export class TenantWorkspaceController {
       const updated = await this.updateTenantUseCase.execute(tenantId, {
         name: req.body.name,
       });
-      sendSuccess(res, updated);
+      sendSuccess(res, sanitizeTenantForTenantUser(updated));
     } catch (err) {
       next(err);
     }
@@ -59,6 +75,9 @@ export class TenantWorkspaceController {
     try {
       const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
       const stats = await this.getTenantStatsUseCase.execute(tenantId);
+      if (stats?.tenant) {
+        stats.tenant = sanitizeTenantForTenantUser(stats.tenant) as any;
+      }
       sendSuccess(res, stats);
     } catch (err) {
       next(err);
@@ -94,7 +113,7 @@ export class TenantWorkspaceController {
         phone: req.body.phone,
         otp: req.body.otp,
       });
-      sendSuccess(res, result.tenant);
+      sendSuccess(res, sanitizeTenantForTenantUser(result.tenant));
     } catch (err) {
       next(err);
     }

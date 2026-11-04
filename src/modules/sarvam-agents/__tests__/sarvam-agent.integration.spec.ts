@@ -52,6 +52,8 @@ class InMemorySarvamAgentRepository implements ISarvamAgentRepository {
       agentVariables: data.agentVariables as any,
       welcomeMessage: data.welcomeMessage as any,
       outputVariables: data.outputVariables as any,
+      connectionConfigs: (data.connectionConfigs ?? []) as any,
+      retryConfig: (data.retryConfig ?? { max_retries: 0 }) as any,
       allowTenantVisible: data.allowTenantVisible ?? false,
       status: data.status ?? "ACTIVE",
       createdBy: data.createdBy,
@@ -94,6 +96,8 @@ class InMemorySarvamAgentRepository implements ISarvamAgentRepository {
       ...(data.agentVariables !== undefined && { agentVariables: data.agentVariables as any }),
       ...(data.welcomeMessage !== undefined && { welcomeMessage: data.welcomeMessage as any }),
       ...(data.outputVariables !== undefined && { outputVariables: data.outputVariables as any }),
+      ...(data.connectionConfigs !== undefined && { connectionConfigs: data.connectionConfigs as any }),
+      ...(data.retryConfig !== undefined && { retryConfig: data.retryConfig as any }),
       ...(data.allowTenantVisible !== undefined && { allowTenantVisible: data.allowTenantVisible }),
       ...(data.status !== undefined && { status: data.status }),
       updatedAt: new Date(),
@@ -319,6 +323,16 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           appId: "sales_app_01",
           appVersion: 1,
           allowTenantVisible: true,
+          connectionConfigs: [
+            { connection_id: "conn_sales_1", agent_phone_number: "+18005550100" },
+          ],
+          retryConfig: {
+            max_retries: 3,
+            retry_on: {
+              busy: { enabled: true, threshold_seconds: 30 },
+            },
+            retry_interval_minutes: 5,
+          },
           agentVariables: [
             { key: "agent_name", defaultValue: "Sarah", isTenantVisible: true, isTenantEditable: true },
             { key: "secret_token", defaultValue: "xyz", isTenantVisible: false, isTenantEditable: false },
@@ -334,6 +348,10 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
       expect(res.body.data.name).toBe("Sales Agent");
       expect(res.body.data.appId).toBe("sales_app_01");
       expect(res.body.data.status).toBe("ACTIVE");
+      expect(res.body.data.connectionConfigs).toHaveLength(1);
+      expect(res.body.data.connectionConfigs[0].connection_id).toBe("conn_sales_1");
+      expect(res.body.data.retryConfig.max_retries).toBe(3);
+      expect(res.body.data.retryConfig.retry_interval_minutes).toBe(5);
     });
 
     it("GET /v1/admin/sarvam-agents lists created agents", async () => {
@@ -344,12 +362,17 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           apiKeyId: VALID_API_KEY_ID,
           appId: "app_01",
           appVersion: 1,
+          connectionConfigs: [
+            { connection_id: "conn_1", agent_phone_number: "+18005550101" },
+          ],
         });
 
       const res = await request(app).get("/v1/admin/sarvam-agents");
       expect(res.status).toBe(HttpStatus.OK);
       expect(res.body.data.items).toHaveLength(1);
       expect(res.body.data.items[0].appId).toBe("app_01");
+      expect(res.body.data.items[0].connectionConfigs).toHaveLength(1);
+      expect(res.body.data.items[0].retryConfig.max_retries).toBe(0);
     });
 
     it("DELETE /v1/admin/sarvam-agents/:id soft-archives agent", async () => {
@@ -360,6 +383,9 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           apiKeyId: VALID_API_KEY_ID,
           appId: "archive_app_01",
           appVersion: 1,
+          connectionConfigs: [
+            { connection_id: "conn_arch", agent_phone_number: "+18005550102" },
+          ],
         });
 
       const agentId = createRes.body.data.id;
@@ -367,6 +393,126 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
       const deleteRes = await request(app).delete(`/v1/admin/sarvam-agents/${agentId}`);
       expect(deleteRes.status).toBe(HttpStatus.OK);
       expect(deleteRes.body.data.status).toBe("ARCHIVED");
+    });
+
+    it("POST /v1/admin/sarvam-agents validates connectionConfigs and retryConfig", async () => {
+      // Missing connectionConfigs
+      const resMissingConn = await request(app)
+        .post("/v1/admin/sarvam-agents")
+        .send({
+          name: "Invalid Agent",
+          apiKeyId: VALID_API_KEY_ID,
+          appId: "invalid_app_1",
+          appVersion: 1,
+        });
+      expect(resMissingConn.status).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+
+      // Empty connectionConfigs array
+      const resEmptyConn = await request(app)
+        .post("/v1/admin/sarvam-agents")
+        .send({
+          name: "Invalid Agent",
+          apiKeyId: VALID_API_KEY_ID,
+          appId: "invalid_app_2",
+          appVersion: 1,
+          connectionConfigs: [],
+        });
+      expect(resEmptyConn.status).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+
+      // max_retries out of bounds (> 20)
+      const resHighRetries = await request(app)
+        .post("/v1/admin/sarvam-agents")
+        .send({
+          name: "Invalid Agent",
+          apiKeyId: VALID_API_KEY_ID,
+          appId: "invalid_app_3",
+          appVersion: 1,
+          connectionConfigs: [
+            { connection_id: "c1", agent_phone_number: "+12345" },
+          ],
+          retryConfig: {
+            max_retries: 25,
+          },
+        });
+      expect(resHighRetries.status).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+
+      // Array retry intervals preserved
+      const resArrayInterval = await request(app)
+        .post("/v1/admin/sarvam-agents")
+        .send({
+          name: "Valid Agent",
+          apiKeyId: VALID_API_KEY_ID,
+          appId: "valid_array_app",
+          appVersion: 1,
+          connectionConfigs: [
+            { connection_id: "c1", agent_phone_number: "+12345" },
+          ],
+          retryConfig: {
+            max_retries: 3,
+            retry_interval_minutes: [2, 5, 15],
+          },
+        });
+      expect(resArrayInterval.status).toBe(HttpStatus.CREATED);
+      expect(resArrayInterval.body.data.retryConfig.retry_interval_minutes).toEqual([2, 5, 15]);
+    });
+
+    it("PATCH /v1/admin/sarvam-agents/:id updates connections and enforces non-empty list", async () => {
+      const createRes = await request(app)
+        .post("/v1/admin/sarvam-agents")
+        .send({
+          name: "Agent To Update",
+          apiKeyId: VALID_API_KEY_ID,
+          appId: "update_app_01",
+          appVersion: 1,
+          connectionConfigs: [
+            { connection_id: "c_initial", agent_phone_number: "+100" },
+          ],
+        });
+      const id = createRes.body.data.id;
+
+      // Reject empty array on update
+      const resEmpty = await request(app)
+        .patch(`/v1/admin/sarvam-agents/${id}`)
+        .send({
+          connectionConfigs: [],
+        });
+      expect(resEmpty.status).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+
+      // Update connectionConfigs and retryConfig
+      const resSuccess = await request(app)
+        .patch(`/v1/admin/sarvam-agents/${id}`)
+        .send({
+          connectionConfigs: [
+            { connection_id: "c_updated_1", agent_phone_number: "+200" },
+            { connection_id: "c_updated_2", agent_phone_number: "+300" },
+          ],
+          retryConfig: {
+            max_retries: 4,
+            retry_on: {
+              voicemail: { enabled: true, threshold_seconds: 15 },
+            },
+            retry_interval_minutes: 10,
+          },
+        });
+
+      expect(resSuccess.status).toBe(HttpStatus.OK);
+      expect(resSuccess.body.data.connectionConfigs).toHaveLength(2);
+      expect(resSuccess.body.data.connectionConfigs[0].connection_id).toBe("c_updated_1");
+      expect(resSuccess.body.data.retryConfig.max_retries).toBe(4);
+      expect(resSuccess.body.data.retryConfig.retry_on.voicemail).toEqual({
+        enabled: true,
+        threshold_seconds: 15,
+      });
+
+      // Partial update omitting connectionConfigs preserves existing
+      const resOmit = await request(app)
+        .patch(`/v1/admin/sarvam-agents/${id}`)
+        .send({
+          name: "Renamed Agent",
+        });
+      expect(resOmit.status).toBe(HttpStatus.OK);
+      expect(resOmit.body.data.name).toBe("Renamed Agent");
+      expect(resOmit.body.data.connectionConfigs).toHaveLength(2);
     });
   });
 
@@ -382,6 +528,9 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           appId: "tenant_app_01",
           appVersion: 1,
           allowTenantVisible: true,
+          connectionConfigs: [
+            { connection_id: "conn_tenant_01", agent_phone_number: "+18005550199" },
+          ],
           agentVariables: [
             { key: "agent_alias", defaultValue: "DefaultBot", isTenantVisible: true, isTenantEditable: true },
             { key: "fixed_role", defaultValue: "Support", isTenantVisible: true, isTenantEditable: false },

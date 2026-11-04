@@ -26,6 +26,7 @@ describe("Admin Tenant Management (Module 1 - Overview)", () => {
     termsVersion: "v1.0",
     workspaceSwitchStatus: "IDLE",
     workspaceSwitchError: null,
+    voiceProvider: "BOLNA",
     bolnaApiKeyId: "key-123",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),

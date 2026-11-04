@@ -14,6 +14,22 @@ export interface SarvamOutputVariable {
   description: string;
 }
 
+export interface SarvamConnectionConfig {
+  connection_id: string;
+  agent_phone_number: string;
+}
+
+export interface SarvamRetryCondition {
+  enabled: boolean;
+  threshold_seconds?: number;
+}
+
+export interface SarvamRetryConfig {
+  max_retries: number;
+  retry_on?: Record<string, SarvamRetryCondition>;
+  retry_interval_minutes?: number | number[];
+}
+
 export interface TenantWelcomeMessageOverride {
   customMessage?: string | null;
 }

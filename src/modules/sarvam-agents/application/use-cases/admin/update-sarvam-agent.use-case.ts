@@ -9,7 +9,16 @@ import {
   SarvamAgentDuplicateAppIdError,
   SarvamAgentInvalidOverrideError,
 } from "../../../domain/errors/sarvam-agent.errors";
+import { ValidationError } from "../../../../../shared/errors/validation.error";
 import type { Logger } from "../../../../../shared/logging/logger.interface";
+import {
+  validateConnectionConfigs,
+  validateRetryConfig,
+} from "../../../domain/rules/sarvam-agent-config.rules";
+import type {
+  SarvamConnectionConfig,
+  SarvamRetryConfig,
+} from "../../../domain/types/sarvam-agent.types";
 
 export class UpdateSarvamAgentUseCase {
   constructor(
@@ -82,6 +91,33 @@ export class UpdateSarvamAgentUseCase {
       }
     }
 
+    // Validate connectionConfigs
+    let validatedConnectionConfigs: SarvamConnectionConfig[] | undefined;
+    if (dto.connectionConfigs !== undefined) {
+      validatedConnectionConfigs = validateConnectionConfigs(
+        dto.connectionConfigs,
+      );
+    } else {
+      const existingConfigs = this.mapper.parseConnectionConfigs(
+        existing.connectionConfigs,
+      );
+      if (existingConfigs.length === 0) {
+        throw new ValidationError([
+          {
+            field: "connectionConfigs",
+            message:
+              "This agent currently has an incomplete configuration. At least one telephony connection configuration is required to update this agent.",
+          },
+        ]);
+      }
+    }
+
+    // Validate retryConfig if provided
+    let validatedRetryConfig: SarvamRetryConfig | undefined;
+    if (dto.retryConfig !== undefined) {
+      validatedRetryConfig = validateRetryConfig(dto.retryConfig);
+    }
+
     const updated = await this.repository.update(dto.id, {
       ...(dto.name !== undefined && { name: dto.name.trim() }),
       ...(dto.appId !== undefined && { appId: dto.appId.trim() }),
@@ -102,6 +138,12 @@ export class UpdateSarvamAgentUseCase {
       }),
       ...(dto.outputVariables !== undefined && {
         outputVariables: dto.outputVariables,
+      }),
+      ...(validatedConnectionConfigs !== undefined && {
+        connectionConfigs: validatedConnectionConfigs,
+      }),
+      ...(validatedRetryConfig !== undefined && {
+        retryConfig: validatedRetryConfig,
       }),
       ...(dto.allowTenantVisible !== undefined && {
         allowTenantVisible: dto.allowTenantVisible,
