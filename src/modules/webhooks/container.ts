@@ -1,6 +1,8 @@
 import { PrismaWebhookRepository } from "./infrastructure/repositories/prisma-webhook.repository";
 import { PrismaSarvamLeadCorrelationRepository } from "./infrastructure/repositories/prisma-sarvam-lead-correlation.repository";
 import { SarvamLeadCorrelationService } from "./application/services/sarvam-lead-correlation.service";
+import { PrismaSarvamWebhookRepository } from "./infrastructure/repositories/prisma-sarvam-webhook.repository";
+import { ProcessSarvamWebhookUseCase } from "./application/use-cases/process-sarvam-webhook.use-case";
 import { ProcessCallWebhookUseCase } from "./application/use-cases/process-call-webhook.use-case";
 import { ProcessBatchWebhookUseCase } from "./application/use-cases/process-batch-webhook.use-case";
 import { WebhookController } from "./presentation/webhook.controller";
@@ -29,6 +31,7 @@ export interface WebhookModule {
   controller: WebhookController;
   processCallWebhook: ProcessCallWebhookUseCase;
   sarvamLeadCorrelation: SarvamLeadCorrelationService;
+  processSarvamWebhook: ProcessSarvamWebhookUseCase;
 }
 
 export function buildWebhookModule(
@@ -73,15 +76,22 @@ export function buildWebhookModule(
 
   const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo, log);
 
-  const controller = new WebhookController(
-    processCallWebhook,
-    processBatchWebhook,
-    log,
-  );
-
   const sarvamCorrelationRepo = new PrismaSarvamLeadCorrelationRepository();
   const sarvamLeadCorrelation = new SarvamLeadCorrelationService(
     sarvamCorrelationRepo,
+    log,
+  );
+  const sarvamWebhookRepo = new PrismaSarvamWebhookRepository();
+  const processSarvamWebhook = new ProcessSarvamWebhookUseCase(
+    sarvamLeadCorrelation,
+    sarvamWebhookRepo,
+    log,
+  );
+
+  const controller = new WebhookController(
+    processCallWebhook,
+    processBatchWebhook,
+    processSarvamWebhook,
     log,
   );
 
@@ -89,5 +99,6 @@ export function buildWebhookModule(
     controller,
     processCallWebhook,
     sarvamLeadCorrelation,
+    processSarvamWebhook,
   };
 }
