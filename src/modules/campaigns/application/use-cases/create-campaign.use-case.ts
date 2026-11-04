@@ -1,5 +1,7 @@
+import type { VoiceProvider } from "@prisma/client";
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
+import type { ITenantVoiceProviderService } from "../../../tenants/application/services/tenant-voice-provider.service";
 import type { CreateCampaignInput } from "../dto/campaign.dto";
 import {
   CampaignAssistantNotFoundError,
@@ -15,12 +17,20 @@ export class CreateCampaignUseCase {
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly planRepo: PlanRepository,
+    private readonly voiceProviderService?: ITenantVoiceProviderService,
     private readonly logger?: Logger,
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
     // ── 0. Workspace Migration Freeze Guard ─────────────────────
     await assertTenantNotFrozen(tenantId);
+
+    // ── 0b. Snapshot active voice provider (fail-fast validation) ──
+    let selectedProvider: VoiceProvider = "BOLNA";
+    if (this.voiceProviderService) {
+      const resolved = await this.voiceProviderService.resolveActiveProvider(tenantId);
+      selectedProvider = resolved.provider;
+    }
 
     // 1. Fetch active tenant plan
     const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
@@ -77,9 +87,10 @@ export class CreateCampaignUseCase {
       }
     }
 
-    // 6. Create campaign
+    // 6. Create campaign with provider snapshot
     const campaign = await this.campaignRepo.create(tenantId, {
       ...input,
+      provider: selectedProvider,
       variables: cleaned,
       defaultRetryConfig: finalRetryConfig,
     });
@@ -89,6 +100,7 @@ export class CreateCampaignUseCase {
       tenantId,
       campaignId: campaign.id,
       assistantId: input.assistantId,
+      provider: selectedProvider,
     });
 
     return campaign;

@@ -1,8 +1,12 @@
-import { type CallStatus, type CallType, type CallSource } from "@prisma/client";
+import { type CallStatus, type CallType, type CallSource, type VoiceProvider } from "@prisma/client";
 
 export interface CallEntityData {
   id: string;
+  provider?: VoiceProvider | null;
   bolnaCallId: string | null;
+  sarvamAttemptId?: string | null;
+  sarvamInteractionId?: string | null;
+  sarvamUserIdentifier?: string | null;
   tenantId: string;
   campaignId: string | null;
   assistantId?: string | null;
@@ -41,8 +45,20 @@ export class CallEntity {
   get id(): string {
     return this.data.id;
   }
+  get provider(): VoiceProvider {
+    return this.data.provider ?? "BOLNA";
+  }
   get bolnaCallId(): string | null {
     return this.data.bolnaCallId;
+  }
+  get sarvamAttemptId(): string | null {
+    return this.data.sarvamAttemptId ?? null;
+  }
+  get sarvamInteractionId(): string | null {
+    return this.data.sarvamInteractionId ?? null;
+  }
+  get sarvamUserIdentifier(): string | null {
+    return this.data.sarvamUserIdentifier ?? null;
   }
   get tenantId(): string {
     return this.data.tenantId;

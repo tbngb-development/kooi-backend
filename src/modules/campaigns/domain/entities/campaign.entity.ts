@@ -1,6 +1,6 @@
 // modules/campaigns/domain/entities/campaign.entity.ts
 
-import type { CampaignStatus } from "@prisma/client";
+import type { CampaignStatus, VoiceProvider } from "@prisma/client";
 import { InvalidCampaignStatusTransitionError } from "../errors/campaign.errors";
 import { canTransitionCampaignStatus } from "./campaign-status.rules";
 
@@ -11,6 +11,8 @@ export interface CampaignEntityData {
   status: CampaignStatus;
   tenantId: string;
   assistantId: string;
+  provider?: VoiceProvider | null;
+  sarvamCampaignId?: string | null;
   variables: Record<string, string> | null;
   defaultRetryConfig: Record<string, unknown> | null;
   totalLeads: number;
@@ -39,6 +41,12 @@ export class CampaignEntity {
   }
   get assistantId(): string {
     return this.data.assistantId;
+  }
+  get provider(): VoiceProvider {
+    return this.data.provider ?? "BOLNA";
+  }
+  get sarvamCampaignId(): string | null {
+    return this.data.sarvamCampaignId ?? null;
   }
   get totalLeads(): number {
     return this.data.totalLeads;

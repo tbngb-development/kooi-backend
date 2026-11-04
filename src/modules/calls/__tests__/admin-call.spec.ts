@@ -24,6 +24,7 @@ describe("Module 4: Admin Calls & Telemetry", () => {
 
   const mockDetailedCall: DetailedCallResult = {
     id: callId,
+    provider: "BOLNA",
     bolnaCallId: "bolna-call-789",
     tenantId,
     campaignId: "campaign-1",
@@ -282,6 +283,7 @@ describe("Module 4: Admin Calls & Telemetry", () => {
     it("should correctly populate financial fields in CallEntity", () => {
       const entityData: CallEntityData = {
         id: callId,
+        provider: "BOLNA",
         bolnaCallId: "bolna-123",
         tenantId,
         campaignId: "campaign-1",

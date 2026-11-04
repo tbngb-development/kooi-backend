@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import type { RetryConfig } from "../../../../shared/types/bolna.types";
 import { type LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 
@@ -5,6 +6,8 @@ export interface CreateBatchData {
   name?: string | null;
   campaignId: string;
   tenantId: string;
+  provider?: VoiceProvider | null;
+  sarvamCohortId?: string | null;
   fileName: string;
   totalLeads?: number;
   retryConfig?: RetryConfig;

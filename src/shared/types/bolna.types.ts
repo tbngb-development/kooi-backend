@@ -123,6 +123,36 @@ export interface BolnaExecution {
   };
 }
 
+export interface BolnaCallHistoryItem {
+  attempt: number;
+  bolnaCallId: string;
+  status: string;
+  duration?: number | null;
+  cost?: number | null;
+  timestamp: string;
+  errorMessage?: string | null;
+  hangupReason?: string | null;
+}
+
+export interface SarvamCallHistoryItem {
+  attempt?: number;
+  attempt_id?: string;
+  interaction_id?: string;
+  user_identifier?: string;
+  retry_attempt?: number;
+  completion_status?: string;
+  connectivity_status?: string;
+  next_action_status?: string;
+  failure_reason?: string | null;
+  duration?: number | null;
+  executed_at?: string;
+  start_datetime?: string;
+  end_datetime?: string;
+  timestamp?: string;
+  status?: string;
+  bolnaCallId?: string;
+}
+
 export interface CallHistoryItem {
   attempt: number;
   bolnaCallId: string;
@@ -132,6 +162,19 @@ export interface CallHistoryItem {
   timestamp: string;
   errorMessage?: string | null;
   hangupReason?: string | null;
+
+  // Future Sarvam attempt support
+  attempt_id?: string;
+  interaction_id?: string;
+  user_identifier?: string;
+  retry_attempt?: number;
+  completion_status?: string;
+  connectivity_status?: string;
+  next_action_status?: string;
+  failure_reason?: string | null;
+  executed_at?: string;
+  start_datetime?: string;
+  end_datetime?: string;
 }
 
 export interface BolnaLLMConfig {

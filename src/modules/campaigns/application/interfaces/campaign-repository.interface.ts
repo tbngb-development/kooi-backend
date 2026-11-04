@@ -1,6 +1,6 @@
 // modules/campaigns/application/interfaces/campaign-repository.interface.ts
 
-import type { CampaignStatus } from "@prisma/client";
+import type { CampaignStatus, VoiceProvider } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
@@ -16,6 +16,8 @@ export interface CreateCampaignData {
   name: string;
   description?: string;
   assistantId: string;
+  provider?: VoiceProvider;
+  sarvamCampaignId?: string | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
 }
@@ -55,6 +57,8 @@ export interface CampaignListItem {
   name: string;
   description: string | null;
   status: CampaignStatus;
+  provider: VoiceProvider;
+  sarvamCampaignId?: string | null;
   totalLeads: number;
   calledLeads: number;
   completedLeads: number;

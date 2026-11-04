@@ -138,7 +138,6 @@ export interface AppContainer {
   contact: ContactModule;
   tenantApiKeys: TenantApiKeyModule;
   sarvamApiKeys: SarvamApiKeyModule;
-  sarvamConfigurations: SarvamApiKeyModule;
   sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
@@ -264,18 +263,6 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  const calls = buildCallModule({
-    bolnaClientFactory,
-    callWalletGuard: wallet.guards.callWalletGuard,
-    walletRepo: wallet.repository,
-    debitWalletForCall: wallet.useCases.debitWalletForCall,
-    classifierQueue: classifier.queue,
-    processClassifierExtractionUseCase:
-      classifier.useCases.processClassifierExtraction,
-    classifierRepo: classifier.repository,
-    logger,
-  });
-
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
   const sarvamApiKeys = buildSarvamApiKeyModule({
@@ -290,6 +277,19 @@ export function buildContainer(): AppContainer {
     logger,
     bolnaApiKeyRepository: bolnaApiKeys.repository,
     sarvamApiKeyRepository: sarvamApiKeys.repository,
+  });
+
+  const calls = buildCallModule({
+    bolnaClientFactory,
+    callWalletGuard: wallet.guards.callWalletGuard,
+    voiceProviderService: tenants.voiceProviderService,
+    walletRepo: wallet.repository,
+    debitWalletForCall: wallet.useCases.debitWalletForCall,
+    classifierQueue: classifier.queue,
+    processClassifierExtractionUseCase:
+      classifier.useCases.processClassifierExtraction,
+    classifierRepo: classifier.repository,
+    logger,
   });
 
   const enforceTenantVerification = new EnforceTenantVerificationMiddleware(
@@ -313,7 +313,10 @@ export function buildContainer(): AppContainer {
     auth,
     assistants,
     tenants,
-    campaigns: buildCampaignModule({ logger }),
+    campaigns: buildCampaignModule({
+      logger,
+      voiceProviderService: tenants.voiceProviderService,
+    }),
     batches: buildBatchModule({
       bolnaClientFactory,
       checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
@@ -339,7 +342,6 @@ export function buildContainer(): AppContainer {
     contact: buildContactModule(logger),
     tenantApiKeys,
     sarvamApiKeys,
-    sarvamConfigurations: sarvamApiKeys,
     sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 

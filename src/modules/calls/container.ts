@@ -1,3 +1,4 @@
+import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
 // modules/calls/container.ts
 
 import { PrismaCallRepository } from "./infrastructure/repositories/prisma-call.repository";
@@ -34,6 +35,7 @@ import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/rep
 export interface CallModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
   callWalletGuard: ICallWalletGuard;
+  voiceProviderService?: ITenantVoiceProviderService;
   walletRepo?: WalletRepository;
   debitWalletForCall?: DebitWalletForCallUseCase;
   classifierQueue?: Queue;
@@ -72,6 +74,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     leadRepo,
     callRepo,
     phoneNumberRepo,
+    deps.voiceProviderService,
     log,
   );
   const stopCall = new StopCallUseCase(deps.bolnaClientFactory, log);
@@ -110,6 +113,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
     assistantRepo,
     leadRepo,
     callRepo,
+    deps.voiceProviderService,
     log,
   );
   const outboundCallController = new TenantOutboundCallController(

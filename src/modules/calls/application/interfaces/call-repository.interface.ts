@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
 import type {
   AvailableFiltersResponse,
@@ -159,6 +160,7 @@ export interface CallRepository {
     assistantId: string;
     leadId: string;
     agentNumber: string | null;
+    provider?: VoiceProvider;
   }): Promise<{ id: string }>;
 
   createInboundCallRecord(data: {
@@ -166,6 +168,7 @@ export interface CallRepository {
     tenantId: string;
     assistantId: string;
     leadId: string;
+    provider?: VoiceProvider;
   }): Promise<void>;
 
   softDelete(callId: string): Promise<void>;

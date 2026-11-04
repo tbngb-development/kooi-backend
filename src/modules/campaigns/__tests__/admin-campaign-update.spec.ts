@@ -22,6 +22,7 @@ describe("Admin Campaign Update UseCase & Controller", () => {
     name: "Old Campaign Name",
     description: "Old description",
     status: "DRAFT" as const,
+    provider: "BOLNA" as const,
     assistantId: "assistant-1",
     variables: { company_name: "Acme Corp" },
     defaultRetryConfig: null,

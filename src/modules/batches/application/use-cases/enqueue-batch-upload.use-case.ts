@@ -52,6 +52,11 @@ export class EnqueueBatchUploadUseCase {
       throw new CampaignFailedError("upload to");
     }
     if (!campaign.assistant) throw new CampaignNotFoundError();
+    if (campaign.provider === "SARVAM") {
+      throw new BatchOperationError(
+        "Batch execution for SARVAM campaigns is not supported in Phase 1.",
+      );
+    }
 
     // 2. Validate active plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -160,6 +165,7 @@ export class EnqueueBatchUploadUseCase {
       name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       fileName: input.fileName,
       totalLeads: 0,
       retryConfig: input.retryConfig,

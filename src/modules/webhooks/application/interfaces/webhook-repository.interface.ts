@@ -6,12 +6,17 @@ import {
   type LeadStopReason,
   type CallType,
   type CallSource,
+  type VoiceProvider,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
   id: string;
+  provider: VoiceProvider;
   bolnaCallId: string | null;
+  sarvamAttemptId?: string | null;
+  sarvamInteractionId?: string | null;
+  sarvamUserIdentifier?: string | null;
   tenantId: string;
   campaignId: string | null;
   assistantId?: string | null;
@@ -87,6 +92,7 @@ export interface WebhookRepository {
   ): Promise<{ id: string } | null>;
 
   createCall(data: {
+    provider?: VoiceProvider;
     bolnaCallId: string;
     tenantId: string;
     campaignId?: string | null;

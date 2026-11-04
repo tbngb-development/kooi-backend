@@ -12,7 +12,7 @@ import type {
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
-import type { Prisma, CampaignStatus } from "@prisma/client";
+import type { Prisma, CampaignStatus, VoiceProvider } from "@prisma/client";
 import type {
   CampaignDetailOverview,
   CampaignListOverview,
@@ -314,6 +314,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
         name: c.name,
         description: c.description,
         status: c.status as CampaignStatus,
+        provider: c.provider ?? "BOLNA",
+        sarvamCampaignId: c.sarvamCampaignId,
         totalLeads: campCounts.totalLeads,
         calledLeads: campCounts.calledLeads,
         completedLeads: campCounts.completedLeads,
@@ -536,6 +538,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
         description: data.description,
         tenantId,
         assistantId: data.assistantId,
+        provider: data.provider ?? "BOLNA",
+        sarvamCampaignId: data.sarvamCampaignId ?? null,
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
         isDeleted: false,
@@ -1338,6 +1342,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
       status: string;
       tenantId: string;
       assistantId: string;
+      provider?: string | null;
+      sarvamCampaignId?: string | null;
       variables: unknown;
       defaultRetryConfig: unknown;
       startedAt: Date | null;
@@ -1361,6 +1367,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
       status: campaign.status as CampaignStatus,
       tenantId: campaign.tenantId,
       assistantId: campaign.assistantId,
+      provider: (campaign.provider as VoiceProvider) ?? "BOLNA",
+      sarvamCampaignId: campaign.sarvamCampaignId ?? null,
       variables: campaign.variables as Record<string, string> | null,
       defaultRetryConfig: campaign.defaultRetryConfig as Record<
         string,

@@ -64,4 +64,3 @@ ALTER TABLE "SarvamAgentTenantOverride" ADD CONSTRAINT "SarvamAgentTenantOverrid
 
 -- AddForeignKey
 ALTER TABLE "SarvamAgentTenantOverride" ADD CONSTRAINT "SarvamAgentTenantOverride_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

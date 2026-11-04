@@ -204,7 +204,7 @@ export class SyncBolnaExecutionUseCase {
       if (bolnaBatchId && recipientPhone) {
         const batch = await prisma.leadBatch.findFirst({
           where: { bolnaBatchId },
-          select: { id: true, tenantId: true, campaignId: true },
+          select: { id: true, tenantId: true, campaignId: true, provider: true },
         });
 
         if (batch) {
@@ -220,6 +220,7 @@ export class SyncBolnaExecutionUseCase {
           if (lead) {
             callRecord = await prisma.call.create({
               data: {
+                provider: batch.provider ?? "BOLNA",
                 bolnaCallId: execution.id,
                 tenantId: batch.tenantId,
                 campaignId: batch.campaignId,
@@ -229,6 +230,7 @@ export class SyncBolnaExecutionUseCase {
               },
               select: {
                 id: true,
+                provider: true,
                 bolnaCallId: true,
                 tenantId: true,
                 campaignId: true,

@@ -12,6 +12,7 @@ import type {
   LeadStopReason,
   CallType,
   CallSource,
+  VoiceProvider,
 } from "@prisma/client";
 
 import type {
@@ -21,7 +22,11 @@ import type {
 
 const callSelectFields = {
   id: true,
+  provider: true,
   bolnaCallId: true,
+  sarvamAttemptId: true,
+  sarvamInteractionId: true,
+  sarvamUserIdentifier: true,
   tenantId: true,
   campaignId: true,
   assistantId: true,
@@ -54,7 +59,11 @@ const callSelectFields = {
 export class PrismaWebhookRepository implements WebhookRepository {
   private toResolvedContext(raw: {
     id: string;
+    provider?: VoiceProvider | null;
     bolnaCallId: string | null;
+    sarvamAttemptId?: string | null;
+    sarvamInteractionId?: string | null;
+    sarvamUserIdentifier?: string | null;
     tenantId: string;
     campaignId: string | null;
     assistantId?: string | null;
@@ -81,6 +90,10 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }): ResolvedCallContext {
     return {
       ...raw,
+      provider: raw.provider ?? "BOLNA",
+      sarvamAttemptId: raw.sarvamAttemptId ?? null,
+      sarvamInteractionId: raw.sarvamInteractionId ?? null,
+      sarvamUserIdentifier: raw.sarvamUserIdentifier ?? null,
       callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
       retryConfig: (raw.batch?.retryConfig as RetryConfig | null) ?? null,
       campaignDefaultRetryConfig:
@@ -148,6 +161,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }
 
   async createCall(data: {
+    provider?: VoiceProvider | null;
     bolnaCallId: string;
     tenantId: string;
     campaignId?: string | null;
@@ -162,6 +176,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         campaignId: data.campaignId ?? null,

@@ -185,6 +185,8 @@ model Campaign {
   status             CampaignStatus @default(DRAFT)
   tenantId           String
   assistantId        String
+  provider           VoiceProvider? @default(BOLNA)
+  sarvamCampaignId   String?
   variables          Json?
   defaultRetryConfig Json?
   createdAt          DateTime       @default(now())
@@ -202,7 +204,9 @@ model Campaign {
   calls     Call[]
   batches   LeadBatch[]
 
-  @@index([tenantId, isDeleted])   
+  @@index([tenantId, isDeleted])
+  @@index([sarvamCampaignId])
+  @@index([provider])
 }
 
 enum CampaignStatus {
@@ -219,7 +223,9 @@ enum CampaignStatus {
 model LeadBatch {
   id                String      @id @default(uuid())
   name              String?
+  provider          VoiceProvider? @default(BOLNA)
   bolnaBatchId      String?     @unique
+  sarvamCohortId    String?
   campaignId        String
   tenantId          String
   status            BatchStatus @default(CREATED)
@@ -255,6 +261,8 @@ model LeadBatch {
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
   @@index([bolnaBatchId])
+  @@index([sarvamCohortId])
+  @@index([provider])
 }
 
 enum BatchStatus {
@@ -340,7 +348,11 @@ enum LeadStopReason {
 
 model Call {
   id                  String      @id @default(uuid())
+  provider            VoiceProvider? @default(BOLNA)
   bolnaCallId         String?     @unique
+  sarvamAttemptId     String?
+  sarvamInteractionId String?
+  sarvamUserIdentifier String?
   tenantId            String
   campaignId          String?
   leadId              String
@@ -398,6 +410,10 @@ model Call {
   @@index([batchId, isDeleted])
   @@index([batchId, isDeleted, status])
   @@index([batchId])
+  @@index([sarvamAttemptId])
+  @@index([sarvamInteractionId])
+  @@index([sarvamUserIdentifier])
+  @@index([provider])
 }
 
 enum CallType {

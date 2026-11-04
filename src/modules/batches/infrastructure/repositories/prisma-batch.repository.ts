@@ -17,6 +17,7 @@ import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entit
 import {
   type BatchStatus,
   LeadStatus,
+  type VoiceProvider,
   type LeadStopReason,
   type Prisma,
 } from "@prisma/client";
@@ -289,6 +290,8 @@ export class PrismaBatchRepository implements BatchRepository {
       data: {
         name: data.name ?? null,
         campaignId: data.campaignId,
+        provider: data.provider ?? "BOLNA",
+        sarvamCohortId: data.sarvamCohortId ?? null,
         tenantId: data.tenantId,
         status: "CREATED",
         fileName: data.fileName,
@@ -760,6 +763,8 @@ export class PrismaBatchRepository implements BatchRepository {
     batch: {
       id: string;
       name?: string | null;
+      provider?: string | null;
+      sarvamCohortId?: string | null;
       bolnaBatchId: string | null;
       tenantId: string;
       campaignId: string;
@@ -794,6 +799,8 @@ export class PrismaBatchRepository implements BatchRepository {
     return {
       id: batch.id,
       name: batch.name ?? null,
+      provider: (batch.provider as VoiceProvider) ?? "BOLNA",
+      sarvamCohortId: batch.sarvamCohortId ?? null,
       bolnaBatchId: batch.bolnaBatchId,
       tenantId: batch.tenantId,
       campaignId: batch.campaignId,

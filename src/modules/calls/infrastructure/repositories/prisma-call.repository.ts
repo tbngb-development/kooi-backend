@@ -1,7 +1,7 @@
 // modules/calls/infrastructure/repositories/prisma-call.repository.ts
 
 import prisma from "../../../../shared/config/database/prisma";
-import { type Prisma, type CallStatus } from "@prisma/client";
+import { type Prisma, type CallStatus, type VoiceProvider } from "@prisma/client";
 import type {
   CallRepository,
   ListCallsFilters,
@@ -175,7 +175,11 @@ export class PrismaCallRepository implements CallRepository {
       overview,
       calls: calls.map((c) => ({
         id: c.id,
+        provider: c.provider ?? "BOLNA",
         bolnaCallId: c.bolnaCallId,
+        sarvamAttemptId: c.sarvamAttemptId,
+        sarvamInteractionId: c.sarvamInteractionId,
+        sarvamUserIdentifier: c.sarvamUserIdentifier,
         tenantId: c.tenantId,
         campaignId: c.campaignId,
         assistantId: c.assistantId,
@@ -397,7 +401,11 @@ export class PrismaCallRepository implements CallRepository {
 
     return {
       id: call.id,
+      provider: call.provider ?? "BOLNA",
       bolnaCallId: call.bolnaCallId,
+      sarvamAttemptId: call.sarvamAttemptId,
+      sarvamInteractionId: call.sarvamInteractionId,
+      sarvamUserIdentifier: call.sarvamUserIdentifier,
       tenantId: call.tenantId,
       campaignId: call.campaignId,
       assistantId: call.assistantId,
@@ -652,9 +660,11 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string;
     assistantId: string;
     leadId: string;
+    provider?: VoiceProvider;
   }): Promise<void> {
     await prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         assistantId: data.assistantId,
@@ -673,9 +683,11 @@ export class PrismaCallRepository implements CallRepository {
     assistantId: string;
     leadId: string;
     agentNumber: string | null;
+    provider?: VoiceProvider;
   }): Promise<{ id: string }> {
     return prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         assistantId: data.assistantId,

@@ -21,16 +21,18 @@ import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-camp
 import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
+import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
+
 export interface CampaignModuleDeps {
   logger: Logger;
+  voiceProviderService?: ITenantVoiceProviderService;
 }
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
+  repository: PrismaCampaignRepository;
 }
-
-// modules/campaigns/container.ts
 
 export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const campaignRepo = new PrismaCampaignRepository();
@@ -68,7 +70,6 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
 
   const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
 
-  // Clean dependency injection: repository owns atomic database access
   const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
   const restoreCampaign = new RestoreCampaignUseCase(campaignRepo);
   const updateCampaignStatus = new UpdateCampaignStatusUseCase(
@@ -81,11 +82,19 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     log,
   );
 
+  const createCampaign = new CreateCampaignUseCase(
+    campaignRepo,
+    planRepo,
+    deps?.voiceProviderService,
+    log,
+  );
+
   return {
+    repository: campaignRepo,
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,
-      new CreateCampaignUseCase(campaignRepo, planRepo, log),
+      createCampaign,
       new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo, log),
       getCampaignStats,
       extractVariables,

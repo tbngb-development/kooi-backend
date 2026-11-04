@@ -70,6 +70,11 @@ export class CreateBatchUseCase {
       throw new CampaignFailedError("upload to");
     }
     if (!campaign.assistant) throw new CampaignNotFoundError();
+    if (campaign.provider === "SARVAM") {
+      throw new BatchOperationError(
+        "Batch execution for SARVAM campaigns is not supported in Phase 1.",
+      );
+    }
 
     // 2. Fetch active tenant plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -217,6 +222,7 @@ export class CreateBatchUseCase {
       name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       fileName: input.fileName,
       totalLeads: newLeads.length,
       retryConfig: resolvedRetryConfig,
@@ -345,6 +351,7 @@ export class CreateBatchUseCase {
     this.logger?.info("Batch created", {
       action: "batch.create",
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       campaignId: input.campaignId,
       batchId: batch.id,
       bolnaBatchId,
