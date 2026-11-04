@@ -1,4 +1,6 @@
 import { PrismaWebhookRepository } from "./infrastructure/repositories/prisma-webhook.repository";
+import { PrismaSarvamLeadCorrelationRepository } from "./infrastructure/repositories/prisma-sarvam-lead-correlation.repository";
+import { SarvamLeadCorrelationService } from "./application/services/sarvam-lead-correlation.service";
 import { ProcessCallWebhookUseCase } from "./application/use-cases/process-call-webhook.use-case";
 import { ProcessBatchWebhookUseCase } from "./application/use-cases/process-batch-webhook.use-case";
 import { WebhookController } from "./presentation/webhook.controller";
@@ -26,6 +28,7 @@ export interface WebhookModuleDeps {
 export interface WebhookModule {
   controller: WebhookController;
   processCallWebhook: ProcessCallWebhookUseCase;
+  sarvamLeadCorrelation: SarvamLeadCorrelationService;
 }
 
 export function buildWebhookModule(
@@ -76,8 +79,15 @@ export function buildWebhookModule(
     log,
   );
 
+  const sarvamCorrelationRepo = new PrismaSarvamLeadCorrelationRepository();
+  const sarvamLeadCorrelation = new SarvamLeadCorrelationService(
+    sarvamCorrelationRepo,
+    log,
+  );
+
   return {
     controller,
     processCallWebhook,
+    sarvamLeadCorrelation,
   };
 }
