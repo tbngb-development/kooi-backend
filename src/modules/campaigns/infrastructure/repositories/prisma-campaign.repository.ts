@@ -9,6 +9,7 @@ import type {
   CampaignStatsResult,
   CampaignListItem,
   AssistantWithAgentData,
+  SarvamAgentWithApiKeyData,
 } from "../../application/interfaces/campaign-repository.interface";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
@@ -264,6 +265,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         where,
         include: {
           assistant: { select: { id: true, name: true } },
+          sarvamAgent: { select: { id: true, name: true } },
           batches: {
             where: { isDeleted },
             select: {
@@ -325,6 +327,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         isDeleted: c.isDeleted,
         deletedAt: c.deletedAt,
         assistant: c.assistant,
+        sarvamAgent: c.sarvamAgent,
         batches: mappedBatches,
       };
     });
@@ -487,6 +490,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
+        sarvamAgent?: {
+          id: string;
+          name: string;
+          appId: string;
+          agentVariables?: unknown;
+        } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -502,6 +511,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
             platformAgent: true,
           },
         },
+        sarvamAgent: true,
         batches: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -521,6 +531,14 @@ export class PrismaCampaignRepository implements CampaignRepository {
             },
           }
         : null,
+      sarvamAgent: campaign.sarvamAgent
+        ? {
+            id: campaign.sarvamAgent.id,
+            name: campaign.sarvamAgent.name,
+            appId: campaign.sarvamAgent.appId,
+            agentVariables: campaign.sarvamAgent.agentVariables,
+          }
+        : null,
       batches: campaign.batches.map((b) => ({
         id: b.id,
         status: b.status,
@@ -537,14 +555,19 @@ export class PrismaCampaignRepository implements CampaignRepository {
         name: data.name,
         description: data.description,
         tenantId,
-        assistantId: data.assistantId,
+        assistantId: data.assistantId ?? null,
+        sarvamAgentId: data.sarvamAgentId ?? null,
+        startTimestamp: data.startTimestamp ? new Date(data.startTimestamp) : null,
+        endTimestamp: data.endTimestamp ? new Date(data.endTimestamp) : null,
+        allowedSchedule: (data.allowedSchedule as any) ?? undefined,
+        status: data.status ?? "DRAFT",
         provider: data.provider ?? "BOLNA",
         sarvamCampaignId: data.sarvamCampaignId ?? null,
         variables: data.variables,
         defaultRetryConfig: data.defaultRetryConfig as any,
         isDeleted: false,
       },
-      include: { assistant: true },
+      include: { assistant: true, sarvamAgent: true },
     });
 
     return this.toEntityData(campaign, {
@@ -573,12 +596,29 @@ export class PrismaCampaignRepository implements CampaignRepository {
         ...(data.assistantId !== undefined && {
           assistantId: data.assistantId,
         }),
+        ...(data.sarvamAgentId !== undefined && {
+          sarvamAgentId: data.sarvamAgentId,
+        }),
+        ...(data.sarvamCampaignId !== undefined && {
+          sarvamCampaignId: data.sarvamCampaignId,
+        }),
+        ...(data.startTimestamp !== undefined && {
+          startTimestamp: data.startTimestamp
+            ? new Date(data.startTimestamp)
+            : null,
+        }),
+        ...(data.endTimestamp !== undefined && {
+          endTimestamp: data.endTimestamp ? new Date(data.endTimestamp) : null,
+        }),
+        ...(data.allowedSchedule !== undefined && {
+          allowedSchedule: data.allowedSchedule as any,
+        }),
         ...(data.variables !== undefined && { variables: data.variables }),
         ...(data.defaultRetryConfig !== undefined && {
           defaultRetryConfig: data.defaultRetryConfig as any,
         }),
       },
-      include: { assistant: true },
+      include: { assistant: true, sarvamAgent: true },
     });
 
     const counts = await this.getSingleCampaignMetrics(campaignId);
@@ -1181,6 +1221,54 @@ export class PrismaCampaignRepository implements CampaignRepository {
     };
   }
 
+  async findSarvamAgentWithApiKey(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<SarvamAgentWithApiKeyData | null> {
+    const agent = await prisma.sarvamAgent.findFirst({
+      where: {
+        id: sarvamAgentId,
+        status: "ACTIVE",
+        allowTenantVisible: true,
+        apiKey: {
+          tenantId,
+          isActive: true,
+        },
+      },
+      include: {
+        apiKey: true,
+        overrides: {
+          where: { tenantId },
+        },
+      },
+    });
+
+    if (!agent) return null;
+
+    return {
+      id: agent.id,
+      name: agent.name,
+      appId: agent.appId,
+      appVersion: agent.appVersion,
+      attemptsPerSecond: agent.attemptsPerSecond,
+      webhookUrl: agent.webhookUrl,
+      agentVariables: agent.agentVariables,
+      connectionConfigs: agent.connectionConfigs,
+      retryConfig: agent.retryConfig,
+      allowTenantVisible: agent.allowTenantVisible,
+      status: agent.status,
+      apiKey: {
+        id: agent.apiKey.id,
+        tenantId: agent.apiKey.tenantId,
+        apiKeyEncrypted: agent.apiKey.apiKeyEncrypted,
+        workspaceId: agent.apiKey.workspaceId,
+        organizationId: agent.apiKey.organizationId,
+        isActive: agent.apiKey.isActive,
+      },
+      overrides: agent.overrides,
+    };
+  }
+
   async resolveAssistantForPlatformAgent(
     tenantId: string,
     platformAgentId: string,
@@ -1341,9 +1429,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
       description: string | null;
       status: string;
       tenantId: string;
-      assistantId: string;
+      assistantId?: string | null;
+      sarvamAgentId?: string | null;
       provider?: string | null;
       sarvamCampaignId?: string | null;
+      startTimestamp?: Date | null;
+      endTimestamp?: Date | null;
+      allowedSchedule?: unknown;
       variables: unknown;
       defaultRetryConfig: unknown;
       startedAt: Date | null;
@@ -1366,9 +1458,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
       description: campaign.description,
       status: campaign.status as CampaignStatus,
       tenantId: campaign.tenantId,
-      assistantId: campaign.assistantId,
+      assistantId: campaign.assistantId ?? null,
+      sarvamAgentId: campaign.sarvamAgentId ?? null,
       provider: (campaign.provider as VoiceProvider) ?? "BOLNA",
       sarvamCampaignId: campaign.sarvamCampaignId ?? null,
+      startTimestamp: campaign.startTimestamp ?? null,
+      endTimestamp: campaign.endTimestamp ?? null,
+      allowedSchedule: campaign.allowedSchedule as Record<string, unknown> | null,
       variables: campaign.variables as Record<string, string> | null,
       defaultRetryConfig: campaign.defaultRetryConfig as Record<
         string,

@@ -142,13 +142,14 @@ describe("Batch Provider Inheritance & Guards", () => {
   });
 
   describe("EnqueueBatchUploadUseCase", () => {
-    it("throws BatchOperationError when campaign has SARVAM provider", async () => {
+    it("inherits SARVAM provider from parent campaign on batch creation", async () => {
       vi.mocked(mockCampaignRepo.findByIdWithRelations).mockResolvedValueOnce({
         id: "camp-sarvam",
         tenantId: "tenant-1",
+        name: "Sarvam Campaign",
         provider: "SARVAM",
         status: "ACTIVE",
-        assistant: { id: "asst-1" },
+        sarvamAgentId: "agent-1",
       } as any);
 
       const useCase = new EnqueueBatchUploadUseCase(
@@ -158,16 +159,22 @@ describe("Batch Provider Inheritance & Guards", () => {
         mockStorage,
       );
 
-      await expect(
-        useCase.execute({
-          tenantId: "tenant-1",
+      await useCase.execute({
+        tenantId: "tenant-1",
+        campaignId: "camp-sarvam",
+        fileName: "test.csv",
+        fileBuffer: Buffer.from("contact_number\n+919876543210"),
+        termsAccepted: true,
+        termsVersion: "1.0",
+      });
+
+      expect(mockBatchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
           campaignId: "camp-sarvam",
-          fileName: "test.csv",
-          fileBuffer: Buffer.from("contact_number\n+919876543210"),
-          termsAccepted: true,
-          termsVersion: "1.0",
+          tenantId: "tenant-1",
+          provider: "SARVAM",
         }),
-      ).rejects.toThrow(BatchOperationError);
+      );
     });
 
     it("inherits BOLNA provider from parent campaign on batch creation", async () => {

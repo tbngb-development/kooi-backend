@@ -184,9 +184,13 @@ model Campaign {
   description        String?
   status             CampaignStatus @default(DRAFT)
   tenantId           String
-  assistantId        String
+  assistantId        String?
+  sarvamAgentId      String?
   provider           VoiceProvider? @default(BOLNA)
   sarvamCampaignId   String?
+  startTimestamp     DateTime?
+  endTimestamp       DateTime?
+  allowedSchedule    Json?
   variables          Json?
   defaultRetryConfig Json?
   createdAt          DateTime       @default(now())
@@ -198,21 +202,26 @@ model Campaign {
   deletedAt   DateTime?
 
 
-  tenant    Tenant      @relation(fields: [tenantId], references: [id])
-  assistant Assistant   @relation(fields: [assistantId], references: [id])
-  leads     Lead[]
-  calls     Call[]
-  batches   LeadBatch[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  assistant   Assistant?   @relation(fields: [assistantId], references: [id])
+  sarvamAgent SarvamAgent? @relation(fields: [sarvamAgentId], references: [id])
+  leads       Lead[]
+  calls       Call[]
+  batches     LeadBatch[]
 
   @@index([tenantId, isDeleted])
   @@index([sarvamCampaignId])
+  @@index([sarvamAgentId])
   @@index([provider])
 }
 
 enum CampaignStatus {
   DRAFT
+  SCHEDULED
   RUNNING
+  PAUSED
   COMPLETED
+  CANCELLED
   FAILED
 }
 
@@ -358,6 +367,7 @@ model Call {
   leadId              String
   batchId             String?
   assistantId         String?
+  sarvamAgentId       String?
   type                CallType    @default(OUTBOUND)
   source              CallSource  @default(CAMPAIGN)
   status              CallStatus  @default(PENDING)
@@ -397,6 +407,7 @@ model Call {
   lead        Lead         @relation(fields: [leadId], references: [id])
   batch       LeadBatch?   @relation(fields: [batchId], references: [id], onDelete: Cascade)
   assistant   Assistant?   @relation(fields: [assistantId], references: [id])
+  sarvamAgent SarvamAgent? @relation(fields: [sarvamAgentId], references: [id])
   planVersion PlanVersion? @relation(fields: [planVersionId], references: [id])
 
 
@@ -404,6 +415,7 @@ model Call {
   @@index([campaignId, isDeleted])
   @@index([campaignId, isDeleted, status])
   @@index([assistantId, isDeleted])
+  @@index([sarvamAgentId])
   @@index([type, source])
   @@index([agentNumber])
   @@index([leadId])
@@ -839,6 +851,8 @@ model SarvamAgent {
 
   apiKey    SarvamApiKey                 @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
   overrides SarvamAgentTenantOverride[]
+  campaigns Campaign[]
+  calls     Call[]
 
   @@unique([apiKeyId, appId])
   @@index([apiKeyId])

@@ -57,21 +57,25 @@ describe("Campaign Voice Provider Snapshotting & Immutability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    let currentCampaign = { ...sampleCreatedCampaign };
     mockCampaignRepo = {
-      create: vi.fn().mockImplementation((_t, data) =>
-        Promise.resolve({
-          ...sampleCreatedCampaign,
-          provider: data.provider ?? "BOLNA",
-        }),
-      ),
-      findAssistantWithAgent: vi.fn().mockResolvedValue(sampleAssistant),
-      findById: vi.fn().mockResolvedValue(sampleCreatedCampaign),
-      update: vi.fn().mockImplementation((_t, _c, data) =>
-        Promise.resolve({
+      create: vi.fn().mockImplementation((_t, data) => {
+        currentCampaign = {
           ...sampleCreatedCampaign,
           ...data,
-        }),
-      ),
+          provider: data.provider ?? "BOLNA",
+        };
+        return Promise.resolve(currentCampaign);
+      }),
+      findAssistantWithAgent: vi.fn().mockResolvedValue(sampleAssistant),
+      findById: vi.fn().mockImplementation(() => Promise.resolve(currentCampaign)),
+      update: vi.fn().mockImplementation((_t, _c, data) => {
+        currentCampaign = {
+          ...currentCampaign,
+          ...data,
+        };
+        return Promise.resolve(currentCampaign);
+      }),
     };
 
     mockPlanRepo = {
@@ -127,15 +131,68 @@ describe("Campaign Voice Provider Snapshotting & Immutability", () => {
         credential: { id: "sarvam-key-1", isActive: true, provider: "SARVAM" },
       });
 
-      const campaign = await createCampaignUseCase.execute(tenantId, {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue({
+        id: "sarvam-agent-1",
+        name: "Sarvam Support",
+        appId: "app-123",
+        appVersion: 1,
+        attemptsPerSecond: 1,
+        webhookUrl: null,
+        agentVariables: [],
+        connectionConfigs: [],
+        retryConfig: { max_retries: 0 },
+        allowTenantVisible: true,
+        status: "ACTIVE",
+        apiKey: {
+          id: "key-1",
+          tenantId,
+          apiKeyEncrypted: "encrypted",
+          workspaceId: "ws-1",
+          organizationId: "org-1",
+          isActive: true,
+        },
+      });
+
+      const mockSarvamClient = {
+        createCampaign: vi.fn().mockResolvedValue({
+          campaign_id: "ext-camp-1",
+          name: "Sarvam Campaign",
+          status: "scheduled",
+          app_id: "app-123",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      };
+      const mockEncryptionService = {
+        encrypt: vi.fn(),
+        decrypt: vi.fn().mockReturnValue("decrypted-api-key"),
+      };
+
+      const customUseCase = new CreateCampaignUseCase(
+        mockCampaignRepo as CampaignRepository,
+        mockPlanRepo as PlanRepository,
+        mockVoiceProviderService as ITenantVoiceProviderService,
+        mockSarvamClient as any,
+        mockEncryptionService as any,
+      );
+
+      const campaign = await customUseCase.execute(tenantId, {
         name: "Sarvam Campaign",
-        assistantId: "assistant-1",
+        sarvamAgentId: "sarvam-agent-1",
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-10T18:00:00.000Z",
+        allowedSchedule: {
+          allowed_start_time: "09:00",
+          allowed_end_time: "18:00",
+          allowed_days: ["Monday", "Tuesday"],
+          timezone: "Asia/Kolkata",
+        },
       });
 
       expect(mockVoiceProviderService.resolveActiveProvider).toHaveBeenCalledWith(tenantId);
       expect(mockCampaignRepo.create).toHaveBeenCalledWith(
         tenantId,
-        expect.objectContaining({ provider: "SARVAM" }),
+        expect.objectContaining({ provider: "SARVAM", status: "SCHEDULED" }),
       );
       expect(campaign.provider).toBe("SARVAM");
     });

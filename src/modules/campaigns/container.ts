@@ -22,10 +22,14 @@ import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.u
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
 import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
+import type { ISarvamCampaignClient } from "./infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 
 export interface CampaignModuleDeps {
   logger: Logger;
   voiceProviderService?: ITenantVoiceProviderService;
+  sarvamCampaignClient?: ISarvamCampaignClient;
+  sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
 }
 
 export interface CampaignModule {
@@ -86,6 +90,8 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     campaignRepo,
     planRepo,
     deps?.voiceProviderService,
+    deps?.sarvamCampaignClient,
+    deps?.sarvamEncryptionService,
     log,
   );
 

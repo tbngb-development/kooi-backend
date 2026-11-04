@@ -1,10 +1,22 @@
+// modules/campaigns/application/use-cases/create-campaign.use-case.ts
+
 import type { VoiceProvider } from "@prisma/client";
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { ITenantVoiceProviderService } from "../../../tenants/application/services/tenant-voice-provider.service";
+import type {
+  ISarvamCampaignClient,
+  CreateSarvamCampaignPayload,
+} from "../../infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import type { CreateCampaignInput } from "../dto/campaign.dto";
 import {
   CampaignAssistantNotFoundError,
+  CampaignAssistantRequiredError,
+  CampaignSarvamAgentNotFoundError,
+  CampaignSarvamAgentRequiredError,
+  CampaignScheduleRequiredError,
+  ExternalCampaignCreationFailedError,
   MissingRequiredVariablesError,
   RetryConfigNotAllowedError,
   MaxActiveCampaignsReachedError,
@@ -12,12 +24,15 @@ import {
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import { env } from "../../../../shared/config/env";
 
 export class CreateCampaignUseCase {
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly planRepo: PlanRepository,
     private readonly voiceProviderService?: ITenantVoiceProviderService,
+    private readonly sarvamCampaignClient?: ISarvamCampaignClient,
+    private readonly sarvamEncryptionService?: ISarvamApiKeyEncryptionService,
     private readonly logger?: Logger,
   ) {}
 
@@ -28,7 +43,9 @@ export class CreateCampaignUseCase {
     // ── 0b. Snapshot active voice provider (fail-fast validation) ──
     let selectedProvider: VoiceProvider = "BOLNA";
     if (this.voiceProviderService) {
-      const resolved = await this.voiceProviderService.resolveActiveProvider(tenantId);
+      const resolved = await this.voiceProviderService.resolveActiveProvider(
+        tenantId,
+      );
       selectedProvider = resolved.provider;
     }
 
@@ -53,28 +70,8 @@ export class CreateCampaignUseCase {
       }
     }
 
-    // 3. Fetch assistant + platform agent
-    const assistant = await this.campaignRepo.findAssistantWithAgent(
-      tenantId,
-      input.assistantId,
-    );
-    if (!assistant) {
-      throw new CampaignAssistantNotFoundError();
-    }
-
-    // 4. Validate and clean variables
-    const requiredVariables = assistant.platformAgent.requiredVariables;
-    const { cleaned, missing } = validateAndCleanVariables(
-      requiredVariables,
-      input.variables,
-    );
-    if (missing.length > 0) {
-      throw new MissingRequiredVariablesError(missing);
-    }
-
-    // 5. Resolve retry config
+    // 3. Resolve retry config
     let finalRetryConfig = input.defaultRetryConfig;
-
     if (input.defaultRetryConfig) {
       const retryAllowed = activePlan?.retryAutomation ?? false;
 
@@ -87,15 +84,64 @@ export class CreateCampaignUseCase {
       }
     }
 
-    // 6. Create campaign with provider snapshot
+    // ── 4. Provider-Specific Logic ──
+    if (selectedProvider === "BOLNA") {
+      return this.createBolnaCampaign(
+        tenantId,
+        input,
+        selectedProvider,
+        finalRetryConfig,
+      );
+    } else if (selectedProvider === "SARVAM") {
+      return this.createSarvamCampaign(
+        tenantId,
+        input,
+        selectedProvider,
+        finalRetryConfig,
+      );
+    } else {
+      throw new Error(`Unsupported voice provider: ${selectedProvider}`);
+    }
+  }
+
+  // ── Bolna Creation Flow (Preserved exactly as-is) ─────────────
+  private async createBolnaCampaign(
+    tenantId: string,
+    input: CreateCampaignInput,
+    selectedProvider: VoiceProvider,
+    finalRetryConfig?: Record<string, unknown>,
+  ) {
+    if (!input.assistantId) {
+      throw new CampaignAssistantRequiredError();
+    }
+
+    const assistant = await this.campaignRepo.findAssistantWithAgent(
+      tenantId,
+      input.assistantId,
+    );
+    if (!assistant) {
+      throw new CampaignAssistantNotFoundError();
+    }
+
+    const requiredVariables = assistant.platformAgent.requiredVariables;
+    const { cleaned, missing } = validateAndCleanVariables(
+      requiredVariables,
+      input.variables,
+    );
+    if (missing.length > 0) {
+      throw new MissingRequiredVariablesError(missing);
+    }
+
     const campaign = await this.campaignRepo.create(tenantId, {
-      ...input,
+      name: input.name,
+      description: input.description,
+      assistantId: input.assistantId,
       provider: selectedProvider,
       variables: cleaned,
       defaultRetryConfig: finalRetryConfig,
     });
 
-    this.logger?.info("Campaign created", {
+    this.logger?.info("Bolna campaign created", {
       action: "campaign.create",
       tenantId,
       campaignId: campaign.id,
@@ -104,5 +150,166 @@ export class CreateCampaignUseCase {
     });
 
     return campaign;
+  }
+
+  // ── Sarvam Creation Flow (External creation with failure safety) ──
+  private async createSarvamCampaign(
+    tenantId: string,
+    input: CreateCampaignInput,
+    selectedProvider: VoiceProvider,
+    finalRetryConfig?: Record<string, unknown>,
+  ) {
+    if (!input.sarvamAgentId) {
+      throw new CampaignSarvamAgentRequiredError();
+    }
+
+    if (
+      !input.startTimestamp ||
+      !input.endTimestamp ||
+      !input.allowedSchedule
+    ) {
+      throw new CampaignScheduleRequiredError();
+    }
+
+    const startDate = new Date(input.startTimestamp);
+    const endDate = new Date(input.endTimestamp);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      throw new CampaignScheduleRequiredError(
+        "Invalid startTimestamp or endTimestamp format",
+      );
+    }
+
+    if (endDate <= startDate) {
+      throw new CampaignScheduleRequiredError(
+        "endTimestamp must be after startTimestamp",
+      );
+    }
+
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
+    const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+      tenantId,
+      input.sarvamAgentId,
+    );
+    if (!sarvamAgent) {
+      throw new CampaignSarvamAgentNotFoundError();
+    }
+
+    const cleanedVariables: Record<string, string> = {};
+    if (input.variables) {
+      for (const [k, v] of Object.entries(input.variables)) {
+        if (typeof v === "string") {
+          cleanedVariables[k] = v;
+        }
+      }
+    }
+
+    // Decrypt API key
+    if (!this.sarvamEncryptionService) {
+      throw new Error("Sarvam encryption service is not configured");
+    }
+    const decryptedApiKey = this.sarvamEncryptionService.decrypt(
+      sarvamAgent.apiKey.apiKeyEncrypted,
+    );
+
+    // 1. Create internal Kooi Campaign first with SCHEDULED status
+    const campaign = await this.campaignRepo.create(tenantId, {
+      name: input.name,
+      description: input.description,
+      status: "SCHEDULED",
+      provider: selectedProvider,
+      sarvamAgentId: input.sarvamAgentId,
+      startTimestamp: startIso,
+      endTimestamp: endIso,
+      allowedSchedule: input.allowedSchedule,
+      variables: cleanedVariables,
+      defaultRetryConfig: finalRetryConfig,
+    });
+
+    // 2. Dispatch external creation to Sarvam API
+    if (!this.sarvamCampaignClient) {
+      throw new Error("Sarvam campaign client is not configured");
+    }
+
+    const webhookSecret = env.sarvam.webhookSecret;
+    const webhookUrl = env.webhook.baseUrl
+      ? `${env.webhook.baseUrl}/api/webhooks/sarvam`
+      : "https://apps.kooi.io/api/webhooks/sarvam";
+
+    const webhookConfig = {
+      url: webhookUrl,
+      metadata: {
+        tenantId,
+        campaignId: campaign.id,
+        secret: webhookSecret,
+      },
+    };
+
+    const sarvamPayload: CreateSarvamCampaignPayload = {
+      name: input.name,
+      description: input.description || null,
+      start_timestamp: startIso,
+      end_timestamp: endIso,
+      allowed_schedule: {
+        allowed_start_time: input.allowedSchedule.allowed_start_time,
+        allowed_end_time: input.allowedSchedule.allowed_end_time,
+        allowed_days: input.allowedSchedule.allowed_days,
+        timezone: input.allowedSchedule.timezone || "Asia/Kolkata",
+      },
+      app_config: {
+        app_id: sarvamAgent.appId,
+        app_type: "agent",
+        app_version: sarvamAgent.appVersion,
+        attempts_per_second: sarvamAgent.attemptsPerSecond ?? 1,
+        connection_configs: (sarvamAgent.connectionConfigs as any) ?? [],
+        retry_config: (sarvamAgent.retryConfig as any) ?? { max_retries: 0 },
+        webhook_config: webhookConfig,
+      },
+      webhook_config: webhookConfig,
+    };
+
+    try {
+      const sarvamRes = await this.sarvamCampaignClient.createCampaign(
+        sarvamAgent.apiKey.organizationId,
+        sarvamAgent.apiKey.workspaceId,
+        decryptedApiKey,
+        sarvamPayload,
+      );
+
+      // Save external campaign ID
+      const updatedCampaign = await this.campaignRepo.update(
+        tenantId,
+        campaign.id,
+        {
+          sarvamCampaignId: sarvamRes.campaign_id,
+        },
+      );
+
+      this.logger?.info("Sarvam campaign created and linked", {
+        action: "campaign.create",
+        tenantId,
+        campaignId: campaign.id,
+        sarvamCampaignId: sarvamRes.campaign_id,
+        provider: selectedProvider,
+      });
+
+      return updatedCampaign;
+    } catch (err: any) {
+      this.logger?.error("External Sarvam campaign creation failed", {
+        action: "campaign.create",
+        tenantId,
+        campaignId: campaign.id,
+        error: err?.message || String(err),
+      });
+
+      // Mark the Kooi campaign as FAILED and retain diagnostics
+      await this.campaignRepo.updateStatus(campaign.id, "FAILED");
+
+      throw new ExternalCampaignCreationFailedError(
+        err?.message || "Provider returned an error during campaign creation",
+      );
+    }
   }
 }

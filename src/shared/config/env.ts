@@ -49,7 +49,12 @@ export const env = {
   },
 
   sarvam: {
+    apiUrl: process.env.SARVAM_API_URL || "https://apps.sarvam.ai",
     encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
+    webhookSecret:
+      process.env.SARVAM_WEBHOOK_SECRET ||
+      process.env.WEBHOOK_SECRET ||
+      "kooi-sarvam-secret",
   },
 
   webhook: {

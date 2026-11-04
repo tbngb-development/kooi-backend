@@ -17,6 +17,54 @@ export class CampaignAssistantNotFoundError extends NotFoundError {
   }
 }
 
+export class CampaignAssistantRequiredError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.BAD_REQUEST,
+      "assistantId is required for Bolna campaigns",
+      "CAMPAIGN_ASSISTANT_REQUIRED",
+    );
+  }
+}
+
+export class CampaignSarvamAgentNotFoundError extends NotFoundError {
+  constructor() {
+    super("SarvamAgent");
+  }
+}
+
+export class CampaignSarvamAgentRequiredError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.BAD_REQUEST,
+      "sarvamAgentId is required for Sarvam campaigns",
+      "CAMPAIGN_SARVAM_AGENT_REQUIRED",
+    );
+  }
+}
+
+export class ExternalCampaignCreationFailedError extends AppError {
+  constructor(reason: string) {
+    super(
+      HttpStatus.BAD_GATEWAY,
+      `Failed to create external campaign: ${reason}`,
+      "EXTERNAL_CAMPAIGN_CREATION_FAILED",
+    );
+  }
+}
+
+export class CampaignScheduleRequiredError extends AppError {
+  constructor(
+    message: string = "Campaign scheduling (start/end timestamp and allowed schedule) is required for Sarvam campaigns",
+  ) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      message,
+      "CAMPAIGN_SCHEDULE_REQUIRED",
+    );
+  }
+}
+
 export class CampaignIdRequiredError extends AppError {
   constructor() {
     super(

@@ -51,11 +51,12 @@ export class EnqueueBatchUploadUseCase {
     if (campaign.status === "FAILED") {
       throw new CampaignFailedError("upload to");
     }
-    if (!campaign.assistant) throw new CampaignNotFoundError();
     if (campaign.provider === "SARVAM") {
-      throw new BatchOperationError(
-        "Batch execution for SARVAM campaigns is not supported in Phase 1.",
-      );
+      if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
+        throw new CampaignNotFoundError();
+      }
+    } else {
+      if (!campaign.assistant) throw new CampaignNotFoundError();
     }
 
     // 2. Validate active plan

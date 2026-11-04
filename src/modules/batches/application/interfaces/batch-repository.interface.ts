@@ -55,6 +55,7 @@ export interface BatchRepository {
       fileName?: string;
       status?: BatchStatus;
       bolnaBatchId?: string;
+      sarvamCohortId?: string | null;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
       scheduledAt?: Date | null;

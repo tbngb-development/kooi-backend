@@ -55,6 +55,17 @@ export function toUserFriendlyError(technicalError: string): string {
     return "We couldn't read your file. Please make sure it's a valid CSV file with the correct column headers.";
   }
 
+  if (
+    lower.includes("missing required") &&
+    (lower.includes("variable") || lower.includes("sarvam"))
+  ) {
+    return technicalError;
+  }
+
+  if (lower.includes("sarvam cohort processing failed")) {
+    return "Sarvam cohort processing failed at the voice provider. Please verify your contact list and try again.";
+  }
+
   // Fallback: generic but friendly
   return "Something went wrong while processing your file. Please try again. If the issue persists, contact our support team.";
 }

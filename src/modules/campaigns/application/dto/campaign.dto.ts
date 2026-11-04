@@ -5,7 +5,16 @@ import { type CampaignListItem } from "../interfaces/campaign-repository.interfa
 export interface CreateCampaignInput {
   name: string;
   description?: string;
-  assistantId: string;
+  assistantId?: string;
+  sarvamAgentId?: string;
+  startTimestamp?: string | Date;
+  endTimestamp?: string | Date;
+  allowedSchedule?: {
+    allowed_start_time: string;
+    allowed_end_time: string;
+    allowed_days: string[];
+    timezone?: string;
+  };
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
 }
@@ -15,6 +24,15 @@ export interface UpdateDraftCampaignInput {
   description?: string | null;
   platformAgentId?: string;
   assistantId?: string;
+  sarvamAgentId?: string;
+  startTimestamp?: string | Date | null;
+  endTimestamp?: string | Date | null;
+  allowedSchedule?: {
+    allowed_start_time: string;
+    allowed_end_time: string;
+    allowed_days: string[];
+    timezone?: string;
+  } | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown> | null;
 }
@@ -58,6 +76,7 @@ export interface ParseLeadsOutput {
   detectedHeaders: {
     contact_number: boolean;
     customer_name: boolean;
+    rawHeaders?: string[];
   };
   estimation: {
     estimatedCostMinPaisa: number;
@@ -228,4 +247,3 @@ export interface CampaignCallMetricsResult {
   totalCalls: number;
   metrics: CampaignCallMetricItem[];
 }
-

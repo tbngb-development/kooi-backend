@@ -10,9 +10,13 @@ export interface CampaignEntityData {
   description: string | null;
   status: CampaignStatus;
   tenantId: string;
-  assistantId: string;
+  assistantId?: string | null;
+  sarvamAgentId?: string | null;
   provider?: VoiceProvider | null;
   sarvamCampaignId?: string | null;
+  startTimestamp?: Date | null;
+  endTimestamp?: Date | null;
+  allowedSchedule?: Record<string, unknown> | null;
   variables: Record<string, string> | null;
   defaultRetryConfig: Record<string, unknown> | null;
   totalLeads: number;
@@ -39,14 +43,26 @@ export class CampaignEntity {
   get tenantId(): string {
     return this.data.tenantId;
   }
-  get assistantId(): string {
-    return this.data.assistantId;
+  get assistantId(): string | null {
+    return this.data.assistantId ?? null;
+  }
+  get sarvamAgentId(): string | null {
+    return this.data.sarvamAgentId ?? null;
   }
   get provider(): VoiceProvider {
     return this.data.provider ?? "BOLNA";
   }
   get sarvamCampaignId(): string | null {
     return this.data.sarvamCampaignId ?? null;
+  }
+  get startTimestamp(): Date | null {
+    return this.data.startTimestamp ?? null;
+  }
+  get endTimestamp(): Date | null {
+    return this.data.endTimestamp ?? null;
+  }
+  get allowedSchedule(): Record<string, unknown> | null {
+    return this.data.allowedSchedule ?? null;
   }
   get totalLeads(): number {
     return this.data.totalLeads;
@@ -58,7 +74,11 @@ export class CampaignEntity {
     return this.data.deletedAt;
   }
   get isTerminal(): boolean {
-    return this.data.status === "COMPLETED" || this.data.status === "FAILED";
+    return (
+      this.data.status === "COMPLETED" ||
+      this.data.status === "FAILED" ||
+      this.data.status === "CANCELLED"
+    );
   }
 
   get isDraft(): boolean {
@@ -66,13 +86,16 @@ export class CampaignEntity {
   }
 
   /**
-   * Only campaigns in DRAFT, COMPLETED, or FAILED statuses are allowed to be archived.
+   * Only campaigns in DRAFT, SCHEDULED, COMPLETED, CANCELLED, or FAILED statuses are allowed to be archived.
    * RUNNING campaigns cannot be archived.
    */
   get isArchivable(): boolean {
     return (
       this.data.status === "DRAFT" ||
+      this.data.status === "SCHEDULED" ||
+      this.data.status === "PAUSED" ||
       this.data.status === "COMPLETED" ||
+      this.data.status === "CANCELLED" ||
       this.data.status === "FAILED"
     );
   }

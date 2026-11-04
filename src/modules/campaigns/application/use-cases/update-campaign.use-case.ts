@@ -84,7 +84,7 @@ export class UpdateCampaignUseCase {
     let cleanedVariables: Record<string, string> | undefined = undefined;
 
     if (input.variables !== undefined || isAgentChanged) {
-      if (!targetAssistant) {
+      if (!targetAssistant && targetAssistantId) {
         targetAssistant = await this.campaignRepo.findAssistantWithAgent(
           tenantId,
           targetAssistantId,
@@ -149,4 +149,3 @@ export class UpdateCampaignUseCase {
 // Backward-compatibility aliases
 export { UpdateCampaignUseCase as UpdateDraftCampaignUseCase };
 export type { UpdateCampaignParams as UpdateDraftCampaignParams };
-

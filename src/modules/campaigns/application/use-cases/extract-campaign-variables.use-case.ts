@@ -23,6 +23,14 @@ export class ExtractCampaignVariablesUseCase {
     tenantId: string,
     input: ExtractVariablesInput,
   ): Promise<ExtractVariablesOutput> {
+    if (!input.assistantId) {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        "assistantId is required for variable extraction",
+        "ASSISTANT_ID_REQUIRED",
+      );
+    }
+
     // 1. Validate assistant belongs to tenant and fetch required variables
     const assistant = await this.campaignRepo.findAssistantWithAgent(
       tenantId,

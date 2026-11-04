@@ -2,23 +2,97 @@
 
 import { z } from "zod";
 
-export const createCampaignSchema = z.object({
-  name: z.string().min(1, "Campaign name is required").max(200),
-  description: z.string().max(2000).optional(),
-  assistantId: z.string().uuid("Invalid assistant ID"),
-  variables: z.record(z.string(), z.string()).optional(),
-  defaultRetryConfig: z
-    .object({
-      enabled: z.boolean(),
-      max_retries: z.number().int().min(0).max(5).optional(),
-      retry_on_statuses: z
-        .array(z.enum(["no-answer", "busy", "failed"]))
-        .optional(),
-      retry_on_voicemail: z.boolean().optional(),
-      retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
-    })
+export const campaignRetryConfigSchema = z.object({
+  enabled: z.boolean(),
+  max_retries: z.number().int().min(0).max(5).optional(),
+  retry_on_statuses: z
+    .array(z.enum(["no-answer", "busy", "failed"]))
     .optional(),
+  retry_on_voicemail: z.boolean().optional(),
+  retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
 });
+
+export const allowedScheduleSchema = z.object({
+  allowed_start_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format"),
+  allowed_end_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format"),
+  allowed_days: z
+    .array(
+      z.enum([
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ]),
+    )
+    .min(1, "At least one day must be allowed"),
+  timezone: z.string().optional().default("Asia/Kolkata"),
+});
+
+export const createCampaignSchema = z
+  .object({
+    name: z.string().min(1, "Campaign name is required").max(200),
+    description: z.string().max(2000).optional(),
+    assistantId: z.string().uuid("Invalid assistant ID").optional(),
+    sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID").optional(),
+    startTimestamp: z
+      .string()
+      .datetime({ message: "Invalid start timestamp format" })
+      .optional(),
+    endTimestamp: z
+      .string()
+      .datetime({ message: "Invalid end timestamp format" })
+      .optional(),
+    allowedSchedule: allowedScheduleSchema.optional(),
+    variables: z.record(z.string(), z.string()).optional(),
+    defaultRetryConfig: campaignRetryConfigSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sarvamAgentId) {
+      if (!data.startTimestamp) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["startTimestamp"],
+          message: "startTimestamp is required for Sarvam campaigns",
+        });
+      }
+      if (!data.endTimestamp) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["endTimestamp"],
+          message: "endTimestamp is required for Sarvam campaigns",
+        });
+      }
+      if (!data.allowedSchedule) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["allowedSchedule"],
+          message: "allowedSchedule is required for Sarvam campaigns",
+        });
+      }
+      if (data.startTimestamp && data.endTimestamp) {
+        if (new Date(data.endTimestamp) <= new Date(data.startTimestamp)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["endTimestamp"],
+            message: "endTimestamp must be after startTimestamp",
+          });
+        }
+      }
+    } else if (!data.assistantId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assistantId"],
+        message: "Either assistantId or sarvamAgentId is required",
+      });
+    }
+  });
 
 export const listCampaignsQuerySchema = z.object({
   search: z.string().trim().optional(),
@@ -59,21 +133,15 @@ export const parseManualLeadsSchema = z.object({
     .max(1000, "Maximum 1000 leads per manual submission"),
 });
 
-export const campaignRetryConfigSchema = z.object({
-  enabled: z.boolean(),
-  max_retries: z.number().int().min(0).max(5).optional(),
-  retry_on_statuses: z
-    .array(z.enum(["no-answer", "busy", "failed"]))
-    .optional(),
-  retry_on_voicemail: z.boolean().optional(),
-  retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
-});
-
 export const updateCampaignSchema = z.object({
   name: z.string().trim().min(1, "Campaign name cannot be empty").max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   platformAgentId: z.string().uuid("Invalid platform agent ID").optional(),
   assistantId: z.string().uuid("Invalid assistant ID").optional(),
+  sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID").optional(),
+  startTimestamp: z.string().datetime().nullable().optional(),
+  endTimestamp: z.string().datetime().nullable().optional(),
+  allowedSchedule: allowedScheduleSchema.nullable().optional(),
   variables: z.record(z.string(), z.string()).optional(),
   defaultRetryConfig: campaignRetryConfigSchema.nullable().optional(),
   retryConfig: campaignRetryConfigSchema.nullable().optional(),
@@ -83,7 +151,15 @@ export const updateCampaignSchema = z.object({
 export const updateDraftCampaignSchema = updateCampaignSchema;
 
 export const updateCampaignStatusSchema = z.object({
-  status: z.enum(["DRAFT", "RUNNING", "COMPLETED", "FAILED"]),
+  status: z.enum([
+    "DRAFT",
+    "SCHEDULED",
+    "RUNNING",
+    "PAUSED",
+    "COMPLETED",
+    "CANCELLED",
+    "FAILED",
+  ]),
   cascadeToBatches: z.boolean().optional().default(true),
 });
 

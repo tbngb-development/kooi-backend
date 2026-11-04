@@ -85,6 +85,7 @@ export class ParseLeadsUseCase {
         detectedHeaders: {
           contact_number: headerInfo.hasContactNumber,
           customer_name: headerInfo.hasCustomerName,
+          rawHeaders: headerInfo.rawHeaders,
         },
         estimation: zeroEstimation,
       };
@@ -203,6 +204,7 @@ export class ParseLeadsUseCase {
       detectedHeaders: {
         contact_number: headerInfo.hasContactNumber,
         customer_name: headerInfo.hasCustomerName,
+        rawHeaders: headerInfo.rawHeaders,
       },
       estimation,
       trialUsage: activePlan.isTrial

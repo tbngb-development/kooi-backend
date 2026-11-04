@@ -29,6 +29,8 @@ import {
   buildCampaignModule,
   type CampaignModule,
 } from "../modules/campaigns/container";
+import { SarvamCampaignClient } from "../modules/campaigns/infrastructure/clients/sarvam-campaign.client";
+import { SarvamCohortClient } from "../modules/batches/infrastructure/clients/sarvam-cohort.client";
 import {
   buildBatchModule,
   type BatchModule,
@@ -308,6 +310,12 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
+  const sarvamCohortClient = new SarvamCohortClient(env.sarvam.apiUrl, logger?.child({ component: "SarvamCohortClient" }));
+  const sarvamCampaignClient = new SarvamCampaignClient(
+    env.sarvam.apiUrl,
+    logger,
+  );
+
   return {
     logger,
     auth,
@@ -316,6 +324,8 @@ export function buildContainer(): AppContainer {
     campaigns: buildCampaignModule({
       logger,
       voiceProviderService: tenants.voiceProviderService,
+      sarvamCampaignClient,
+      sarvamEncryptionService: sarvamApiKeys.encryptionService,
     }),
     batches: buildBatchModule({
       bolnaClientFactory,

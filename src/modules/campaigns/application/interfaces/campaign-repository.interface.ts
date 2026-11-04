@@ -15,7 +15,12 @@ import type {
 export interface CreateCampaignData {
   name: string;
   description?: string;
-  assistantId: string;
+  assistantId?: string;
+  sarvamAgentId?: string;
+  startTimestamp?: string | Date;
+  endTimestamp?: string | Date;
+  allowedSchedule?: Record<string, unknown>;
+  status?: CampaignStatus;
   provider?: VoiceProvider;
   sarvamCampaignId?: string | null;
   variables?: Record<string, string>;
@@ -25,7 +30,12 @@ export interface CreateCampaignData {
 export interface UpdateCampaignData {
   name?: string;
   description?: string | null;
-  assistantId?: string;
+  assistantId?: string | null;
+  sarvamAgentId?: string | null;
+  sarvamCampaignId?: string | null;
+  startTimestamp?: string | Date | null;
+  endTimestamp?: string | Date | null;
+  allowedSchedule?: Record<string, unknown> | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown> | null;
 }
@@ -68,6 +78,7 @@ export interface CampaignListItem {
   isDeleted: boolean;
   deletedAt: Date | null;
   assistant: { id: string; name: string } | null;
+  sarvamAgent?: { id: string; name: string } | null;
   batches: Array<{
     id: string;
     status: string;
@@ -84,6 +95,29 @@ export interface AssistantWithAgentData {
     bolnaId: string;
     requiredVariables: RequiredVariable[] | null;
   };
+}
+
+export interface SarvamAgentWithApiKeyData {
+  id: string;
+  name: string;
+  appId: string;
+  appVersion: number;
+  attemptsPerSecond: number | null;
+  webhookUrl: string | null;
+  agentVariables: unknown;
+  connectionConfigs: unknown;
+  retryConfig: unknown;
+  allowTenantVisible: boolean;
+  status: string;
+  apiKey: {
+    id: string;
+    tenantId: string;
+    apiKeyEncrypted: string;
+    workspaceId: string;
+    organizationId: string;
+    isActive: boolean;
+  };
+  overrides?: Array<{ variableOverrides: unknown }> | null;
 }
 
 export interface CampaignCascadeResult {
@@ -117,6 +151,12 @@ export interface CampaignRepository {
           id: string;
           name: string;
           platformAgent: { bolnaId: string };
+        } | null;
+        sarvamAgent?: {
+          id: string;
+          name: string;
+          appId: string;
+          agentVariables?: unknown;
         } | null;
         batches: Array<{ id: string; status: string }>;
       })
@@ -170,6 +210,11 @@ export interface CampaignRepository {
     tenantId: string,
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
+
+  findSarvamAgentWithApiKey(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<SarvamAgentWithApiKeyData | null>;
 
   resolveAssistantForPlatformAgent(
     tenantId: string,
