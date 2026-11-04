@@ -49,6 +49,10 @@ import {
   buildSarvamApiKeyModule,
   type SarvamApiKeyModule,
 } from "../modules/sarvam-api-keys/container";
+import {
+  buildSarvamAgentModule,
+  type SarvamAgentModule,
+} from "../modules/sarvam-agents/container";
 import { env } from "../shared/config/env";
 import {
   buildBolnaApiKeyModule,
@@ -135,6 +139,7 @@ export interface AppContainer {
   tenantApiKeys: TenantApiKeyModule;
   sarvamApiKeys: SarvamApiKeyModule;
   sarvamConfigurations: SarvamApiKeyModule;
+  sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
@@ -291,6 +296,16 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
+  const authenticate = new AuthenticateMiddleware(tokenService, authRepository);
+  const authorize = new AuthorizeMiddleware();
+
+  const sarvamAgents = buildSarvamAgentModule({
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
+    authenticate,
+    authorize,
+    logger,
+  });
+
   return {
     logger,
     auth,
@@ -323,6 +338,7 @@ export function buildContainer(): AppContainer {
     tenantApiKeys,
     sarvamApiKeys,
     sarvamConfigurations: sarvamApiKeys,
+    sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture
@@ -330,8 +346,8 @@ export function buildContainer(): AppContainer {
     platformAgentModule: platformAgents,
     bolnaApiKeyModule: bolnaApiKeys,
 
-    authenticate: new AuthenticateMiddleware(tokenService, authRepository),
-    authorize: new AuthorizeMiddleware(),
+    authenticate,
+    authorize,
     enforcePlan,
     enforceTenantVerification,
     bolnaClientFactory,

@@ -40,6 +40,42 @@ export class PrismaSarvamApiKeyRepository implements ISarvamApiKeyRepository {
     id: string,
     data: UpdateSarvamApiKeyRecord,
   ): Promise<SarvamApiKeyWithTenant> {
+    if (data.isActive === false) {
+      return prisma.$transaction(async (tx) => {
+        await tx.sarvamAgent.updateMany({
+          where: {
+            apiKeyId: id,
+            status: "ACTIVE",
+          },
+          data: {
+            status: "ARCHIVED",
+          },
+        });
+
+        return tx.sarvamApiKey.update({
+          where: { id },
+          data: {
+            ...(data.apiKeyEncrypted !== undefined && {
+              apiKeyEncrypted: data.apiKeyEncrypted,
+            }),
+            ...(data.workspaceId !== undefined && {
+              workspaceId: data.workspaceId,
+            }),
+            ...(data.organizationId !== undefined && {
+              organizationId: data.organizationId,
+            }),
+            isActive: false,
+            updatedBy: data.updatedBy,
+          },
+          include: {
+            tenant: {
+              select: this.tenantSelect,
+            },
+          },
+        });
+      });
+    }
+
     return prisma.sarvamApiKey.update({
       where: { id },
       data: {
@@ -142,9 +178,26 @@ export class PrismaSarvamApiKeyRepository implements ISarvamApiKeyRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await prisma.sarvamApiKey.delete({
-      where: { id },
+    const agentCount = await prisma.sarvamAgent.count({
+      where: { apiKeyId: id },
     });
+
+    if (agentCount > 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.sarvamAgent.updateMany({
+          where: { apiKeyId: id, status: "ACTIVE" },
+          data: { status: "ARCHIVED" },
+        });
+        await tx.sarvamApiKey.update({
+          where: { id },
+          data: { isActive: false },
+        });
+      });
+    } else {
+      await prisma.sarvamApiKey.delete({
+        where: { id },
+      });
+    }
   }
 
   async existsForTenant(tenantId: string): Promise<boolean> {

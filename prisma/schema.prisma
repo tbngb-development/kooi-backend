@@ -52,6 +52,7 @@ model Tenant {
   phoneNumbers  PhoneNumber[]
   apiKeys       TenantApiKey[]
   sarvamApiKey  SarvamApiKey?
+  sarvamAgentOverrides SarvamAgentTenantOverride[]
 
   @@index([email])
 }
@@ -784,9 +785,58 @@ model SarvamApiKey {
   updatedBy       String?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sarvamAgents SarvamAgent[]
 
   @@index([tenantId])
   @@index([isActive])
+}
+
+enum SarvamAgentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model SarvamAgent {
+  id                 String            @id @default(uuid())
+  name               String
+  apiKeyId           String
+  appId              String
+  appVersion         Int               @default(1)
+  attemptsPerSecond  Int?
+  webhookUrl         String?
+  agentVariables     Json              @default("[]")
+  welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
+  outputVariables    Json              @default("[]")
+  allowTenantVisible Boolean           @default(false)
+  status             SarvamAgentStatus @default(ACTIVE)
+  createdBy          String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  apiKey    SarvamApiKey                 @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+  overrides SarvamAgentTenantOverride[]
+
+  @@unique([apiKeyId, appId])
+  @@index([apiKeyId])
+  @@index([status])
+  @@index([allowTenantVisible])
+}
+
+model SarvamAgentTenantOverride {
+  id                String   @id @default(uuid())
+  agentId           String
+  tenantId          String
+  variableOverrides Json     @default("{}")
+  welcomeMessage    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  agent  SarvamAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, tenantId])
+  @@index([agentId])
+  @@index([tenantId])
 }
 
 model TenantInvite {

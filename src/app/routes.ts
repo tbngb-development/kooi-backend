@@ -81,6 +81,8 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/assistants",
     buildTenantAssistantRoutes(c.assistants.tenantController, c.authenticate),
   );
+  router.use("/v1/sarvam-agents", c.sarvamAgents.buildTenantRoutes());
+
   router.use(
     "/v1/campaigns",
     buildTenantCampaignRoutes(
@@ -290,17 +292,16 @@ export function buildRoutes(c: AppContainer): Router {
     ),
   );
 
-  const sarvamRoutes = buildAdminSarvamApiKeyRoutes(
-    c.sarvamApiKeys.adminController,
-    c.authenticate,
-    c.authorize,
+  router.use("/v1/admin/sarvam-agents", c.sarvamAgents.buildAdminRoutes());
+  
+  router.use(
+    "/v1/admin/sarvam-api-keys",
+    buildAdminSarvamApiKeyRoutes(
+      c.sarvamApiKeys.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
   );
-  router.use("/v1/admin/sarvam-api-keys", sarvamRoutes);
-  router.use("/v1/platform-admin/sarvam-api-keys", sarvamRoutes);
-  router.use("/platform-admin/sarvam-api-keys", sarvamRoutes);
-  router.use("/v1/admin/sarvam-configurations", sarvamRoutes);
-  router.use("/v1/platform-admin/sarvam-configurations", sarvamRoutes);
-  router.use("/platform-admin/sarvam-configurations", sarvamRoutes);
 
   router.use(
     "/v1/admin/wallet",
