@@ -14,6 +14,7 @@ export interface CampaignEntityData {
   sarvamAgentId?: string | null;
   provider?: VoiceProvider | null;
   sarvamCampaignId?: string | null;
+  sarvamStatus?: string | null;
   startTimestamp?: Date | null;
   endTimestamp?: Date | null;
   allowedSchedule?: Record<string, unknown> | null;
@@ -54,6 +55,9 @@ export class CampaignEntity {
   }
   get sarvamCampaignId(): string | null {
     return this.data.sarvamCampaignId ?? null;
+  }
+  get sarvamStatus(): string | null {
+    return this.data.sarvamStatus ?? null;
   }
   get startTimestamp(): Date | null {
     return this.data.startTimestamp ?? null;

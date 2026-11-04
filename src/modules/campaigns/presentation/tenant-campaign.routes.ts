@@ -11,6 +11,7 @@ import {
   createCampaignSchema,
   extractVariablesSchema,
   listCampaignsQuerySchema,
+  controlSarvamCampaignSchema,
 } from "./campaign.schema";
 import { buildTenantBatchRoutes } from "../../batches/presentation/tenant-batch.routes";
 import {
@@ -72,6 +73,14 @@ export function buildTenantCampaignRoutes(
     ...verificationGuard,
     validate(parseManualLeadsSchema),
     controller.parseManual,
+  );
+
+  // Control Sarvam Campaign (pause, resume, cancel)
+  router.post(
+    "/:id/control",
+    authorize.tenantRoles("OWNER", "ADMIN"),
+    validate(controlSarvamCampaignSchema),
+    controller.control,
   );
 
   // Archive (Soft Delete) Campaign

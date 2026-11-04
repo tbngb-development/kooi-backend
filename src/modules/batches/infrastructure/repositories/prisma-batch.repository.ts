@@ -10,6 +10,7 @@ import type {
 } from "../../application/dto/batch.dto";
 import type {
   BatchRepository,
+  ProcessingSarvamBatchRecord,
   BatchListItem,
   PendingLeadRow,
 } from "../../application/interfaces/batch-repository.interface";
@@ -387,13 +388,76 @@ export class PrismaBatchRepository implements BatchRepository {
       sarvamCohortId?: string | null;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
+      sarvamStatus?: string | null;
+      cohortResult?: Record<string, unknown> | null;
       scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData> {
+    const { cohortResult, ...rest } = data;
     const batch = await prisma.leadBatch.update({
       where: { id: batchId },
-      data,
+      data: {
+        ...rest,
+        ...(cohortResult !== undefined && {
+          cohortResult: cohortResult as Prisma.InputJsonValue,
+        }),
+      },
+    });
+
+    return this.toEntityData(batch);
+  }
+
+  async findProcessingSarvamBatches(): Promise<ProcessingSarvamBatchRecord[]> {
+    const batches = await prisma.leadBatch.findMany({
+      where: {
+        isDeleted: false,
+        provider: "SARVAM",
+        sarvamCohortId: { not: null },
+        OR: [
+          { status: "PROCESSING" },
+          { sarvamStatus: "processing" },
+        ],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        campaignId: true,
+        sarvamCohortId: true,
+        status: true,
+        sarvamStatus: true,
+      },
+    });
+
+    return batches.map((b) => ({
+      id: b.id,
+      tenantId: b.tenantId,
+      campaignId: b.campaignId,
+      sarvamCohortId: b.sarvamCohortId as string,
+      status: b.status,
+      sarvamStatus: b.sarvamStatus,
+    }));
+  }
+
+  async updateSarvamCohortStatus(
+    batchId: string,
+    sarvamStatus: string,
+    kooiStatus?: BatchStatus,
+    cohortResult?: Record<string, unknown> | null,
+    error?: string | null,
+  ): Promise<LeadBatchEntityData> {
+    const batch = await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: {
+        sarvamStatus,
+        ...(kooiStatus && { status: kooiStatus }),
+        ...(cohortResult !== undefined && { cohortResult: cohortResult as Prisma.InputJsonValue }),
+        ...(error !== undefined && { processingError: error }),
+        ...(kooiStatus === "CREATED" && {
+          processingStage: null,
+          processingProgress: 100,
+        }),
+      },
     });
 
     return this.toEntityData(batch);
@@ -766,6 +830,8 @@ export class PrismaBatchRepository implements BatchRepository {
       name?: string | null;
       provider?: string | null;
       sarvamCohortId?: string | null;
+      sarvamStatus?: string | null;
+      cohortResult?: unknown;
       bolnaBatchId: string | null;
       tenantId: string;
       campaignId: string;
@@ -802,6 +868,8 @@ export class PrismaBatchRepository implements BatchRepository {
       name: batch.name ?? null,
       provider: (batch.provider as VoiceProvider) ?? "BOLNA",
       sarvamCohortId: batch.sarvamCohortId ?? null,
+      sarvamStatus: batch.sarvamStatus ?? null,
+      cohortResult: (batch.cohortResult as Record<string, unknown> | null) ?? null,
       bolnaBatchId: batch.bolnaBatchId,
       tenantId: batch.tenantId,
       campaignId: batch.campaignId,

@@ -18,6 +18,9 @@ import type { GetCampaignExtractionInsightsUseCase } from "../application/use-ca
 import type { GetCampaignCallMetricsUseCase } from "../application/use-cases/get-campaign-call-metrics.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
+import type { ControlSarvamCampaignUseCase } from "../application/use-cases/control-sarvam-campaign.use-case";
+import { controlSarvamCampaignSchema } from "./campaign.schema";
+import { AppError } from "../../../shared/errors/app.error";
 import type { ListCampaignsQuery } from "./campaign.schema";
 
 export class TenantCampaignController {
@@ -33,6 +36,7 @@ export class TenantCampaignController {
     private readonly getCampaignCallMetricsUseCase: GetCampaignCallMetricsUseCase,
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
+    private readonly controlSarvamCampaignUseCase?: ControlSarvamCampaignUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -270,6 +274,42 @@ export class TenantCampaignController {
       });
 
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+
+  control = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      const { action } = controlSarvamCampaignSchema.parse(req.body);
+
+      if (!this.controlSarvamCampaignUseCase) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          "Campaign control service is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const updated = await this.controlSarvamCampaignUseCase.execute({
+        tenantId,
+        campaignId,
+        action,
+      });
+
+      sendSuccess(
+        res,
+        updated,
+        HttpStatus.OK,
+        `Campaign ${action} action executed successfully`,
+      );
     } catch (err) {
       next(err);
     }

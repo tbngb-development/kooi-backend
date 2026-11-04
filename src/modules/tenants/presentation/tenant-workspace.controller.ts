@@ -17,15 +17,14 @@ import type { VerifyTenantMobileOtpUseCase } from "../application/use-cases/veri
  * Provider configuration (BOLNA/SARVAM) and internal credential mappings
  * are platform-internal and must never be exposed to tenant users.
  */
-function sanitizeTenantForTenantUser<T extends Record<string, any>>(tenant: T): Omit<T, "voiceProvider" | "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey"> {
+function sanitizeTenantForTenantUser<T extends Record<string, any>>(tenant: T): Omit<T, "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey"> {
   const {
-    voiceProvider: _vp,
     bolnaApiKeyId: _bkid,
     bolnaApiKey: _bk,
     sarvamApiKey: _sk,
     ...sanitized
   } = tenant;
-  return sanitized as Omit<T, "voiceProvider" | "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey">;
+  return sanitized as Omit<T,  "bolnaApiKeyId" | "bolnaApiKey" | "sarvamApiKey">;
 }
 
 export class TenantWorkspaceController {

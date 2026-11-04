@@ -15,6 +15,8 @@ export interface LeadBatchEntityData {
   provider?: VoiceProvider | null;
   bolnaBatchId: string | null;
   sarvamCohortId?: string | null;
+  sarvamStatus?: string | null;
+  cohortResult?: Record<string, unknown> | null;
   tenantId: string;
   campaignId: string;
   status: BatchStatus;
@@ -63,6 +65,12 @@ export class LeadBatchEntity {
   }
   get sarvamCohortId(): string | null {
     return this.data.sarvamCohortId ?? null;
+  }
+  get sarvamStatus(): string | null {
+    return this.data.sarvamStatus ?? null;
+  }
+  get cohortResult(): Record<string, unknown> | null {
+    return this.data.cohortResult ?? null;
   }
   get campaignId(): string {
     return this.data.campaignId;

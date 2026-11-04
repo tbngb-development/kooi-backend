@@ -87,6 +87,15 @@ export interface CampaignListItem {
   }>;
 }
 
+export interface ActiveSarvamCampaignRecord {
+  id: string;
+  tenantId: string;
+  sarvamCampaignId: string;
+  sarvamAgentId: string;
+  status: CampaignStatus;
+  sarvamStatus: string | null;
+}
+
 export interface AssistantWithAgentData {
   id: string;
   name: string;
@@ -183,6 +192,15 @@ export interface CampaignRepository {
     campaignId: string,
     status: CampaignStatus,
     extra?: { startedAt?: Date; completedAt?: Date },
+  ): Promise<CampaignEntityData>;
+
+  findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]>;
+
+  updateSarvamStatus(
+    campaignId: string,
+    sarvamStatus: string,
+    kooiStatus?: CampaignStatus,
+    extra?: { completedAt?: Date },
   ): Promise<CampaignEntityData>;
 
   getStats(tenantId: string, campaignId: string): Promise<CampaignStatsResult>;

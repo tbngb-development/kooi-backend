@@ -172,3 +172,8 @@ export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
 export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
 export type ExtractVariablesBody = z.infer<typeof extractVariablesSchema>;
+
+export const controlSarvamCampaignSchema = z.object({
+  action: z.enum(["pause", "resume", "cancel"]),
+});
+export type ControlSarvamCampaignBody = z.infer<typeof controlSarvamCampaignSchema>;

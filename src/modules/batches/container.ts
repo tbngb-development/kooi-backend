@@ -27,6 +27,8 @@ import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue
 import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 import { RetryFailedBatchUseCase } from "./application/use-cases/retry-failed-batch.use-case";
 import { UpdateBatchNameUseCase } from "./application/use-cases/update-batch-name.use-case";
+import { SyncSarvamCohortLifecycleUseCase } from "./application/use-cases/sync-sarvam-cohort-lifecycle.use-case";
+import type { SyncSarvamCampaignLifecycleUseCase } from "../campaigns/application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
 import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort-client.interface";
 import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 
@@ -36,6 +38,7 @@ export interface BatchModuleDeps {
   logger?: Logger;
   sarvamCohortClient?: ISarvamCohortClient;
   sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
 }
 
 export interface BatchModule {
@@ -112,7 +115,23 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     log,
   );
 
-  const batchProcessingScheduler = new BatchProcessingScheduler(worker, log);
+  const syncCohortLifecycle =
+    deps.sarvamCohortClient && deps.sarvamEncryptionService
+      ? new SyncSarvamCohortLifecycleUseCase(
+          batchRepo,
+          campaignRepo,
+          deps.sarvamCohortClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
+  const batchProcessingScheduler = new BatchProcessingScheduler(
+    worker,
+    deps.syncCampaignLifecycle,
+    syncCohortLifecycle,
+    log,
+  );
 
   return {
     tenantController: new TenantBatchController(

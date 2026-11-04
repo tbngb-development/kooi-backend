@@ -188,6 +188,7 @@ model Campaign {
   sarvamAgentId      String?
   provider           VoiceProvider? @default(BOLNA)
   sarvamCampaignId   String?
+  sarvamStatus       String?
   startTimestamp     DateTime?
   endTimestamp       DateTime?
   allowedSchedule    Json?
@@ -235,6 +236,8 @@ model LeadBatch {
   provider          VoiceProvider? @default(BOLNA)
   bolnaBatchId      String?     @unique
   sarvamCohortId    String?
+  sarvamStatus      String?
+  cohortResult      Json?
   campaignId        String
   tenantId          String
   status            BatchStatus @default(CREATED)

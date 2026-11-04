@@ -3,12 +3,17 @@ import type { BatchProcessingWorker } from "./batch-processing.worker";
 import prisma from "../../../../shared/config/database/prisma";
 import { PrismaBatchRepository } from "../repositories/prisma-batch.repository";
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
+import type { SyncSarvamCampaignLifecycleUseCase } from "../../../campaigns/application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
+import type { SyncSarvamCohortLifecycleUseCase } from "../../application/use-cases/sync-sarvam-cohort-lifecycle.use-case";
 
 export class BatchProcessingScheduler {
   private autoRecoveryTimer: NodeJS.Timeout | null = null;
+  private lifecycleSyncTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly worker: BatchProcessingWorker,
+    private readonly syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase,
+    private readonly syncCohortLifecycle?: SyncSarvamCohortLifecycleUseCase,
     private readonly logger?: Logger,
   ) {
     this.logger = logger?.child({ component: "BatchProcessingScheduler" });
@@ -35,7 +40,20 @@ export class BatchProcessingScheduler {
       });
     }, 120_000); // 2 minutes
 
-    // 3. Register Worker Processor
+    // 3. Start Periodic Sarvam Lifecycle Synchronization (Every 2 minutes)
+    if (this.syncCampaignLifecycle || this.syncCohortLifecycle) {
+      this.syncSarvamLifecycle().catch((err) => {
+        if (this.logger) this.logger.error("Initial Sarvam lifecycle sync error", err);
+      });
+
+      this.lifecycleSyncTimer = setInterval(() => {
+        this.syncSarvamLifecycle().catch((err) => {
+          if (this.logger) this.logger.error("Periodic Sarvam lifecycle sync error", err);
+        });
+      }, 120_000); // 2 minutes
+    }
+
+    // 4. Register Worker Processor
     queue.process("process-batch", 2, async (job) => {
       await this.worker.process(job);
     });
@@ -181,7 +199,29 @@ export class BatchProcessingScheduler {
     }
   }
 
+
+  private async syncSarvamLifecycle(): Promise<void> {
+    if (this.syncCampaignLifecycle) {
+      try {
+        await this.syncCampaignLifecycle.execute();
+      } catch (err) {
+        if (this.logger) this.logger.error("Error running Sarvam campaign lifecycle sync", err);
+      }
+    }
+    if (this.syncCohortLifecycle) {
+      try {
+        await this.syncCohortLifecycle.execute();
+      } catch (err) {
+        if (this.logger) this.logger.error("Error running Sarvam cohort lifecycle sync", err);
+      }
+    }
+  }
+
   async stop(): Promise<void> {
+    if (this.lifecycleSyncTimer) {
+      clearInterval(this.lifecycleSyncTimer);
+      this.lifecycleSyncTimer = null;
+    }
     if (this.autoRecoveryTimer) {
       clearInterval(this.autoRecoveryTimer);
       this.autoRecoveryTimer = null;

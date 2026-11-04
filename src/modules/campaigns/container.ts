@@ -19,6 +19,8 @@ import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
 import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
 import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.use-case";
+import { ControlSarvamCampaignUseCase } from "./application/use-cases/control-sarvam-campaign.use-case";
+import { SyncSarvamCampaignLifecycleUseCase } from "./application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
 import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
@@ -36,6 +38,10 @@ export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
   repository: PrismaCampaignRepository;
+  useCases: {
+    controlSarvamCampaign?: ControlSarvamCampaignUseCase;
+    syncSarvamCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+  };
 }
 
 export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
@@ -86,6 +92,28 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     log,
   );
 
+  const controlSarvamCampaign =
+    deps?.sarvamCampaignClient && deps?.sarvamEncryptionService
+      ? new ControlSarvamCampaignUseCase(
+          campaignRepo,
+          batchRepo,
+          deps.sarvamCampaignClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
+  const syncSarvamCampaignLifecycle =
+    deps?.sarvamCampaignClient && deps?.sarvamEncryptionService
+      ? new SyncSarvamCampaignLifecycleUseCase(
+          campaignRepo,
+          batchRepo,
+          deps.sarvamCampaignClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
   const createCampaign = new CreateCampaignUseCase(
     campaignRepo,
     planRepo,
@@ -97,6 +125,10 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
 
   return {
     repository: campaignRepo,
+    useCases: {
+      controlSarvamCampaign,
+      syncSarvamCampaignLifecycle,
+    },
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,

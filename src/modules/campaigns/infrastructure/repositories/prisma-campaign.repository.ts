@@ -8,6 +8,7 @@ import type {
   UpdateCampaignData,
   CampaignStatsResult,
   CampaignListItem,
+  ActiveSarvamCampaignRecord,
   AssistantWithAgentData,
   SarvamAgentWithApiKeyData,
 } from "../../application/interfaces/campaign-repository.interface";
@@ -635,6 +636,56 @@ export class PrismaCampaignRepository implements CampaignRepository {
       data: {
         status,
         ...(extra?.startedAt !== undefined && { startedAt: extra.startedAt }),
+        ...(extra?.completedAt !== undefined && {
+          completedAt: extra.completedAt,
+        }),
+      },
+    });
+
+    const counts = await this.getSingleCampaignMetrics(campaignId);
+    return this.toEntityData(campaign, counts);
+  }
+
+  async findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]> {
+    const campaigns = await prisma.campaign.findMany({
+      where: {
+        isDeleted: false,
+        provider: "SARVAM",
+        sarvamCampaignId: { not: null },
+        sarvamAgentId: { not: null },
+        status: { in: ["SCHEDULED", "RUNNING", "PAUSED"] },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        sarvamCampaignId: true,
+        sarvamAgentId: true,
+        status: true,
+        sarvamStatus: true,
+      },
+    });
+
+    return campaigns.map((c) => ({
+      id: c.id,
+      tenantId: c.tenantId,
+      sarvamCampaignId: c.sarvamCampaignId as string,
+      sarvamAgentId: c.sarvamAgentId as string,
+      status: c.status,
+      sarvamStatus: c.sarvamStatus,
+    }));
+  }
+
+  async updateSarvamStatus(
+    campaignId: string,
+    sarvamStatus: string,
+    kooiStatus?: CampaignStatus,
+    extra?: { completedAt?: Date },
+  ): Promise<CampaignEntityData> {
+    const campaign = await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        sarvamStatus,
+        ...(kooiStatus && { status: kooiStatus }),
         ...(extra?.completedAt !== undefined && {
           completedAt: extra.completedAt,
         }),
@@ -1433,6 +1484,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       sarvamAgentId?: string | null;
       provider?: string | null;
       sarvamCampaignId?: string | null;
+      sarvamStatus?: string | null;
       startTimestamp?: Date | null;
       endTimestamp?: Date | null;
       allowedSchedule?: unknown;

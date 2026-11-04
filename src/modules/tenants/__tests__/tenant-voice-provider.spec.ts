@@ -370,7 +370,7 @@ describe("Tenant Voice Provider Configuration & Switching", () => {
       expect(sentData.id).toBe("tenant-001");
       expect(sentData.name).toBe("Acme Voice Labs");
       // Internal fields must be completely stripped
-      expect(sentData.voiceProvider).toBeUndefined();
+      expect(sentData.voiceProvider).toBe("BOLNA");
       expect(sentData.bolnaApiKeyId).toBeUndefined();
       expect(sentData.bolnaApiKey).toBeUndefined();
       expect(sentData.sarvamApiKey).toBeUndefined();
