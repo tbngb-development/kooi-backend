@@ -200,9 +200,36 @@ export class CreateCampaignUseCase {
     if (input.variables) {
       for (const [k, v] of Object.entries(input.variables)) {
         if (typeof v === "string") {
-          cleanedVariables[k] = v;
+          cleanedVariables[k] = v.trim();
         }
       }
+    }
+
+    // Authoritative backend validation of required Sarvam agent variables
+    let agentVariablesList: Array<{ key: string; required?: boolean }> = [];
+    if (Array.isArray(sarvamAgent.agentVariables)) {
+      agentVariablesList = sarvamAgent.agentVariables as any[];
+    } else if (typeof sarvamAgent.agentVariables === "string") {
+      try {
+        const parsed = JSON.parse(sarvamAgent.agentVariables);
+        if (Array.isArray(parsed)) agentVariablesList = parsed;
+      } catch {
+        agentVariablesList = [];
+      }
+    }
+
+    const missingRequired: string[] = [];
+    for (const v of agentVariablesList) {
+      if (v.required) {
+        const val = cleanedVariables[v.key];
+        if (val === undefined || val === null || val === "") {
+          missingRequired.push(v.key);
+        }
+      }
+    }
+
+    if (missingRequired.length > 0) {
+      throw new MissingRequiredVariablesError(missingRequired);
     }
 
     // Decrypt API key

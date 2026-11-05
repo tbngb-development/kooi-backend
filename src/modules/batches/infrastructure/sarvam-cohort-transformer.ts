@@ -1,7 +1,11 @@
 import { normalizePhoneNumber } from "../../leads/domain/rules/phone.rules";
 import type { LeadRow } from "../../leads/infrastructure/leadParser";
 import { serializeCsv } from "../../../shared/utils/csv";
-import type { SarvamAgentVariable } from "../../sarvam-agents/domain/types/sarvam-agent.types";
+import type {
+  SarvamAgentVariable,
+  WelcomeMessageConfig,
+} from "../../sarvam-agents/domain/types/sarvam-agent.types";
+import type { Logger } from "../../../shared/logging/logger.interface";
 
 export interface SarvamCohortTransformResult {
   transformedCsvBuffer: Buffer;
@@ -35,21 +39,44 @@ export class SarvamCohortTransformer {
     agentVariables: SarvamAgentVariable[] = [],
     variableOverrides: Record<string, string> = {},
     campaignVariables: Record<string, string> = {},
+    welcomeMessageConfig?: WelcomeMessageConfig,
+    logger?: Logger,
   ): SarvamCohortTransformResult {
     const agentVarMap = new Map<string, SarvamAgentVariable>();
     for (const v of agentVariables) {
       agentVarMap.set(v.key, v);
     }
 
-    // Lead CSV upload strictly requires contact number only.
-    // All defined agent variables are included and injected from campaign variables,
-    // overrides, defaults, or fallback to empty string ("").
-    const matchedVariables: string[] = agentVariables.map((v) => v.key);
-    const missingRequiredVariables: string[] = [];
+    // Identify if a welcome message should be injected into the cohort
+    const hasWelcomeMessageConfig = Boolean(
+      welcomeMessageConfig &&
+        ((welcomeMessageConfig.customTemplate &&
+          welcomeMessageConfig.customTemplate.trim().length > 0) ||
+          (welcomeMessageConfig.defaultMessage &&
+            welcomeMessageConfig.defaultMessage.trim().length > 0)),
+    );
 
-    // Construct CSV headers: ["contact_number", ...matchedVariables]
+    const baseVariables = agentVariables.map((v) => v.key);
+    const matchedVariables = [...baseVariables];
+
+    // If welcome message is configured and welcome_message isn't already an agent variable, append it
+    const shouldInjectWelcomeVar =
+      hasWelcomeMessageConfig && !matchedVariables.includes("welcome_message");
+    if (shouldInjectWelcomeVar) {
+      matchedVariables.push("welcome_message");
+    }
+
+    const missingRequiredSet = new Set<string>();
     const headers = ["contact_number", ...matchedVariables];
     const dataRows: string[][] = [];
+
+    // Parse template placeholders if customTemplate exists
+    let templatePlaceholders: string[] = [];
+    if (welcomeMessageConfig?.customTemplate?.trim()) {
+      const matches =
+        welcomeMessageConfig.customTemplate.match(/\{\{([^}]+)\}\}/g) || [];
+      templatePlaceholders = matches.map((m) => m.slice(2, -2).trim());
+    }
 
     for (const lead of leads) {
       const normalizedPhone = normalizePhoneNumber(lead.phone);
@@ -57,37 +84,101 @@ export class SarvamCohortTransformer {
         continue;
       }
 
-      const rowValues: string[] = [normalizedPhone];
+      // 1. Resolve contact merged variables with 3-tier precedence:
+      // Contact CSV > Campaign-level value > Agent override > Agent Default
+      const contactMergedVars: Record<string, string> = {};
 
-      for (const varKey of matchedVariables) {
+      for (const varKey of baseVariables) {
         let val: string | undefined = undefined;
 
-        // 1. Try exact match on lead row
+        // Try exact match on lead row or metadata
         if (lead[varKey] !== undefined && lead[varKey] !== null) {
-          val = String(lead[varKey]);
+          val = String(lead[varKey]).trim();
         } else if (
           lead.metadata &&
           typeof lead.metadata === "object" &&
           (lead.metadata as Record<string, unknown>)[varKey] !== undefined &&
           (lead.metadata as Record<string, unknown>)[varKey] !== null
         ) {
-          val = String((lead.metadata as Record<string, unknown>)[varKey]);
-        } else if (varKey === "customer_name" && lead.name) {
-          val = lead.name;
+          val = String((lead.metadata as Record<string, unknown>)[varKey]).trim();
+        } else if (
+          (varKey === "customer_name" || varKey === "recipient_name") &&
+          lead.name
+        ) {
+          val = lead.name.trim();
         }
 
-        // 2. Fallbacks: campaignVariables -> variableOverrides -> agent defaultValue -> ""
+        // Fallbacks: Campaign -> Override -> Agent Default -> ""
         if (val === undefined || val === "") {
-          if (campaignVariables[varKey] !== undefined && campaignVariables[varKey] !== "") {
-            val = campaignVariables[varKey];
-          } else if (variableOverrides[varKey] !== undefined && variableOverrides[varKey] !== "") {
-            val = variableOverrides[varKey];
+          if (
+            campaignVariables[varKey] !== undefined &&
+            campaignVariables[varKey].trim() !== ""
+          ) {
+            val = campaignVariables[varKey].trim();
+          } else if (
+            variableOverrides[varKey] !== undefined &&
+            variableOverrides[varKey].trim() !== ""
+          ) {
+            val = variableOverrides[varKey].trim();
           } else {
-            val = agentVarMap.get(varKey)?.defaultValue ?? "";
+            val = agentVarMap.get(varKey)?.defaultValue?.trim() ?? "";
           }
         }
 
-        rowValues.push(val);
+        contactMergedVars[varKey] = val;
+
+        // Validate required agent variables for each contact
+        const isRequired = agentVarMap.get(varKey)?.required ?? false;
+        if (isRequired && (!val || val.trim() === "")) {
+          missingRequiredSet.add(varKey);
+        }
+      }
+
+      // 2. Generate welcome message if configured
+      let resolvedWelcomeMessage = "";
+      if (hasWelcomeMessageConfig && welcomeMessageConfig) {
+        const customTemplate = welcomeMessageConfig.customTemplate?.trim();
+
+        if (customTemplate && templatePlaceholders.length > 0) {
+          // Check if all interpolation variables are available and non-empty
+          const missingPlaceholders = templatePlaceholders.filter(
+            (p) =>
+              !contactMergedVars[p] || contactMergedVars[p].trim() === "",
+          );
+
+          if (missingPlaceholders.length === 0) {
+            // All variables present: interpolate
+            resolvedWelcomeMessage = customTemplate.replace(
+              /\{\{([^}]+)\}\}/g,
+              (_, rawKey) => {
+                const cleanKey = rawKey.trim();
+                return contactMergedVars[cleanKey] ?? "";
+              },
+            );
+          } else {
+            // Missing interpolation variable: fall back completely to static greeting
+            logger?.warn(
+              "Sarvam welcome message missing interpolation variable, falling back to static default greeting",
+              {
+                action: "sarvam_cohort_transformer.welcome_message_fallback",
+                missingVariables: missingPlaceholders,
+              },
+            );
+            resolvedWelcomeMessage = welcomeMessageConfig.defaultMessage ?? "";
+          }
+        } else {
+          resolvedWelcomeMessage = welcomeMessageConfig.defaultMessage ?? "";
+        }
+      }
+
+      // 3. Assemble CSV row values
+      const rowValues: string[] = [normalizedPhone];
+      for (const varKey of matchedVariables) {
+        if (varKey === "welcome_message" && hasWelcomeMessageConfig) {
+          rowValues.push(resolvedWelcomeMessage);
+        } else {
+          rowValues.push(contactMergedVars[varKey] ?? "");
+        }
       }
 
       dataRows.push(rowValues);
@@ -96,16 +187,17 @@ export class SarvamCohortTransformer {
     const csvContent = serializeCsv(headers, dataRows);
     const transformedCsvBuffer = Buffer.from(csvContent, "utf-8");
 
-    // Build transformation JSON
+    // Build transformation JSON mapping CSV columns to app_variables
     const appVariablesMap: Record<
       string,
       { column_name: string; required: boolean; formatting_functions: unknown[] }
     > = {};
 
     for (const varKey of matchedVariables) {
+      const isRequired = agentVarMap.get(varKey)?.required ?? false;
       appVariablesMap[varKey] = {
         column_name: varKey,
-        required: false,
+        required: isRequired,
         formatting_functions: [],
       };
     }
@@ -127,7 +219,7 @@ export class SarvamCohortTransformer {
       transformedCsvBuffer,
       transformationJson,
       matchedVariables,
-      missingRequiredVariables,
+      missingRequiredVariables: Array.from(missingRequiredSet),
       totalLeads: dataRows.length,
     };
   }

@@ -35,7 +35,6 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
         appId: data.appId,
         appVersion: data.appVersion,
         attemptsPerSecond: data.attemptsPerSecond,
-        webhookUrl: data.webhookUrl,
         agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
         welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
         outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
@@ -62,7 +61,6 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
         ...(data.attemptsPerSecond !== undefined && {
           attemptsPerSecond: data.attemptsPerSecond,
         }),
-        ...(data.webhookUrl !== undefined && { webhookUrl: data.webhookUrl }),
         ...(data.agentVariables !== undefined && {
           agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
         }),

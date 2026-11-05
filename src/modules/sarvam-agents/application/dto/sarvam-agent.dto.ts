@@ -13,7 +13,6 @@ export interface CreateSarvamAgentDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond?: number | null;
-  webhookUrl?: string | null;
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -29,7 +28,6 @@ export interface UpdateSarvamAgentDTO {
   appId?: string;
   appVersion?: number;
   attemptsPerSecond?: number | null;
-  webhookUrl?: string | null;
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -56,7 +54,6 @@ export interface SarvamAgentAdminResponseDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond: number | null;
-  webhookUrl: string | null;
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
@@ -111,7 +108,6 @@ export interface TenantSarvamAgentDetailDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond: number | null;
-  webhookUrl: string | null;
   status: "ACTIVE";
   welcomeMessage: {
     defaultMessage: string;
@@ -131,4 +127,3 @@ export interface UpdateTenantVariablesDTO {
 export interface UpdateTenantWelcomeMessageDTO {
   customMessage: string | null;
 }
-

@@ -193,6 +193,7 @@ export class ProcessSarvamWebhookUseCase {
           typeof p.duration === "number" ? Math.round(p.duration) : 0;
         const isBillable = isConnected && attemptDurationSec > 0;
 
+        // eslint-disable-next-line no-useless-assignment
         let finalCallId = existingCall?.id;
         let debitResult: DebitCallResult | null = null;
         let attemptPlatformCostPaisa: number | null = null;
@@ -612,6 +613,26 @@ export class ProcessSarvamWebhookUseCase {
         const rawValue = payloadVars[varName];
         if (rawValue !== undefined) {
           if (typeof rawValue !== "function" && typeof rawValue !== "symbol") {
+            const varType = (item as any).type;
+            if (varType === "enum") {
+              const configuredOptions = Array.isArray((item as any).options)
+                ? (item as any).options.map((o: unknown) => String(o).trim().toLowerCase())
+                : [];
+              const rawStr = String(rawValue).trim().toLowerCase();
+              const isValidOption = configuredOptions.includes(rawStr);
+
+              if (!isValidOption && configuredOptions.length > 0) {
+                this.logger?.warn(
+                  "Sarvam output variable value not among configured enum options",
+                  {
+                    action: "webhook.sarvam.unexpected_enum_output_var",
+                    key: varName,
+                    configuredOptions: (item as any).options,
+                  },
+                );
+              }
+            }
+
             matched.push({ key: varName, value: rawValue });
           } else {
             this.logger?.warn("Invalid Sarvam output variable value type ignored", {

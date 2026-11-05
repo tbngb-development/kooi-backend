@@ -464,5 +464,72 @@ describe("Dynamic Sarvam Output Variable Mapping and Persistence", () => {
       { key: "call_summary", value: "Sarvam call completed." },
     ]);
   });
+
+  // 12. Case-insensitive matching for enum output variables
+  it("Scenario 12: matches enum output variable case-insensitively and persists value", async () => {
+    agentConfigStore.set(sarvamAgentId, {
+      id: sarvamAgentId,
+      tenantId,
+      outputVariables: [
+        {
+          name: "call_disposition",
+          description: "Outcome",
+          type: "enum",
+          options: ["Interested", "Callback", "Not Interested"],
+        },
+      ],
+    });
+
+    const payload = createPayload("att-enum-1", {
+      call_disposition: "interested", // lowercase returned by Sarvam
+    });
+
+    await useCase.execute(payload);
+
+    expect(inMemoryCallAnalysis?.outputVariables).toEqual([
+      { key: "call_disposition", value: "interested" },
+    ]);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Unexpected enum value"),
+      expect.anything(),
+    );
+  });
+
+  // 13. Unexpected enum value logs structured warning and preserves original returned string without rejecting
+  it("Scenario 13: logs structured warning and preserves original returned string for unexpected enum value", async () => {
+    agentConfigStore.set(sarvamAgentId, {
+      id: sarvamAgentId,
+      tenantId,
+      outputVariables: [
+        {
+          name: "call_disposition",
+          description: "Outcome",
+          type: "enum",
+          options: ["Interested", "Callback", "Not Interested"],
+        },
+      ],
+    });
+
+    const payload = createPayload("att-enum-unexpected", {
+      call_disposition: "Voicemail Left", // Not in allowed options
+    });
+
+    await useCase.execute(payload);
+
+    // Logs warning with structured metadata
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Sarvam output variable value not among configured enum options",
+      expect.objectContaining({
+        action: "webhook.sarvam.unexpected_enum_output_var",
+        key: "call_disposition",
+        configuredOptions: ["Interested", "Callback", "Not Interested"],
+      }),
+    );
+
+    // Preserves original returned string without failing or rejecting call
+    expect(inMemoryCallAnalysis?.outputVariables).toEqual([
+      { key: "call_disposition", value: "Voicemail Left" },
+    ]);
+  });
 });
 

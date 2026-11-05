@@ -25,6 +25,7 @@ import {
   SarvamAgentNotFoundError,
   SarvamAgentInvalidOverrideError,
 } from "../domain/errors/sarvam-agent.errors";
+import { ValidationError } from "../../../shared/errors/validation.error";
 import type { SarvamAgent, SarvamAgentTenantOverride } from "@prisma/client";
 
 describe("Sarvam Agent Use Cases", () => {
@@ -59,23 +60,25 @@ describe("Sarvam Agent Use Cases", () => {
     appId: "sarvam_app_01",
     appVersion: 1,
     attemptsPerSecond: 5,
-    webhookUrl: "https://api.acme.com/webhook",
     agentVariables: [
       {
         key: "company_name",
         defaultValue: "Acme Corp",
+        required: false,
         isTenantVisible: true,
         isTenantEditable: true,
       },
       {
         key: "system_tier",
         defaultValue: "premium",
+        required: false,
         isTenantVisible: true,
         isTenantEditable: false,
       },
       {
         key: "internal_secret",
         defaultValue: "secret_123",
+        required: false,
         isTenantVisible: false,
         isTenantEditable: false,
       },
@@ -231,12 +234,14 @@ describe("Sarvam Agent Use Cases", () => {
             {
               key: "dup_key",
               defaultValue: "val1",
+              required: false,
               isTenantVisible: true,
               isTenantEditable: true,
             },
             {
               key: "dup_key",
               defaultValue: "val2",
+              required: false,
               isTenantVisible: true,
               isTenantEditable: true,
             },
@@ -277,6 +282,146 @@ describe("Sarvam Agent Use Cases", () => {
       expect(result.connectionConfigs).toHaveLength(1);
       expect(result.connectionConfigs[0].connection_id).toBe("conn_123");
       expect(result.retryConfig.max_retries).toBe(2);
+    });
+
+    it("creates an agent with required input variables, enum output variables, and dynamic welcome template", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const agentWithNewFields: SarvamAgentWithApiKeyAndTenant = {
+        ...sampleAgentWithApiKey,
+        agentVariables: [
+          {
+            key: "customer_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+        outputVariables: [
+          {
+            name: "call_disposition",
+            description: "Final call outcome",
+            type: "enum",
+            options: ["interested", "callback", "not_interested"],
+          },
+        ],
+        welcomeMessage: {
+          defaultMessage: "Hello customer.",
+          customTemplate: "Hello {{customer_name}}, welcome.",
+          interpolationVariables: ["customer_name"],
+        },
+      };
+
+      vi.mocked(mockAgentRepo.create).mockResolvedValue(agentWithNewFields);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      const result = await useCase.execute({
+        name: "Refactored Agent",
+        apiKeyId: "key-uuid-1",
+        appId: "sarvam_app_02",
+        appVersion: 1,
+        createdBy: "admin-1",
+        connectionConfigs: [{ connection_id: "conn-1", agent_phone_number: "+12345" }],
+        agentVariables: [
+          {
+            key: "customer_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+        outputVariables: [
+          {
+            name: "call_disposition",
+            description: "Final call outcome",
+            type: "enum",
+            options: ["interested", "callback", "not_interested"],
+          },
+        ],
+        welcomeMessage: {
+          defaultMessage: "Hello customer.",
+          customTemplate: "Hello {{customer_name}}, welcome.",
+        },
+      });
+
+      expect(result.agentVariables[0].required).toBe(true);
+      expect(result.outputVariables[0].type).toBe("enum");
+      expect(result.outputVariables[0].options).toEqual(["interested", "callback", "not_interested"]);
+      expect(result.welcomeMessage?.customTemplate).toBe("Hello {{customer_name}}, welcome.");
+      expect(result.welcomeMessage?.interpolationVariables).toEqual(["customer_name"]);
+    });
+
+    it("rejects agent creation if enum output variable has duplicate options", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      await expect(
+        useCase.execute({
+          name: "Invalid Enum Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "sarvam_app_dup_enum",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "conn-1", agent_phone_number: "+12345" }],
+          outputVariables: [
+            {
+              name: "sentiment",
+              description: "Customer sentiment",
+              type: "enum",
+              options: ["Positive", "positive"], // Duplicate case-insensitive
+            },
+          ],
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it("rejects agent creation if welcome template references an undefined variable", async () => {
+      vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(sampleApiKey);
+      vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+
+      const useCase = new CreateSarvamAgentUseCase(
+        mockAgentRepo,
+        mockApiKeyRepo,
+        mapper,
+      );
+
+      await expect(
+        useCase.execute({
+          name: "Undefined Var Template Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "sarvam_app_template_err",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "conn-1", agent_phone_number: "+12345" }],
+          agentVariables: [
+            {
+              key: "user_name",
+              defaultValue: "",
+              required: false,
+              isTenantVisible: true,
+              isTenantEditable: true,
+            },
+          ],
+          welcomeMessage: {
+            defaultMessage: "Hello.",
+            customTemplate: "Hello {{unknown_variable}}, your order is ready.",
+          },
+        }),
+      ).rejects.toThrow(ValidationError);
     });
 
     it("rejects creation when connectionConfigs is empty or omitted", async () => {
@@ -745,7 +890,6 @@ describe("Sarvam Agent Use Cases", () => {
       appId: "sarvam_app_01",
       appVersion: 1,
       attemptsPerSecond: 5,
-      webhookUrl: null,
       agentVariables: sampleAgentWithApiKey.agentVariables,
       welcomeMessage: sampleAgentWithApiKey.welcomeMessage,
       outputVariables: sampleAgentWithApiKey.outputVariables,

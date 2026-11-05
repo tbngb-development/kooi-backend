@@ -5,16 +5,42 @@ export const sarvamAgentVariableSchema = z.object({
   defaultValue: z.string().default(""),
   isTenantVisible: z.boolean().default(true),
   isTenantEditable: z.boolean().default(true),
+  required: z.boolean().default(false),
 });
 
 export const welcomeMessageConfigSchema = z.object({
   defaultMessage: z.string().default(""),
+  customTemplate: z.string().trim().nullable().optional(),
+  interpolationVariables: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
-export const sarvamOutputVariableSchema = z.object({
-  name: z.string().trim().min(1, "Output variable name is required"),
-  description: z.string().trim().min(1, "Output variable description is required"),
-});
+export const sarvamOutputVariableSchema = z
+  .object({
+    name: z.string().trim().min(1, "Output variable name is required"),
+    description: z.string().trim().min(1, "Output variable description is required"),
+    type: z.enum(["string", "enum"]).default("string"),
+    options: z.array(z.string().trim().min(1, "Option cannot be empty")).optional().default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === "enum") {
+      const cleanOptions = (data.options || []).map((o) => o.trim()).filter(Boolean);
+      if (cleanOptions.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options"],
+          message: "At least one option is required for enum output variables.",
+        });
+      }
+      const unique = new Set(cleanOptions.map((o) => o.toLowerCase()));
+      if (unique.size !== cleanOptions.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["options"],
+          message: "Enum options must be unique.",
+        });
+      }
+    }
+  });
 
 export const sarvamConnectionConfigSchema = z
   .object({
@@ -75,15 +101,8 @@ export const createSarvamAgentSchema = z.object({
   appId: z.string().trim().min(1, "App ID is required").max(255),
   appVersion: z.number().int().min(1, "App Version must be at least 1").default(1),
   attemptsPerSecond: z.number().int().positive().nullable().optional(),
-  webhookUrl: z
-    .string()
-    .trim()
-    .url("Webhook URL must be a valid URL")
-    .nullable()
-    .optional()
-    .or(z.literal("")),
   agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
-  welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "" }),
+  welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "", interpolationVariables: [] }),
   outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
   connectionConfigs: z
     .array(sarvamConnectionConfigSchema)
@@ -97,13 +116,6 @@ export const updateSarvamAgentSchema = z.object({
   appId: z.string().trim().min(1, "App ID cannot be empty").max(255).optional(),
   appVersion: z.number().int().min(1, "App Version must be at least 1").optional(),
   attemptsPerSecond: z.number().int().positive().nullable().optional(),
-  webhookUrl: z
-    .string()
-    .trim()
-    .url("Webhook URL must be a valid URL")
-    .nullable()
-    .optional()
-    .or(z.literal("")),
   agentVariables: z.array(sarvamAgentVariableSchema).optional(),
   welcomeMessage: welcomeMessageConfigSchema.optional(),
   outputVariables: z.array(sarvamOutputVariableSchema).optional(),
@@ -124,4 +136,3 @@ export const listSarvamAgentsQuerySchema = z.object({
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
   tenantId: z.string().trim().optional(),
 });
-

@@ -15,6 +15,7 @@ import {
   CampaignSarvamAgentNotFoundError,
   CampaignScheduleRequiredError,
   ExternalCampaignCreationFailedError,
+  MissingRequiredVariablesError,
 } from "../domain/errors/campaign.errors";
 
 describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
@@ -391,6 +392,77 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           name: "Missing Assistant Bolna Campaign",
         } as any),
       ).rejects.toThrow(CampaignAssistantRequiredError);
+    });
+
+    it("should reject campaign creation when a required Sarvam agent variable is missing", async () => {
+      const agentWithRequired = {
+        ...sampleSarvamAgent,
+        agentVariables: [
+          {
+            key: "company_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRequired);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Campaign with missing required var",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+          variables: {},
+        }),
+      ).rejects.toThrow(MissingRequiredVariablesError);
+    });
+
+    it("should succeed and persist campaign-level variables when all required variables are supplied", async () => {
+      const agentWithRequired = {
+        ...sampleSarvamAgent,
+        agentVariables: [
+          {
+            key: "company_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+          {
+            key: "campaign_theme",
+            defaultValue: "Default Theme",
+            required: false,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRequired);
+
+      const campaign = await useCase.execute(tenantId, {
+        name: "Campaign with valid required var",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+        allowedSchedule: validSchedule,
+        variables: {
+          company_name: "Acme SuperCorp",
+        },
+      });
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          variables: {
+            company_name: "Acme SuperCorp",
+          },
+        }),
+      );
+      expect(campaign.status).toBe("SCHEDULED");
     });
   });
 });

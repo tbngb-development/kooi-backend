@@ -3,15 +3,22 @@ export interface SarvamAgentVariable {
   defaultValue: string;
   isTenantVisible: boolean;
   isTenantEditable: boolean;
+  required: boolean;
 }
 
 export interface WelcomeMessageConfig {
   defaultMessage: string;
+  customTemplate?: string | null;
+  interpolationVariables?: string[];
 }
+
+export type SarvamOutputVariableType = "string" | "enum";
 
 export interface SarvamOutputVariable {
   name: string;
   description: string;
+  type: SarvamOutputVariableType;
+  options?: string[];
 }
 
 export interface SarvamConnectionConfig {
@@ -45,6 +52,7 @@ export interface EffectiveSarvamVariable {
   effectiveValue: string;
   isTenantEditable: boolean;
   isOverridden: boolean;
+  required: boolean;
 }
 
 export interface ResolvedTenantSarvamAgent {
@@ -53,7 +61,6 @@ export interface ResolvedTenantSarvamAgent {
   appId: string;
   appVersion: number;
   attemptsPerSecond?: number | null;
-  webhookUrl?: string | null;
   status: "ACTIVE" | "ARCHIVED";
   welcomeMessage: {
     defaultMessage: string;

@@ -18,6 +18,7 @@ import {
 import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
+  SarvamOutputVariable,
 } from "../../../domain/types/sarvam-agent.types";
 
 export class UpdateSarvamAgentUseCase {
@@ -54,8 +55,8 @@ export class UpdateSarvamAgentUseCase {
     }
 
     // Validate variables if provided
+    const effectiveVarKeys = new Set<string>();
     if (dto.agentVariables !== undefined) {
-      const varKeys = new Set<string>();
       for (const v of dto.agentVariables) {
         const key = v.key.trim();
         if (!key) {
@@ -63,18 +64,25 @@ export class UpdateSarvamAgentUseCase {
             "Variable key cannot be empty.",
           );
         }
-        if (varKeys.has(key)) {
+        if (effectiveVarKeys.has(key)) {
           throw new SarvamAgentInvalidOverrideError(
             `Duplicate variable key '${key}' defined in agent variables.`,
           );
         }
-        varKeys.add(key);
+        effectiveVarKeys.add(key);
+      }
+    } else {
+      const existingVars = this.mapper.parseAgentVariables(existing.agentVariables);
+      for (const v of existingVars) {
+        effectiveVarKeys.add(v.key);
       }
     }
 
     // Validate output variables if provided
+    let validatedOutputVariables: SarvamOutputVariable[] | undefined = undefined;
     if (dto.outputVariables !== undefined) {
       const outNames = new Set<string>();
+      validatedOutputVariables = [];
       for (const out of dto.outputVariables) {
         const name = out.name.trim();
         if (!name) {
@@ -88,6 +96,59 @@ export class UpdateSarvamAgentUseCase {
           );
         }
         outNames.add(name);
+
+        const type = out.type === "enum" ? "enum" : "string";
+        let options: string[] | undefined = undefined;
+
+        if (type === "enum") {
+          const rawOptions = Array.isArray(out.options) ? out.options : [];
+          const cleanOptions = rawOptions
+            .map((o) => String(o).trim())
+            .filter(Boolean);
+
+          if (cleanOptions.length === 0) {
+            throw new SarvamAgentInvalidOverrideError(
+              `Enum output variable '${name}' must have at least one valid option.`,
+            );
+          }
+
+          const uniqueOptions = new Set(cleanOptions.map((o) => o.toLowerCase()));
+          if (uniqueOptions.size !== cleanOptions.length) {
+            throw new SarvamAgentInvalidOverrideError(
+              `Enum output variable '${name}' has duplicate options.`,
+            );
+          }
+          options = cleanOptions;
+        }
+
+        validatedOutputVariables.push({
+          name,
+          description: out.description.trim(),
+          type,
+          options: options ?? [],
+        });
+      }
+    }
+
+    // Validate welcome message template
+    let validatedWelcomeMessage = dto.welcomeMessage;
+    if (validatedWelcomeMessage !== undefined) {
+      if (
+        validatedWelcomeMessage.customTemplate &&
+        validatedWelcomeMessage.customTemplate.trim()
+      ) {
+        const matches =
+          validatedWelcomeMessage.customTemplate.match(/\{\{([^}]+)\}\}/g) || [];
+        const referencedKeys = matches.map((m) => m.slice(2, -2).trim());
+
+        for (const refKey of referencedKeys) {
+          if (!effectiveVarKeys.has(refKey)) {
+            throw new SarvamAgentInvalidOverrideError(
+              `Welcome message references undefined variable '{{${refKey}}}'. Please define it in agent variables first.`,
+            );
+          }
+        }
+        validatedWelcomeMessage.interpolationVariables = referencedKeys;
       }
     }
 
@@ -127,17 +188,14 @@ export class UpdateSarvamAgentUseCase {
       ...(dto.attemptsPerSecond !== undefined && {
         attemptsPerSecond: dto.attemptsPerSecond,
       }),
-      ...(dto.webhookUrl !== undefined && {
-        webhookUrl: dto.webhookUrl?.trim() || null,
-      }),
       ...(dto.agentVariables !== undefined && {
         agentVariables: dto.agentVariables,
       }),
-      ...(dto.welcomeMessage !== undefined && {
-        welcomeMessage: dto.welcomeMessage,
+      ...(validatedWelcomeMessage !== undefined && {
+        welcomeMessage: validatedWelcomeMessage,
       }),
-      ...(dto.outputVariables !== undefined && {
-        outputVariables: dto.outputVariables,
+      ...(validatedOutputVariables !== undefined && {
+        outputVariables: validatedOutputVariables,
       }),
       ...(validatedConnectionConfigs !== undefined && {
         connectionConfigs: validatedConnectionConfigs,

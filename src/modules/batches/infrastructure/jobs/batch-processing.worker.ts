@@ -9,7 +9,10 @@ import type { ISarvamCohortClient } from "../../application/interfaces/sarvam-co
 import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
 import { SarvamCohortTransformer } from "../sarvam-cohort-transformer";
-import type { SarvamAgentVariable } from "../../../sarvam-agents/domain/types/sarvam-agent.types";
+import type {
+  SarvamAgentVariable,
+  WelcomeMessageConfig,
+} from "../../../sarvam-agents/domain/types/sarvam-agent.types";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import type { PendingLeadRow } from "../../application/interfaces/batch-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -544,12 +547,16 @@ export class BatchProcessingWorker {
       (sarvamAgent.overrides?.[0]?.variableOverrides as Record<string, string>) ?? {};
     const campaignVariables =
       (campaign.variables as Record<string, string>) ?? {};
+    const welcomeMessageConfig =
+      (sarvamAgent.welcomeMessage as WelcomeMessageConfig | undefined) ?? undefined;
 
     const transformResult = this.sarvamCohortTransformer.transform(
       leadsForSarvam,
       agentVariables,
       variableOverrides,
       campaignVariables,
+      welcomeMessageConfig,
+      this.log,
     );
 
     if (transformResult.missingRequiredVariables.length > 0) {

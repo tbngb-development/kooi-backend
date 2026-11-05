@@ -11,7 +11,7 @@ import type {
 } from "../application/interfaces/sarvam-webhook-repository.interface";
 import type { SarvamWebhookAttemptPayload } from "../application/dto/sarvam-webhook.dto";
 import type { BatchStatus, CampaignStatus, CallStatus } from "@prisma/client";
-import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { Logger } from "../../../shared/logging/logger.interface";
 
 describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => {
   const tenantId = "tenant-uuid-1";
@@ -297,6 +297,7 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         completion_status: "completed",
         connectivity_status: "connected",
         next_action_status: null,
+        retry_attempt: 0,
         duration: 120,
         user_identifier: userPhoneNumber,
         user_phone_number: userPhoneNumber,
@@ -333,6 +334,7 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         cohort_id: sarvamCohort2Id,
         completion_status: "completed",
         connectivity_status: "connected",
+        retry_attempt: 0,
         next_action_status: null,
         duration: 45,
         user_identifier: userPhoneNumber,
@@ -379,6 +381,7 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         cohort_id: sarvamCohort1Id,
         completion_status: "completed",
         connectivity_status: "connected",
+        retry_attempt: 0,
         next_action_status: null,
         user_identifier: userPhoneNumber,
         user_phone_number: userPhoneNumber,
@@ -469,6 +472,7 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         cohort_id: sarvamCohort1Id,
         completion_status: "completed",
         connectivity_status: "connected",
+        retry_attempt: 0,
         next_action_status: null,
         user_identifier: userPhoneNumber,
         user_phone_number: userPhoneNumber,
@@ -579,6 +583,7 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         cohort_id: sarvamCohort2Id,
         completion_status: "completed",
         connectivity_status: "connected",
+        retry_attempt: 0,
         next_action_status: null,
         user_identifier: userPhoneNumber,
         user_phone_number: userPhoneNumber,

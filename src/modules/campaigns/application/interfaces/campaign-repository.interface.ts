@@ -112,7 +112,7 @@ export interface SarvamAgentWithApiKeyData {
   appId: string;
   appVersion: number;
   attemptsPerSecond: number | null;
-  webhookUrl: string | null;
+  welcomeMessage?: unknown;
   agentVariables: unknown;
   connectionConfigs: unknown;
   retryConfig: unknown;

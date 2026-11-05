@@ -9,11 +9,11 @@ import type { PlanRepository } from "../../plans/application/interfaces/plan-rep
 import type { FileStorageProvider } from "../../../shared/config/external/storage/file-storage.interface";
 import type { BolnaBatchProvider } from "../application/interfaces/bolna-batch-provider.interface";
 
-vi.mock("../../../../shared/utils/tenant-freeze.guard", () => ({
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
   assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../../shared/jobs/queue", () => ({
+vi.mock("../../../shared/config/external/queue/queue.factory", () => ({
   getQueue: vi.fn().mockReturnValue({
     getJobs: vi.fn().mockResolvedValue([]),
     add: vi.fn().mockResolvedValue({ id: "job-1" }),

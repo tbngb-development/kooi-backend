@@ -18,52 +18,87 @@ import type {
 export class SarvamAgentMapper {
   parseAgentVariables(data: unknown): SarvamAgentVariable[] {
     if (!data) return [];
+    let items: unknown[] = [];
     if (Array.isArray(data)) {
-      return data as SarvamAgentVariable[];
-    }
-    if (typeof data === "string") {
+      items = data;
+    } else if (typeof data === "string") {
       try {
         const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? (parsed as SarvamAgentVariable[]) : [];
+        if (Array.isArray(parsed)) items = parsed;
       } catch {
         return [];
       }
+    } else {
+      return [];
     }
-    return [];
+
+    return items
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item) => ({
+        key: String(item.key ?? "").trim(),
+        defaultValue: String(item.defaultValue ?? ""),
+        isTenantVisible: item.isTenantVisible !== undefined ? Boolean(item.isTenantVisible) : true,
+        isTenantEditable: item.isTenantEditable !== undefined ? Boolean(item.isTenantEditable) : true,
+        required: Boolean(item.required ?? false),
+      }));
   }
 
   parseWelcomeMessage(data: unknown): WelcomeMessageConfig {
     if (!data) return { defaultMessage: "" };
-    if (typeof data === "object" && data !== null && "defaultMessage" in data) {
-      return data as WelcomeMessageConfig;
-    }
-    if (typeof data === "string") {
+    let parsedObj: Record<string, unknown> | null = null;
+    if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+      parsedObj = data as Record<string, unknown>;
+    } else if (typeof data === "string") {
       try {
         const parsed = JSON.parse(data);
-        if (typeof parsed === "object" && parsed !== null && "defaultMessage" in parsed) {
-          return parsed as WelcomeMessageConfig;
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          parsedObj = parsed;
+        } else {
+          return { defaultMessage: data };
         }
       } catch {
         return { defaultMessage: data };
       }
+    }
+    if (parsedObj) {
+      return {
+        defaultMessage: typeof parsedObj.defaultMessage === "string" ? parsedObj.defaultMessage : "",
+        customTemplate:
+          typeof parsedObj.customTemplate === "string" ? parsedObj.customTemplate : null,
+        interpolationVariables: Array.isArray(parsedObj.interpolationVariables)
+          ? parsedObj.interpolationVariables.map((v) => String(v).trim()).filter(Boolean)
+          : [],
+      };
     }
     return { defaultMessage: "" };
   }
 
   parseOutputVariables(data: unknown): SarvamOutputVariable[] {
     if (!data) return [];
+    let items: unknown[] = [];
     if (Array.isArray(data)) {
-      return data as SarvamOutputVariable[];
-    }
-    if (typeof data === "string") {
+      items = data;
+    } else if (typeof data === "string") {
       try {
         const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? (parsed as SarvamOutputVariable[]) : [];
+        if (Array.isArray(parsed)) items = parsed;
       } catch {
         return [];
       }
+    } else {
+      return [];
     }
-    return [];
+
+    return items
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item) => ({
+        name: String(item.name ?? "").trim(),
+        description: String(item.description ?? "").trim(),
+        type: item.type === "enum" ? "enum" : "string",
+        options: Array.isArray(item.options)
+          ? item.options.map((opt) => String(opt).trim()).filter(Boolean)
+          : [],
+      }));
   }
 
   parseVariableOverrides(data: unknown): Record<string, string> {
@@ -183,7 +218,6 @@ export class SarvamAgentMapper {
       appId: agent.appId,
       appVersion: agent.appVersion,
       attemptsPerSecond: agent.attemptsPerSecond,
-      webhookUrl: agent.webhookUrl,
       agentVariables: this.parseAgentVariables(agent.agentVariables),
       welcomeMessage: this.parseWelcomeMessage(agent.welcomeMessage),
       outputVariables: this.parseOutputVariables(agent.outputVariables),
@@ -250,10 +284,11 @@ export class SarvamAgentMapper {
           effectiveValue,
           isTenantEditable: v.isTenantEditable,
           isOverridden: hasCustomOverride,
+          required: v.required,
         };
       });
 
-    const platformWelcome = this.parseWelcomeMessage(agent.welcomeMessage);
+    const agentWelcome = this.parseWelcomeMessage(agent.welcomeMessage);
     const customMessage =
       override?.welcomeMessage !== null && override?.welcomeMessage !== undefined
         ? override.welcomeMessage.trim()
@@ -262,7 +297,7 @@ export class SarvamAgentMapper {
     const hasCustomWelcome = customMessage !== null && customMessage.length > 0;
     const effectiveWelcome = hasCustomWelcome
       ? customMessage
-      : platformWelcome.defaultMessage;
+      : agentWelcome.defaultMessage;
 
     return {
       id: agent.id,
@@ -270,10 +305,9 @@ export class SarvamAgentMapper {
       appId: agent.appId,
       appVersion: agent.appVersion,
       attemptsPerSecond: agent.attemptsPerSecond,
-      webhookUrl: agent.webhookUrl,
       status: "ACTIVE",
       welcomeMessage: {
-        defaultMessage: platformWelcome.defaultMessage,
+        defaultMessage: agentWelcome.defaultMessage,
         customMessage,
         effectiveMessage: effectiveWelcome,
         isOverridden: hasCustomWelcome,
@@ -284,4 +318,3 @@ export class SarvamAgentMapper {
     };
   }
 }
-

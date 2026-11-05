@@ -16,6 +16,7 @@ import type { Logger } from "../../../../../shared/logging/logger.interface";
 import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
+  SarvamOutputVariable,
 } from "../../../domain/types/sarvam-agent.types";
 import {
   validateConnectionConfigs,
@@ -67,9 +68,11 @@ export class CreateSarvamAgentUseCase {
       varKeys.add(key);
     }
 
-    // Validate unique output variable names
+    // Validate unique output variable names & enum options
     const outputVariables = dto.outputVariables ?? [];
     const outNames = new Set<string>();
+    const validatedOutputVariables: SarvamOutputVariable[] = [];
+
     for (const out of outputVariables) {
       const name = out.name.trim();
       if (!name) {
@@ -83,6 +86,54 @@ export class CreateSarvamAgentUseCase {
         );
       }
       outNames.add(name);
+
+      const type = out.type === "enum" ? "enum" : "string";
+      let options: string[] | undefined = undefined;
+
+      if (type === "enum") {
+        const rawOptions = Array.isArray(out.options) ? out.options : [];
+        const cleanOptions = rawOptions
+          .map((o) => String(o).trim())
+          .filter(Boolean);
+
+        if (cleanOptions.length === 0) {
+          throw new SarvamAgentInvalidOverrideError(
+            `Enum output variable '${name}' must have at least one valid option.`,
+          );
+        }
+
+        const uniqueOptions = new Set(cleanOptions.map((o) => o.toLowerCase()));
+        if (uniqueOptions.size !== cleanOptions.length) {
+          throw new SarvamAgentInvalidOverrideError(
+            `Enum output variable '${name}' has duplicate options.`,
+          );
+        }
+        options = cleanOptions;
+      }
+
+      validatedOutputVariables.push({
+        name,
+        description: out.description.trim(),
+        type,
+        options: options ?? [],
+      });
+    }
+
+    // Validate welcome message template interpolation variables
+    const welcomeMessage = dto.welcomeMessage ?? { defaultMessage: "" };
+    if (welcomeMessage.customTemplate && welcomeMessage.customTemplate.trim()) {
+      const matches =
+        welcomeMessage.customTemplate.match(/\{\{([^}]+)\}\}/g) || [];
+      const referencedKeys = matches.map((m) => m.slice(2, -2).trim());
+
+      for (const refKey of referencedKeys) {
+        if (!varKeys.has(refKey)) {
+          throw new SarvamAgentInvalidOverrideError(
+            `Welcome message references undefined variable '{{${refKey}}}'. Please define it in agent variables first.`,
+          );
+        }
+      }
+      welcomeMessage.interpolationVariables = referencedKeys;
     }
 
     const connectionConfigs = validateConnectionConfigs(dto.connectionConfigs);
@@ -94,10 +145,9 @@ export class CreateSarvamAgentUseCase {
       appId: trimmedAppId,
       appVersion: Math.max(1, dto.appVersion),
       attemptsPerSecond: dto.attemptsPerSecond ?? null,
-      webhookUrl: dto.webhookUrl?.trim() || null,
       agentVariables,
-      welcomeMessage: dto.welcomeMessage ?? { defaultMessage: "" },
-      outputVariables,
+      welcomeMessage,
+      outputVariables: validatedOutputVariables,
       connectionConfigs,
       retryConfig,
       allowTenantVisible: dto.allowTenantVisible ?? false,

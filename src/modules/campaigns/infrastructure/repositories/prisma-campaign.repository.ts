@@ -1302,7 +1302,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       appId: agent.appId,
       appVersion: agent.appVersion,
       attemptsPerSecond: agent.attemptsPerSecond,
-      webhookUrl: agent.webhookUrl,
+      welcomeMessage: agent.welcomeMessage,
       agentVariables: agent.agentVariables,
       connectionConfigs: agent.connectionConfigs,
       retryConfig: agent.retryConfig,

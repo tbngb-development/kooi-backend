@@ -841,7 +841,6 @@ model SarvamAgent {
   appId              String
   appVersion         Int               @default(1)
   attemptsPerSecond  Int?
-  webhookUrl         String?
   agentVariables     Json              @default("[]")
   welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
   outputVariables    Json              @default("[]")

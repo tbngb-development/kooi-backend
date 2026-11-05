@@ -24,7 +24,6 @@ export interface CreateSarvamAgentRecord {
   appId: string;
   appVersion: number;
   attemptsPerSecond?: number | null;
-  webhookUrl?: string | null;
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
@@ -40,7 +39,6 @@ export interface UpdateSarvamAgentRecord {
   appId?: string;
   appVersion?: number;
   attemptsPerSecond?: number | null;
-  webhookUrl?: string | null;
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -87,4 +85,3 @@ export interface ISarvamAgentRepository {
     excludeId?: string,
   ): Promise<boolean>;
 }
-
