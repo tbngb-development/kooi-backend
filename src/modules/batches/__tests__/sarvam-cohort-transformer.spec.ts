@@ -30,6 +30,7 @@ describe("SarvamCohortTransformer", () => {
   it("requires only contact number in leads and falls back to empty string when variables are not in CSV", () => {
     const leads: LeadRow[] = [
       {
+        name: "",
         phone: "9876543210",
       },
     ];

@@ -291,6 +291,7 @@ export function buildContainer(): AppContainer {
     processClassifierExtractionUseCase:
       classifier.useCases.processClassifierExtraction,
     classifierRepo: classifier.repository,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
     logger,
   });
 

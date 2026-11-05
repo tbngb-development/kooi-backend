@@ -212,7 +212,7 @@ describe("SarvamOutputVariablesAnalysis Logic & Formatting", () => {
     expect(Boolean(sarvamCall.callAnalysis.outputVariables?.length)).toBe(true);
 
     // Bolna check
-    expect(bolnaCall.provider === "SARVAM").toBe(false);
+    expect((bolnaCall.provider as string) === "SARVAM").toBe(false);
     expect(Boolean(bolnaCall.callAnalysis.dynamicExtractions)).toBe(true);
   });
 });

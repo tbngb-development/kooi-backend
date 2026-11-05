@@ -1,4 +1,5 @@
 import type { CallStatus, LeadStatus, VoiceProvider } from "@prisma/client";
+import type { RecordingRetrievalStatus } from "../../../calls/domain/errors/sarvam-recording.errors";
 
 export interface AggregateCallCandidate {
   id: string;
@@ -42,6 +43,14 @@ export interface SarvamAttemptHistoryEntry {
   output_agent_variables?: Record<string, unknown> | null;
   transcript?: string | null;
   metadata?: Record<string, unknown> | null;
+  // Recording tracking fields
+  recording_url?: string | null;
+  recording_storage_key?: string | null;
+  recording_status?: RecordingRetrievalStatus;
+  recording_error?: string | null;
+  recording_attempts?: number;
+  recording_retrieved_at?: string | null;
+  recording_source?: "AUTOMATIC" | "MANUAL" | null;
 }
 
 export interface CreateAggregateCallData {

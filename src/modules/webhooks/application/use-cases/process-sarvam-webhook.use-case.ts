@@ -1,4 +1,5 @@
 import type { CallStatus, LeadStatus } from "@prisma/client";
+import type { Queue } from "bull";
 import { AppError } from "../../../../shared/errors/app.error";
 import { UnauthorizedError } from "../../../../shared/errors/unauthorized.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
@@ -15,6 +16,7 @@ import type {
   ISarvamWebhookRepository,
   SarvamAttemptHistoryEntry,
 } from "../interfaces/sarvam-webhook-repository.interface";
+import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
 
 export interface ProcessSarvamWebhookResult {
   status: "SUCCESS" | "IDEMPOTENT_IGNORED" | "CORRELATION_REJECTED";
@@ -32,6 +34,7 @@ export class ProcessSarvamWebhookUseCase {
     private readonly webhookRepo: ISarvamWebhookRepository,
     private readonly logger?: Logger,
     expectedSecret?: string,
+    private readonly recordingQueue?: Queue,
   ) {
     this.expectedSecret = expectedSecret ?? env.sarvam.webhookSecret;
   }
@@ -277,6 +280,58 @@ export class ProcessSarvamWebhookUseCase {
 
         // 10. Update Lead status
         await txRepo.updateLeadStatus(lead.id, targetLeadStatus);
+
+        // 11. Trigger automatic recording retrieval if completed + connected with interaction_id
+        const isCompleted = p.completion_status?.toLowerCase() === "completed";
+        const isConnected =
+          p.connectivity_status?.toLowerCase() === "connected";
+        const hasInteractionId = Boolean(p.interaction_id);
+
+        if (isCompleted && isConnected && hasInteractionId && finalCallId) {
+          try {
+            const queue =
+              this.recordingQueue ?? getQueue("sarvam-recording-retrieval");
+            await queue.add(
+              "fetch-recording",
+              {
+                callId: finalCallId,
+                tenantId,
+                attemptId: p.attempt_id,
+                interactionId: p.interaction_id!,
+                source: "AUTOMATIC",
+              },
+              {
+                jobId: `sarvam-recording:${p.interaction_id}`,
+                attempts: 5,
+                backoff: {
+                  type: "sarvamBackoff",
+                },
+                removeOnComplete: 100,
+                removeOnFail: 500,
+              },
+            );
+
+            this.logger?.info(
+              "Enqueued automatic Sarvam recording retrieval job",
+              {
+                action: "webhook.sarvam.recording_enqueued",
+                callId: finalCallId,
+                attemptId: p.attempt_id,
+                interactionId: p.interaction_id,
+              },
+            );
+          } catch (queueErr) {
+            this.logger?.error(
+              "Failed to enqueue Sarvam recording retrieval job",
+              queueErr,
+              {
+                action: "webhook.sarvam.recording_queue_error",
+                callId: finalCallId,
+                interactionId: p.interaction_id,
+              },
+            );
+          }
+        }
 
         this.logger?.info("Sarvam call attempt processed successfully", {
           action: "webhook.sarvam.success",

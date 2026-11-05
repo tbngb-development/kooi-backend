@@ -19,6 +19,11 @@ import { QuickDialCallUseCase } from "./application/use-cases/quick-dial-call.us
 import { InitiateOutboundCallUseCase } from "./application/use-cases/initiate-outbound-call.use-case";
 import { StopCallUseCase } from "./application/use-cases/stop-call.use-case";
 import { ReEvaluateClassifierUseCase } from "./application/use-cases/re-evaluate-classifier.use-case";
+import { FetchSarvamRecordingUseCase } from "./application/use-cases/fetch-sarvam-recording.use-case";
+import { SarvamRecordingClient } from "./infrastructure/clients/sarvam-recording.client";
+import type { ISarvamRecordingClient } from "./application/interfaces/sarvam-recording-client.interface";
+import { SarvamRecordingWorker } from "./infrastructure/jobs/sarvam-recording.worker";
+import { SarvamRecordingScheduler } from "./infrastructure/jobs/sarvam-recording.scheduler";
 import { TenantOutboundCallController } from "./presentation/tenant-outbound-call.controller";
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { WalletRepository } from "../wallet/application/interfaces/wallet-repository.interface";
@@ -26,6 +31,9 @@ import type { ICallWalletGuard } from "../wallet/application/guards/call-wallet.
 import type { DebitWalletForCallUseCase } from "../wallet/application/use-cases/debit-wallet.use-case";
 import type { ProcessClassifierExtractionUseCase } from "../classifier/application/use-cases/process-classifier-extraction.use-case";
 import type { ClassifierRepository } from "../classifier/application/interfaces/classifier-repository.interface";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import type { FileStorageProvider } from "../../shared/config/external/storage/file-storage.interface";
+import { CloudinaryStorageProvider } from "../../shared/config/external/storage/cloudinary.storage";
 import type { Queue } from "bull";
 import type { Logger } from "../../shared/logging/logger.interface";
 import { PrismaLeadRepository } from "../leads/infrastructure/repositories/prisma-lead.repository";
@@ -41,6 +49,9 @@ export interface CallModuleDeps {
   classifierQueue?: Queue;
   processClassifierExtractionUseCase?: ProcessClassifierExtractionUseCase;
   classifierRepo?: ClassifierRepository;
+  sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  storage?: FileStorageProvider;
+  sarvamRecordingClient?: ISarvamRecordingClient;
   logger: Logger;
 }
 
@@ -49,6 +60,12 @@ export interface CallModule {
   tenantController: TenantCallController;
   inboundCallerController: InboundCallerMatchController;
   outboundCallController: TenantOutboundCallController;
+  useCases: {
+    fetchSarvamRecording?: FetchSarvamRecordingUseCase;
+  };
+  schedulers: {
+    sarvamRecording?: SarvamRecordingScheduler;
+  };
 }
 
 export function buildCallModule(deps: CallModuleDeps): CallModule {
@@ -107,6 +124,38 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
         )
       : undefined;
 
+  const storage =
+    deps.storage ??
+    new CloudinaryStorageProvider(log.child({ module: "cloudinary" }));
+
+  const sarvamRecordingClient =
+    deps.sarvamRecordingClient ??
+    new SarvamRecordingClient(log.child({ component: "SarvamRecordingClient" }));
+
+  const fetchSarvamRecording = deps.sarvamEncryptionService
+    ? new FetchSarvamRecordingUseCase(
+        sarvamRecordingClient,
+        deps.sarvamEncryptionService,
+        storage,
+        undefined,
+        log.child({ useCase: "FetchSarvamRecordingUseCase" }),
+      )
+    : undefined;
+
+  const sarvamRecordingWorker = fetchSarvamRecording
+    ? new SarvamRecordingWorker(
+        fetchSarvamRecording,
+        log.child({ component: "SarvamRecordingWorker" }),
+      )
+    : undefined;
+
+  const sarvamRecordingScheduler = sarvamRecordingWorker
+    ? new SarvamRecordingScheduler(
+        sarvamRecordingWorker,
+        log.child({ component: "SarvamRecordingScheduler" }),
+      )
+    : undefined;
+
   const initiateOutboundCall = new InitiateOutboundCallUseCase(
     deps.bolnaClientFactory,
     deps.callWalletGuard,
@@ -142,8 +191,15 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       restoreCall,
       syncBolnaExecution,
       reEvaluateClassifier,
+      fetchSarvamRecording,
     ),
     inboundCallerController: inboundCallerMatchController,
     outboundCallController,
+    useCases: {
+      fetchSarvamRecording,
+    },
+    schedulers: {
+      sarvamRecording: sarvamRecordingScheduler,
+    },
   };
 }
