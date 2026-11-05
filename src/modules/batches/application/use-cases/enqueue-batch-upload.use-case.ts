@@ -48,9 +48,6 @@ export class EnqueueBatchUploadUseCase {
       input.campaignId,
     );
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("upload to");
-    }
     if (campaign.provider === "SARVAM") {
       if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
         throw new CampaignNotFoundError();
@@ -174,6 +171,17 @@ export class EnqueueBatchUploadUseCase {
       termsAcceptedAt: new Date(),
       termsVersion: input.termsVersion,
     });
+
+    // If parent campaign was FAILED, automatically reactivate it
+    if (campaign.status === "FAILED") {
+      const nextStatus = input.runImmediately ? "RUNNING" : "SCHEDULED";
+      await this.campaignRepo.updateStatus(campaign.id, nextStatus);
+      this.log?.info("Reactivated failed campaign on new batch upload", {
+        action: "campaign.reactivate",
+        campaignId: campaign.id,
+        newStatus: nextStatus,
+      });
+    }
 
     // Auto-generate standardized batch name if not explicitly provided
     const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(

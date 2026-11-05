@@ -105,7 +105,10 @@ export class SarvamAgentMapper {
       })
       .map((item) => ({
         connection_id: item.connection_id.trim(),
-        agent_phone_number: item.agent_phone_number.trim(),
+        agent_phone_number: item.agent_phone_number?.trim() || "",
+        phone_numbers:
+          (item as any).phone_numbers ||
+          (item.agent_phone_number ? [item.agent_phone_number.trim()] : []),
       }));
   }
 

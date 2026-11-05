@@ -2,12 +2,13 @@ import type { CallStatus, LeadStatus } from "@prisma/client";
 import { AppError } from "../../../../shared/errors/app.error";
 import { UnauthorizedError } from "../../../../shared/errors/unauthorized.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
-import { HEADER_WEBHOOK_SECRET, WebhookMessages } from "../../../../shared/constants";
+import {
+  HEADER_WEBHOOK_SECRET,
+  WebhookMessages,
+} from "../../../../shared/constants";
 import { env } from "../../../../shared/config/env";
 import type { Logger } from "../../../../shared/logging/logger.interface";
-import type {
-  SarvamWebhookAttemptPayload,
-} from "../dto/sarvam-webhook.dto";
+import type { SarvamWebhookAttemptPayload } from "../dto/sarvam-webhook.dto";
 import { isValidSarvamWebhookPayload } from "../dto/sarvam-webhook.dto";
 import type { SarvamLeadCorrelationService } from "../services/sarvam-lead-correlation.service";
 import type {
@@ -16,10 +17,7 @@ import type {
 } from "../interfaces/sarvam-webhook-repository.interface";
 
 export interface ProcessSarvamWebhookResult {
-  status:
-    | "SUCCESS"
-    | "IDEMPOTENT_IGNORED"
-    | "CORRELATION_REJECTED";
+  status: "SUCCESS" | "IDEMPOTENT_IGNORED" | "CORRELATION_REJECTED";
   callId?: string;
   attemptId: string;
   reason?: string;
@@ -51,6 +49,9 @@ export class ProcessSarvamWebhookUseCase {
     payload: unknown,
     headers?: Record<string, string | string[] | undefined>,
   ): Promise<ProcessSarvamWebhookResult> {
+    this.logger?.debug("sarvam webhook payload: ", {
+      payload: payload,
+    });
     // 1. Payload structural validation
     if (!isValidSarvamWebhookPayload(payload)) {
       throw new AppError(
@@ -145,7 +146,8 @@ export class ProcessSarvamWebhookUseCase {
           attempt_id: p.attempt_id,
           interaction_id: p.interaction_id ?? null,
           user_identifier: p.user_identifier,
-          retry_attempt: typeof p.retry_attempt === "number" ? p.retry_attempt : 0,
+          retry_attempt:
+            typeof p.retry_attempt === "number" ? p.retry_attempt : 0,
           connectivity_status: p.connectivity_status ?? null,
           completion_status: p.completion_status,
           next_action_status: p.next_action_status ?? null,

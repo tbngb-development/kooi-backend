@@ -316,22 +316,29 @@ export function buildContainer(): AppContainer {
     logger,
   );
 
+  const campaigns = buildCampaignModule({
+    logger,
+    voiceProviderService: tenants.voiceProviderService,
+    sarvamCampaignClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+  });
+
+  const batches = buildBatchModule({
+    bolnaClientFactory,
+    checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
+    logger,
+    sarvamCohortClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+    syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+  });
+
   return {
     logger,
     auth,
     assistants,
     tenants,
-    campaigns: buildCampaignModule({
-      logger,
-      voiceProviderService: tenants.voiceProviderService,
-      sarvamCampaignClient,
-      sarvamEncryptionService: sarvamApiKeys.encryptionService,
-    }),
-    batches: buildBatchModule({
-      bolnaClientFactory,
-      checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
-      logger,
-    }),
+    campaigns,
+    batches,
     leads: buildLeadModule(),
     calls,
     dashboard: buildDashboardModule(),

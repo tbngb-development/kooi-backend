@@ -62,12 +62,12 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
   ): Promise<T> {
     if ("$transaction" in this.client) {
       return (this.client as PrismaClient).$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
         const txRepo = new PrismaSarvamWebhookRepository(tx);
         return operation(txRepo);
       });
     } else {
-      await (this.client as Prisma.TransactionClient).$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      await (this.client as Prisma.TransactionClient).$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
       return operation(this);
     }
   }

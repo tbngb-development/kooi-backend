@@ -43,9 +43,8 @@ export class CreateCampaignUseCase {
     // ── 0b. Snapshot active voice provider (fail-fast validation) ──
     let selectedProvider: VoiceProvider = "BOLNA";
     if (this.voiceProviderService) {
-      const resolved = await this.voiceProviderService.resolveActiveProvider(
-        tenantId,
-      );
+      const resolved =
+        await this.voiceProviderService.resolveActiveProvider(tenantId);
       selectedProvider = resolved.provider;
     }
 
@@ -263,7 +262,19 @@ export class CreateCampaignUseCase {
         app_type: "agent",
         app_version: sarvamAgent.appVersion,
         attempts_per_second: sarvamAgent.attemptsPerSecond ?? 1,
-        connection_configs: (sarvamAgent.connectionConfigs as any) ?? [],
+        connection_configs: (
+          (sarvamAgent.connectionConfigs as any[]) ?? []
+        ).map((cfg) => ({
+          connection_id: cfg.connection_id,
+          agent_phone_number:
+            cfg.agent_phone_number || cfg.phone_numbers?.[0] || "",
+          phone_numbers:
+            Array.isArray(cfg.phone_numbers) && cfg.phone_numbers.length > 0
+              ? cfg.phone_numbers
+              : cfg.agent_phone_number
+                ? [cfg.agent_phone_number]
+                : [],
+        })),
         retry_config: (sarvamAgent.retryConfig as any) ?? { max_retries: 0 },
         webhook_config: webhookConfig,
       },
@@ -271,6 +282,12 @@ export class CreateCampaignUseCase {
     };
 
     try {
+      this.logger?.info("sarvam campaign payload: ", {
+        orgId: sarvamAgent.apiKey.organizationId,
+        workId: sarvamAgent.apiKey.workspaceId,
+        apiKey: decryptedApiKey,
+        campaignDetails: sarvamPayload,
+      });
       const sarvamRes = await this.sarvamCampaignClient.createCampaign(
         sarvamAgent.apiKey.organizationId,
         sarvamAgent.apiKey.workspaceId,

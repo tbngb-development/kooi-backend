@@ -264,8 +264,8 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
     );
   });
 
-  it("fails batch when a required agent variable is missing from CSV", async () => {
-    // Missing required account_number column
+  it("succeeds and uploads cohort when non-phone variables are missing from CSV", async () => {
+    // CSV only has Contact Number; account_number should fall back to empty string
     const csvContent =
       "Contact Number,Customer Name\n+919876543210,Aarav Sharma";
 
@@ -302,10 +302,12 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
 
     await worker.process(job);
 
-    expect(mockBatchRepo.updateProcessingError).toHaveBeenCalledWith(
+    expect(mockSarvamCohortClient.uploadCohort).toHaveBeenCalled();
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
       batchId,
-      expect.stringContaining("Missing required Sarvam agent variable(s): account_number"),
+      expect.objectContaining({
+        sarvamCohortId: "cohort-sarvam-ext-1",
+      }),
     );
-    expect(mockSarvamCohortClient.uploadCohort).not.toHaveBeenCalled();
   });
 });

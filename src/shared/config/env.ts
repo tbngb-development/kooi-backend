@@ -53,7 +53,6 @@ export const env = {
     encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
     webhookSecret:
       process.env.SARVAM_WEBHOOK_SECRET ||
-      process.env.WEBHOOK_SECRET ||
       "kooi-sarvam-secret",
   },
 

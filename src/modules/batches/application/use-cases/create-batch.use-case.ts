@@ -66,9 +66,6 @@ export class CreateBatchUseCase {
       input.campaignId,
     );
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("upload to");
-    }
     if (!campaign.assistant) throw new CampaignNotFoundError();
     if (campaign.provider === "SARVAM") {
       throw new BatchOperationError(

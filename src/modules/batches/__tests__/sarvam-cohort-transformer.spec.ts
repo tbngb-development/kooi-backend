@@ -27,25 +27,26 @@ describe("SarvamCohortTransformer", () => {
     },
   ];
 
-  it("identifies missing required variables that have no default, override, or campaign value", () => {
+  it("requires only contact number in leads and falls back to empty string when variables are not in CSV", () => {
     const leads: LeadRow[] = [
       {
         phone: "9876543210",
-        name: "Aarav Sharma",
       },
     ];
 
     const result = transformer.transform(leads, dummyVariables, {}, {});
 
-    // customer_name is covered by lead.name
-    // city has defaultValue "Mumbai"
-    // account_number has no default, no override, no campaign value, and is not in leads
-    expect(result.missingRequiredVariables).toContain("account_number");
-    expect(result.missingRequiredVariables).not.toContain("customer_name");
-    expect(result.missingRequiredVariables).not.toContain("city");
+    // CSV requires only phone number; missingRequiredVariables is always empty
+    expect(result.missingRequiredVariables).toHaveLength(0);
+    expect(result.totalLeads).toBe(1);
+    expect(result.matchedVariables).toEqual(["customer_name", "account_number", "city"]);
+
+    const csvString = result.transformedCsvBuffer.toString("utf-8");
+    // Verify city gets default value "Mumbai", and others get ""
+    expect(csvString).toContain("+919876543210,,,Mumbai");
   });
 
-  it("resolves missing required variable when supplied via campaign variables", () => {
+  it("injects campaign variables into cohort CSV when supplied from campaign creation", () => {
     const leads: LeadRow[] = [
       {
         phone: "9876543210",
@@ -62,6 +63,9 @@ describe("SarvamCohortTransformer", () => {
 
     expect(result.missingRequiredVariables).toHaveLength(0);
     expect(result.matchedVariables).toContain("account_number");
+
+    const csvString = result.transformedCsvBuffer.toString("utf-8");
+    expect(csvString).toContain("+919876543210,Aarav Sharma,ACC-999,Mumbai");
   });
 
   it("generates correct CSV headers and transformation JSON matching official schema", () => {
@@ -90,8 +94,6 @@ describe("SarvamCohortTransformer", () => {
     expect(result.missingRequiredVariables).toHaveLength(0);
     expect(result.totalLeads).toBe(2);
 
-    // Unmatched column "unrelated_col" should NOT be in matchedVariables
-    expect(result.matchedVariables).not.toContain("unrelated_col");
     expect(result.matchedVariables).toContain("customer_name");
     expect(result.matchedVariables).toContain("account_number");
     expect(result.matchedVariables).toContain("city");
@@ -99,45 +101,45 @@ describe("SarvamCohortTransformer", () => {
     // CSV structure check
     const csvString = result.transformedCsvBuffer.toString("utf-8");
     const lines = csvString.trim().split("\n");
+    expect(lines).toHaveLength(3); // header + 2 valid rows
+
+    // Header check
     expect(lines[0]).toBe("contact_number,customer_name,account_number,city");
 
-    expect(lines[1]).toContain("+919876543210");
-    expect(lines[1]).toContain("Priya Patel");
-    expect(lines[1]).toContain("ACC-12345");
-    expect(lines[1]).toContain("Mumbai"); // default for city
+    // Row 1 check
+    expect(lines[1]).toBe("+919876543210,Priya Patel,ACC-12345,Mumbai");
 
-    expect(lines[2]).toContain("+919123456789");
-    expect(lines[2]).toContain("Rahul Roy");
-    expect(lines[2]).toContain("ACC-67890");
-    expect(lines[2]).toContain("Delhi");
+    // Row 2 check (custom city override in lead)
+    expect(lines[2]).toBe("+919123456789,Rahul Roy,ACC-67890,Delhi");
 
-    // Transformation JSON schema check
-    const json = result.transformationJson;
-    expect(json.phone_number).toEqual({
-      column_name: "contact_number",
-      required: true,
-      formatting_functions: [],
-      country_code: "IN",
+    // Transformation JSON check
+    expect(result.transformationJson).toEqual({
+      phone_number: {
+        column_name: "contact_number",
+        required: true,
+        formatting_functions: [],
+        country_code: "IN",
+      },
+      user_identifier: null,
+      app_variables: {
+        customer_name: {
+          column_name: "customer_name",
+          required: false,
+          formatting_functions: [],
+        },
+        account_number: {
+          column_name: "account_number",
+          required: false,
+          formatting_functions: [],
+        },
+        city: {
+          column_name: "city",
+          required: false,
+          formatting_functions: [],
+        },
+      },
+      app_overrides: {},
+      alternate_phone_numbers: [],
     });
-    expect(json.user_identifier).toBeNull();
-    expect(json.app_variables.customer_name).toEqual({
-      column_name: "customer_name",
-      required: false,
-      formatting_functions: [],
-    });
-    expect(json.app_variables.account_number).toEqual({
-      column_name: "account_number",
-      required: false,
-      formatting_functions: [],
-    });
-    expect(json.app_variables.city).toEqual({
-      column_name: "city",
-      required: false,
-      formatting_functions: [],
-    });
-    expect(json.app_variables.unrelated_col).toBeUndefined();
-    expect(json.app_overrides).toEqual({});
-    expect(json.alternate_phone_numbers).toEqual([]);
   });
 });
-

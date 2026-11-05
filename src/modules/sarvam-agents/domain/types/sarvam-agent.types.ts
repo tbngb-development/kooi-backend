@@ -16,7 +16,8 @@ export interface SarvamOutputVariable {
 
 export interface SarvamConnectionConfig {
   connection_id: string;
-  agent_phone_number: string;
+  agent_phone_number?: string;
+  phone_numbers?: string[];
 }
 
 export interface SarvamRetryCondition {
