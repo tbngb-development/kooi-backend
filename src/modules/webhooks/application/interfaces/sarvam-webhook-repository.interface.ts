@@ -1,4 +1,4 @@
-import type { CallStatus, LeadStatus, VoiceProvider } from "@prisma/client";
+import type { BatchStatus, CampaignStatus, CallStatus, LeadStatus, VoiceProvider } from "@prisma/client";
 import type { RecordingRetrievalStatus } from "../../../calls/domain/errors/sarvam-recording.errors";
 
 export interface AggregateCallCandidate {
@@ -125,7 +125,7 @@ export interface ISarvamWebhookRepository {
 
   findAggregateCall(
     leadId: string,
-    campaignId: string,
+    batchId: string,
   ): Promise<AggregateCallCandidate | null>;
 
   createAggregateCall(
@@ -138,6 +138,34 @@ export interface ISarvamWebhookRepository {
   ): Promise<void>;
 
   updateLeadStatus(leadId: string, status: LeadStatus): Promise<void>;
+
+  countActiveLeadsInBatch(batchId: string): Promise<number>;
+
+  countActiveCallsInBatch(batchId: string): Promise<number>;
+
+  getBatchWithRetryConfig(
+    batchId: string,
+  ): Promise<{ id: string; status: BatchStatus; retryConfig: unknown; campaignId: string } | null>;
+
+  getCallsInBatch(
+    batchId: string,
+  ): Promise<Array<{ id: string; status: CallStatus; callHistory: unknown }>>;
+
+  updateBatchStatus(
+    batchId: string,
+    status: BatchStatus,
+    completedAt?: Date,
+  ): Promise<void>;
+
+  getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]>;
+
+  updateCampaignStatus(
+    campaignId: string,
+    status: CampaignStatus,
+    completedAt?: Date,
+  ): Promise<void>;
+
+  recalculateCampaignStats(campaignId: string): Promise<void>;
 
   findSarvamAgentForTenant(
     agentId: string,

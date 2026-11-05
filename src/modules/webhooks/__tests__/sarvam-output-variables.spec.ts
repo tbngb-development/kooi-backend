@@ -187,7 +187,7 @@ describe("Dynamic Sarvam Output Variable Mapping and Persistence", () => {
           };
         },
       ),
-    };
+    } as unknown as ISarvamWebhookRepository;
 
     mockLogger = {
       info: vi.fn(),

@@ -160,7 +160,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
       findSarvamAgentForTenant: vi.fn().mockResolvedValue(null),
       getCallAnalysis: vi.fn().mockResolvedValue(null),
       upsertCallAnalysisOutputVariables: vi.fn().mockResolvedValue(undefined),
-    };
+    } as unknown as ISarvamWebhookRepository;
 
     mockLogger = {
       info: vi.fn(),
@@ -290,11 +290,11 @@ describe("ProcessSarvamWebhookUseCase", () => {
       expect(history).toHaveLength(1);
     });
 
-    it("serializes execution using PostgreSQL advisory lock on (leadId, campaignId)", async () => {
+    it("serializes execution using PostgreSQL advisory lock on (leadId, batchId)", async () => {
       await useCase.execute(basePayload);
 
       expect(mockRepo.executeInAdvisoryLock).toHaveBeenCalledWith(
-        `sarvam-call:${leadId}:${campaignId}`,
+        `sarvam-call:${leadId}:${batchId}`,
         expect.any(Function),
       );
     });

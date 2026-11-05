@@ -12,6 +12,7 @@ import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { SarvamWebhookAttemptPayload } from "../dto/sarvam-webhook.dto";
 import { isValidSarvamWebhookPayload } from "../dto/sarvam-webhook.dto";
 import type { SarvamLeadCorrelationService } from "../services/sarvam-lead-correlation.service";
+import { SarvamLifecycleService } from "../services/sarvam-lifecycle.service";
 import type {
   ISarvamWebhookRepository,
   SarvamAttemptHistoryEntry,
@@ -32,6 +33,7 @@ export interface ProcessSarvamWebhookResult {
 
 export class ProcessSarvamWebhookUseCase {
   private readonly expectedSecret: string;
+  private readonly lifecycleService: SarvamLifecycleService;
 
   constructor(
     private readonly correlationService: SarvamLeadCorrelationService,
@@ -41,8 +43,12 @@ export class ProcessSarvamWebhookUseCase {
     private readonly recordingQueue?: Queue,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
     private readonly sarvamCostPerMinutePaisa?: number,
+    lifecycleService?: SarvamLifecycleService,
   ) {
     this.expectedSecret = expectedSecret ?? env.sarvam.webhookSecret;
+    this.lifecycleService =
+      lifecycleService ??
+      new SarvamLifecycleService(this.webhookRepo, this.logger);
   }
 
   /**
@@ -100,15 +106,15 @@ export class ProcessSarvamWebhookUseCase {
 
     const { tenantId, campaign, batch, lead } = correlation.data;
 
-    // 4. Concurrency lock serialized on (leadId, campaignId)
-    const lockKey = `sarvam-call:${lead.id}:${campaign.id}`;
+    // 4. Concurrency lock serialized on (leadId, batchId)
+    const lockKey = `sarvam-call:${lead.id}:${batch.id}`;
 
-    return await this.webhookRepo.executeInAdvisoryLock(
+    const result = await this.webhookRepo.executeInAdvisoryLock<ProcessSarvamWebhookResult>(
       lockKey,
       async (txRepo) => {
         const existingCall = await txRepo.findAggregateCall(
           lead.id,
-          campaign.id,
+          batch.id,
         );
 
         // 5. Idempotency check: attempt_id already in history
@@ -127,7 +133,7 @@ export class ProcessSarvamWebhookUseCase {
           });
 
           return {
-            status: "IDEMPOTENT_IGNORED",
+            status: "IDEMPOTENT_IGNORED" as const,
             attemptId: p.attempt_id,
             callId: existingCall?.id,
           };
@@ -464,12 +470,35 @@ export class ProcessSarvamWebhookUseCase {
         });
 
         return {
-          status: "SUCCESS",
+          status: "SUCCESS" as const,
           callId: finalCallId,
           attemptId: p.attempt_id,
         };
       },
     );
+
+    if (result.status === "SUCCESS") {
+      try {
+        await this.lifecycleService.reconcileAfterCall({
+          tenantId,
+          campaignId: campaign.id,
+          batchId: batch.id,
+          leadId: lead.id,
+        });
+      } catch (lifecycleErr) {
+        this.logger?.warn("Failed to reconcile Sarvam lifecycle after call", {
+          action: "webhook.sarvam.lifecycle_error",
+          batchId: batch.id,
+          campaignId: campaign.id,
+          error:
+            lifecycleErr instanceof Error
+              ? lifecycleErr.message
+              : String(lifecycleErr),
+        });
+      }
+    }
+
+    return result;
   }
 
   private verifyWebhookAuth(

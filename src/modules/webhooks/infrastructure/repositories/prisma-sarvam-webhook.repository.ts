@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Prisma, PrismaClient, CallStatus, LeadStatus } from "@prisma/client";
+import type { Prisma, PrismaClient, CallStatus, LeadStatus, BatchStatus, CampaignStatus } from "@prisma/client";
 import type {
   ISarvamWebhookRepository,
   AggregateCallCandidate,
@@ -90,12 +90,12 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
 
   async findAggregateCall(
     leadId: string,
-    campaignId: string,
+    batchId: string,
   ): Promise<AggregateCallCandidate | null> {
     const call = await this.client.call.findFirst({
       where: {
         leadId,
-        campaignId,
+        batchId,
         provider: "SARVAM",
       },
       orderBy: { createdAt: "desc" },
@@ -237,6 +237,132 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         outputVariables: outputVariables as Prisma.InputJsonValue,
       },
     });
+  }
+
+  async countActiveLeadsInBatch(batchId: string): Promise<number> {
+    return this.client.lead.count({
+      where: {
+        batchId,
+        status: { in: ["PENDING", "CALLING"] },
+      },
+    });
+  }
+
+  async countActiveCallsInBatch(batchId: string): Promise<number> {
+    return this.client.call.count({
+      where: {
+        batchId,
+        status: { in: ["SCHEDULED", "CALLING", "PENDING"] },
+        isDeleted: false,
+      },
+    });
+  }
+
+  async getBatchWithRetryConfig(
+    batchId: string,
+  ): Promise<{ id: string; status: BatchStatus; retryConfig: unknown; campaignId: string } | null> {
+    const batch = await this.client.leadBatch.findUnique({
+      where: { id: batchId },
+      select: {
+        id: true,
+        status: true,
+        retryConfig: true,
+        campaignId: true,
+      },
+    });
+    return batch;
+  }
+
+  async getCallsInBatch(
+    batchId: string,
+  ): Promise<Array<{ id: string; status: CallStatus; callHistory: unknown }>> {
+    const calls = await this.client.call.findMany({
+      where: {
+        batchId,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        status: true,
+        callHistory: true,
+      },
+    });
+    return calls;
+  }
+
+  async updateBatchStatus(
+    batchId: string,
+    status: BatchStatus,
+    completedAt?: Date,
+  ): Promise<void> {
+    await this.client.leadBatch.update({
+      where: { id: batchId },
+      data: {
+        status,
+        ...(completedAt !== undefined ? { completedAt } : {}),
+      },
+    });
+  }
+
+  async getAllBatchStatuses(campaignId: string): Promise<BatchStatus[]> {
+    const batches = await this.client.leadBatch.findMany({
+      where: { campaignId, isDeleted: false },
+      select: { status: true },
+    });
+    return batches.map((b) => b.status);
+  }
+
+  async updateCampaignStatus(
+    campaignId: string,
+    status: CampaignStatus,
+    completedAt?: Date,
+  ): Promise<void> {
+    await this.client.campaign.update({
+      where: { id: campaignId },
+      data: {
+        status,
+        ...(completedAt !== undefined ? { completedAt } : {}),
+      },
+    });
+  }
+
+  async recalculateCampaignStats(campaignId: string): Promise<void> {
+    const batches = await this.client.leadBatch.findMany({
+      where: { campaignId, isDeleted: false },
+      select: { status: true },
+    });
+
+    const statuses = batches.map((b) => b.status);
+
+    const hasActiveBatches = statuses.some(
+      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
+    );
+
+    let campaignStatusUpdate: {
+      status?: "COMPLETED" | "FAILED";
+      completedAt?: Date;
+    } = {};
+
+    if (statuses.length > 0 && !hasActiveBatches) {
+      const allTerminal = statuses.every(
+        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
+      );
+
+      if (allTerminal) {
+        const allFailed = statuses.every((s) => s === "FAILED");
+        campaignStatusUpdate = {
+          status: allFailed ? "FAILED" : "COMPLETED",
+          completedAt: new Date(),
+        };
+      }
+    }
+
+    if (Object.keys(campaignStatusUpdate).length > 0) {
+      await this.client.campaign.update({
+        where: { id: campaignId },
+        data: campaignStatusUpdate,
+      });
+    }
   }
 
   private toCandidate(row: DbCallRow): AggregateCallCandidate {

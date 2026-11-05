@@ -3,6 +3,7 @@ import { PrismaWebhookRepository } from "./infrastructure/repositories/prisma-we
 import { PrismaSarvamLeadCorrelationRepository } from "./infrastructure/repositories/prisma-sarvam-lead-correlation.repository";
 import { SarvamLeadCorrelationService } from "./application/services/sarvam-lead-correlation.service";
 import { PrismaSarvamWebhookRepository } from "./infrastructure/repositories/prisma-sarvam-webhook.repository";
+import { SarvamLifecycleService } from "./application/services/sarvam-lifecycle.service";
 import { ProcessSarvamWebhookUseCase } from "./application/use-cases/process-sarvam-webhook.use-case";
 import { ProcessCallWebhookUseCase } from "./application/use-cases/process-call-webhook.use-case";
 import { ProcessBatchWebhookUseCase } from "./application/use-cases/process-batch-webhook.use-case";
@@ -83,6 +84,7 @@ export function buildWebhookModule(
     log,
   );
   const sarvamWebhookRepo = new PrismaSarvamWebhookRepository();
+  const sarvamLifecycle = new SarvamLifecycleService(sarvamWebhookRepo, log);
   const processSarvamWebhook = new ProcessSarvamWebhookUseCase(
     sarvamLeadCorrelation,
     sarvamWebhookRepo,
@@ -91,6 +93,7 @@ export function buildWebhookModule(
     undefined,
     deps.debitWalletForCall,
     env.sarvam.costPerMinutePaisa,
+    sarvamLifecycle,
   );
 
   const controller = new WebhookController(

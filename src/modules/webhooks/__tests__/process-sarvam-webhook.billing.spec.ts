@@ -173,7 +173,7 @@ describe("Phase 6: Sarvam Call Billing Integration", () => {
       findSarvamAgentForTenant: vi.fn().mockResolvedValue(null),
       getCallAnalysis: vi.fn().mockResolvedValue(null),
       upsertCallAnalysisOutputVariables: vi.fn().mockResolvedValue(undefined),
-    };
+    } as unknown as ISarvamWebhookRepository;
 
     mockDebitUseCase = {
       execute: vi.fn().mockResolvedValue({
