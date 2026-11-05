@@ -22,13 +22,13 @@ export interface SarvamConnectionConfig {
 
 export interface SarvamRetryCondition {
   enabled: boolean;
-  threshold_seconds?: number;
+  threshold_seconds?: number | null;
 }
 
 export interface SarvamRetryConfig {
   max_retries: number;
-  retry_on?: Record<string, SarvamRetryCondition>;
-  retry_interval_minutes?: number | number[];
+  retry_on?: Record<string, SarvamRetryCondition> | null;
+  retry_interval_minutes?: number | number[] | null;
 }
 
 export interface TenantWelcomeMessageOverride {

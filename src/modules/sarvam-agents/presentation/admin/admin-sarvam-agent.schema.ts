@@ -20,6 +20,7 @@ export const sarvamConnectionConfigSchema = z
   .object({
     connection_id: z.string().trim().min(1, "Connection ID is required"),
     agent_phone_number: z.string().trim().min(1, "Agent phone number is required"),
+    phone_numbers: z.array(z.string().trim()).optional(),
   })
   .strict();
 
@@ -30,6 +31,7 @@ export const sarvamRetryConditionSchema = z
       .number()
       .int("threshold_seconds must be an integer")
       .min(0, "threshold_seconds must be non-negative")
+      .nullable()
       .optional(),
   })
   .strict();
@@ -47,6 +49,7 @@ export const sarvamRetryConfigSchema = z
         z.string().min(1, "Condition key cannot be empty"),
         sarvamRetryConditionSchema,
       )
+      .nullable()
       .optional(),
     retry_interval_minutes: z
       .union([
@@ -61,6 +64,7 @@ export const sarvamRetryConfigSchema = z
             .min(0, "retry_interval_minutes items must be non-negative"),
         ),
       ])
+      .nullable()
       .optional(),
   })
   .strict();

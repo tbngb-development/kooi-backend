@@ -504,6 +504,32 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
         threshold_seconds: 15,
       });
 
+      // Update with phone_numbers in connectionConfigs (as returned by GET mapper)
+      const resWithPhoneNumbers = await request(app)
+        .patch(`/v1/admin/sarvam-agents/${id}`)
+        .send({
+          connectionConfigs: [
+            {
+              connection_id: "c_with_phone_numbers_1",
+              agent_phone_number: "+918000000001",
+              phone_numbers: ["+918000000001"],
+            },
+            {
+              connection_id: "c_with_phone_numbers_2",
+              agent_phone_number: "+918000000002",
+              phone_numbers: ["+918000000002"],
+            },
+          ],
+        });
+      expect(resWithPhoneNumbers.status).toBe(HttpStatus.OK);
+      expect(resWithPhoneNumbers.body.data.connectionConfigs).toHaveLength(2);
+      expect(resWithPhoneNumbers.body.data.connectionConfigs[0].connection_id).toBe(
+        "c_with_phone_numbers_1",
+      );
+      expect(
+        resWithPhoneNumbers.body.data.connectionConfigs[0].phone_numbers,
+      ).toEqual(["+918000000001"]);
+
       // Partial update omitting connectionConfigs preserves existing
       const resOmit = await request(app)
         .patch(`/v1/admin/sarvam-agents/${id}`)

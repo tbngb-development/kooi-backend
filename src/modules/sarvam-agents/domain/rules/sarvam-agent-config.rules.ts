@@ -28,7 +28,7 @@ export function validateConnectionConfigs(
       ]);
     }
 
-    const { connection_id, agent_phone_number, ...extra } = entry as Record<
+    const { connection_id, agent_phone_number, phone_numbers, ...extra } = entry as Record<
       string,
       unknown
     >;
@@ -60,9 +60,15 @@ export function validateConnectionConfigs(
       ]);
     }
 
+    const resolvedPhoneNumbers: string[] =
+      Array.isArray(phone_numbers) && phone_numbers.length > 0
+        ? phone_numbers.map((p) => String(p).trim()).filter(Boolean)
+        : [agent_phone_number.trim()];
+
     cleaned.push({
       connection_id: connection_id.trim(),
       agent_phone_number: agent_phone_number.trim(),
+      phone_numbers: resolvedPhoneNumbers,
     });
   }
 
@@ -102,10 +108,9 @@ export function validateRetryConfig(config: unknown): SarvamRetryConfig {
 
   const result: SarvamRetryConfig = { max_retries };
 
-  if (raw.retry_on !== undefined) {
+  if (raw.retry_on !== undefined && raw.retry_on !== null) {
     if (
       typeof raw.retry_on !== "object" ||
-      raw.retry_on === null ||
       Array.isArray(raw.retry_on)
     ) {
       throw new ValidationError([
@@ -164,7 +169,7 @@ export function validateRetryConfig(config: unknown): SarvamRetryConfig {
         ]);
       }
 
-      if (threshold_seconds !== undefined) {
+      if (threshold_seconds !== undefined && threshold_seconds !== null) {
         if (
           typeof threshold_seconds !== "number" ||
           !Number.isInteger(threshold_seconds) ||
@@ -181,14 +186,14 @@ export function validateRetryConfig(config: unknown): SarvamRetryConfig {
 
       validatedRetryOn[trimmedKey] = {
         enabled,
-        ...(threshold_seconds !== undefined && { threshold_seconds }),
+        ...(threshold_seconds !== undefined && threshold_seconds !== null && { threshold_seconds }),
       };
     }
 
     result.retry_on = validatedRetryOn;
   }
 
-  if (raw.retry_interval_minutes !== undefined) {
+  if (raw.retry_interval_minutes !== undefined && raw.retry_interval_minutes !== null) {
     if (typeof raw.retry_interval_minutes === "number") {
       if (
         !Number.isInteger(raw.retry_interval_minutes) ||
