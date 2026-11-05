@@ -392,6 +392,7 @@ export class PrismaCallRepository implements CallRepository {
             id: true,
             dynamicExtractions: true,
             extractionResult: true,
+            outputVariables: true,
           },
         },
       },
@@ -446,6 +447,7 @@ export class PrismaCallRepository implements CallRepository {
               .dynamicExtractions as unknown as string,
             extractionResult: call.callAnalysis
               .extractionResult as unknown as string,
+            outputVariables: call.callAnalysis.outputVariables,
           }
         : null,
     };

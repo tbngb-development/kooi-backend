@@ -159,6 +159,54 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
     });
   }
 
+  async findSarvamAgentForTenant(
+    agentId: string,
+    tenantId: string,
+  ): Promise<{ id: string; outputVariables: unknown } | null> {
+    return this.client.sarvamAgent.findFirst({
+      where: {
+        id: agentId,
+        apiKey: {
+          tenantId,
+        },
+      },
+      select: {
+        id: true,
+        outputVariables: true,
+      },
+    });
+  }
+
+  async getCallAnalysis(
+    callId: string,
+  ): Promise<{ id: string; outputVariables: unknown } | null> {
+    return this.client.callAnalysis.findUnique({
+      where: { callId },
+      select: {
+        id: true,
+        outputVariables: true,
+      },
+    });
+  }
+
+  async upsertCallAnalysisOutputVariables(
+    callId: string,
+    tenantId: string,
+    outputVariables: Array<{ key: string; value: unknown }>,
+  ): Promise<void> {
+    await this.client.callAnalysis.upsert({
+      where: { callId },
+      create: {
+        callId,
+        tenantId,
+        outputVariables: outputVariables as Prisma.InputJsonValue,
+      },
+      update: {
+        outputVariables: outputVariables as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   private toCandidate(row: DbCallRow): AggregateCallCandidate {
     return {
       id: row.id,

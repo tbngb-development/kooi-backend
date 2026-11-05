@@ -101,4 +101,19 @@ export interface ISarvamWebhookRepository {
   ): Promise<void>;
 
   updateLeadStatus(leadId: string, status: LeadStatus): Promise<void>;
+
+  findSarvamAgentForTenant(
+    agentId: string,
+    tenantId: string,
+  ): Promise<{ id: string; outputVariables: unknown } | null>;
+
+  getCallAnalysis(
+    callId: string,
+  ): Promise<{ id: string; outputVariables: unknown } | null>;
+
+  upsertCallAnalysisOutputVariables(
+    callId: string,
+    tenantId: string,
+    outputVariables: Array<{ key: string; value: unknown }>,
+  ): Promise<void>;
 }

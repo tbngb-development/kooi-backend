@@ -224,7 +224,58 @@ export class ProcessSarvamWebhookUseCase {
           finalCallId = newCall.id;
         }
 
-        // 8. Update Lead status
+        // 8. Resolve Sarvam Agent and match output variables dynamically
+        let matchedOutputVariables: Array<{ key: string; value: unknown }> = [];
+
+        if (campaign.sarvamAgentId) {
+          const agentConfig = await txRepo.findSarvamAgentForTenant(
+            campaign.sarvamAgentId,
+            tenantId,
+          );
+
+          if (!agentConfig) {
+            this.logger?.warn("Sarvam agent configuration not found or tenant unauthorized", {
+              action: "webhook.sarvam.agent_not_found",
+              sarvamAgentId: campaign.sarvamAgentId,
+              tenantId,
+            });
+          } else {
+            matchedOutputVariables = this.extractMatchedOutputVariables(
+              agentConfig.outputVariables,
+              p.output_agent_variables,
+            );
+
+            this.logger?.info("Sarvam output variables evaluated", {
+              action: "webhook.sarvam.output_variables_evaluated",
+              configuredCount: Array.isArray(agentConfig.outputVariables)
+                ? agentConfig.outputVariables.length
+                : 0,
+              matchedCount: matchedOutputVariables.length,
+            });
+          }
+        } else {
+          this.logger?.info("Campaign has no sarvamAgentId, skipping output variable extraction", {
+            action: "webhook.sarvam.no_agent_id",
+            campaignId: campaign.id,
+          });
+        }
+
+        // 9. Persist matching output variables in CallAnalysis
+        if (matchedOutputVariables.length > 0) {
+          await txRepo.upsertCallAnalysisOutputVariables(
+            finalCallId!,
+            tenantId,
+            matchedOutputVariables,
+          );
+
+          this.logger?.info("CallAnalysis output variables persisted successfully", {
+            action: "webhook.sarvam.call_analysis_persisted",
+            callId: finalCallId,
+            matchedCount: matchedOutputVariables.length,
+          });
+        }
+
+        // 10. Update Lead status
         await txRepo.updateLeadStatus(lead.id, targetLeadStatus);
 
         this.logger?.info("Sarvam call attempt processed successfully", {
@@ -319,5 +370,54 @@ export class ProcessSarvamWebhookUseCase {
     if (conn === "no_answer") return "NO_ANSWER";
     if (conn === "failed" || comp === "failed") return "FAILED";
     return "CALLED";
+  }
+
+  private extractMatchedOutputVariables(
+    configuredVariables: unknown,
+    outputAgentVariables: unknown,
+  ): Array<{ key: string; value: unknown }> {
+    if (!configuredVariables || !Array.isArray(configuredVariables)) {
+      return [];
+    }
+
+    if (
+      !outputAgentVariables ||
+      typeof outputAgentVariables !== "object" ||
+      Array.isArray(outputAgentVariables)
+    ) {
+      return [];
+    }
+
+    const payloadVars = outputAgentVariables as Record<string, unknown>;
+    const matched: Array<{ key: string; value: unknown }> = [];
+
+    for (const item of configuredVariables) {
+      if (
+        !item ||
+        typeof item !== "object" ||
+        typeof (item as any).name !== "string"
+      ) {
+        continue;
+      }
+      const varName = (item as any).name.trim();
+      if (!varName) continue;
+
+      if (Object.prototype.hasOwnProperty.call(payloadVars, varName)) {
+        const rawValue = payloadVars[varName];
+        if (rawValue !== undefined) {
+          if (typeof rawValue !== "function" && typeof rawValue !== "symbol") {
+            matched.push({ key: varName, value: rawValue });
+          } else {
+            this.logger?.warn("Invalid Sarvam output variable value type ignored", {
+              action: "webhook.sarvam.invalid_output_var_type",
+              key: varName,
+              type: typeof rawValue,
+            });
+          }
+        }
+      }
+    }
+
+    return matched;
   }
 }

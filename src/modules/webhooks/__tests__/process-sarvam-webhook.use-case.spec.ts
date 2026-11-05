@@ -157,6 +157,9 @@ describe("ProcessSarvamWebhookUseCase", () => {
       updateLeadStatus: vi.fn().mockImplementation(async (_leadId, status) => {
         inMemoryLeadStatus = status;
       }),
+      findSarvamAgentForTenant: vi.fn().mockResolvedValue(null),
+      getCallAnalysis: vi.fn().mockResolvedValue(null),
+      upsertCallAnalysisOutputVariables: vi.fn().mockResolvedValue(undefined),
     };
 
     mockLogger = {

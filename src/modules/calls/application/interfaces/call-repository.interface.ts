@@ -88,6 +88,7 @@ export interface DetailedCallResult extends CallEntityData {
     id: string;
     dynamicExtractions: string | null;
     extractionResult: string | null;
+    outputVariables?: unknown;
   } | null;
 }
 
