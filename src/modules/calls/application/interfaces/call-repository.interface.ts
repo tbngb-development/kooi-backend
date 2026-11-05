@@ -7,6 +7,7 @@ import type {
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
 export interface ListCallsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
   assistantId?: string;
   leadId?: string;
@@ -39,6 +40,10 @@ export interface PaginatedCallsResult {
         name: string;
       } | null;
       assistant?: {
+        id: string;
+        name: string;
+      } | null;
+      sarvamAgent?: {
         id: string;
         name: string;
       } | null;
@@ -84,6 +89,10 @@ export interface DetailedCallResult extends CallEntityData {
     id: string;
     name: string;
   } | null;
+  sarvamAgent?: {
+    id: string;
+    name: string;
+  } | null;
   callAnalysis: {
     id: string;
     dynamicExtractions: string | null;
@@ -104,6 +113,7 @@ export interface CallTranscriptResult {
 }
 
 export interface CallStatsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
   leadId?: string;
 }

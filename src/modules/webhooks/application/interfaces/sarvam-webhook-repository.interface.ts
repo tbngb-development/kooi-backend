@@ -21,6 +21,14 @@ export interface AggregateCallCandidate {
   startedAt: Date | null;
   endedAt: Date | null;
   agentNumber: string | null;
+  cost?: number | null;
+  platformCost?: number | null;
+  billableSeconds?: number | null;
+  planVersionId?: string | null;
+  appliedRate?: number | null;
+  appliedMinSec?: number | null;
+  appliedIncrementSec?: number | null;
+  chargedAmount?: number | null;
 }
 
 export interface SarvamAttemptHistoryEntry {
@@ -51,6 +59,10 @@ export interface SarvamAttemptHistoryEntry {
   recording_attempts?: number;
   recording_retrieved_at?: string | null;
   recording_source?: "AUTOMATIC" | "MANUAL" | null;
+  cost?: number | null;
+  platformCost?: number | null;
+  billableSeconds?: number | null;
+  chargedAmount?: number | null;
 }
 
 export interface CreateAggregateCallData {
@@ -72,6 +84,14 @@ export interface CreateAggregateCallData {
   transcript?: string | null;
   transcriptMessages?: unknown | null;
   extractionResult?: unknown | null;
+  cost?: number | null;
+  platformCost?: number | null;
+  billableSeconds?: number | null;
+  planVersionId?: string | null;
+  appliedRate?: number | null;
+  appliedMinSec?: number | null;
+  appliedIncrementSec?: number | null;
+  chargedAmount?: number | null;
 }
 
 export interface UpdateAggregateCallData {
@@ -87,6 +107,14 @@ export interface UpdateAggregateCallData {
   transcript?: string | null;
   transcriptMessages?: unknown | null;
   extractionResult?: unknown | null;
+  cost?: number | null;
+  platformCost?: number | null;
+  billableSeconds?: number | null;
+  planVersionId?: string | null;
+  appliedRate?: number | null;
+  appliedMinSec?: number | null;
+  appliedIncrementSec?: number | null;
+  chargedAmount?: number | null;
 }
 
 export interface ISarvamWebhookRepository {

@@ -50,6 +50,7 @@ export const env = {
 
   sarvam: {
     apiUrl: process.env.SARVAM_API_URL || "https://apps.sarvam.ai",
+    costPerMinutePaisa: parseInt(process.env.SARVAM_COST_PER_MINUTE_PAISA || "0", 10),
     encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
     webhookSecret:
       process.env.SARVAM_WEBHOOK_SECRET ||

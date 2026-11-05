@@ -511,15 +511,18 @@ export class PrismaBatchRepository implements BatchRepository {
     });
 
     const costAgg = await prisma.call.aggregate({
-      where: { batchId, cost: { not: null }, isDeleted: false },
-      _sum: { cost: true },
+      where: { batchId, isDeleted: false },
+      _sum: { cost: true, chargedAmount: true },
     });
 
     return {
       batch: this.toEntityData(batch),
       leads: leadStats.map((s) => ({ status: s.status, _count: s._count })),
       calls: callStats.map((s) => ({ status: s.status, _count: s._count })),
-      totalCost: (costAgg._sum.cost ?? 0) / 100,
+      totalCost:
+        (costAgg._sum.cost ?? 0) > 0
+          ? (costAgg._sum.cost ?? 0) / 100
+          : (costAgg._sum.chargedAmount ?? 0) / 100,
     };
   }
 

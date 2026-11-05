@@ -40,6 +40,7 @@ export class TenantCallController {
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
         assistantId: query.assistantId,
         leadId: query.leadId,
@@ -109,6 +110,7 @@ export class TenantCallController {
 
       const data = await this.getCallStatsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
         leadId: query.leadId,
       });

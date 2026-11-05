@@ -1,3 +1,4 @@
+import { env } from "../../shared/config/env";
 import { PrismaWebhookRepository } from "./infrastructure/repositories/prisma-webhook.repository";
 import { PrismaSarvamLeadCorrelationRepository } from "./infrastructure/repositories/prisma-sarvam-lead-correlation.repository";
 import { SarvamLeadCorrelationService } from "./application/services/sarvam-lead-correlation.service";
@@ -86,6 +87,10 @@ export function buildWebhookModule(
     sarvamLeadCorrelation,
     sarvamWebhookRepo,
     log,
+    undefined,
+    undefined,
+    deps.debitWalletForCall,
+    env.sarvam.costPerMinutePaisa,
   );
 
   const controller = new WebhookController(

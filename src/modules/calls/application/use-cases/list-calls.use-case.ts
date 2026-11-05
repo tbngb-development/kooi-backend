@@ -11,6 +11,7 @@ export class ListCallsUseCase {
 
   async execute(input: ListCallsInput): Promise<PaginatedCallsResult> {
     return this.callRepo.list(input.tenantId, {
+      provider: input.provider,
       campaignId: input.campaignId,
       assistantId: input.assistantId,
       leadId: input.leadId,

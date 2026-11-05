@@ -16,6 +16,10 @@ import type {
   ISarvamWebhookRepository,
   SarvamAttemptHistoryEntry,
 } from "../interfaces/sarvam-webhook-repository.interface";
+import type {
+  DebitWalletForCallUseCase,
+  DebitCallResult,
+} from "../../../wallet/application/use-cases/debit-wallet.use-case";
 import { getQueue } from "../../../../shared/config/external/queue/queue.factory";
 
 export interface ProcessSarvamWebhookResult {
@@ -35,6 +39,8 @@ export class ProcessSarvamWebhookUseCase {
     private readonly logger?: Logger,
     expectedSecret?: string,
     private readonly recordingQueue?: Queue,
+    private readonly debitWalletForCall?: DebitWalletForCallUseCase,
+    private readonly sarvamCostPerMinutePaisa?: number,
   ) {
     this.expectedSecret = expectedSecret ?? env.sarvam.webhookSecret;
   }
@@ -167,22 +173,82 @@ export class ProcessSarvamWebhookUseCase {
           output_agent_variables: p.output_agent_variables ?? null,
           transcript: formattedTranscript,
           metadata: p.metadata ?? null,
+          chargedAmount: 0,
+          billableSeconds: 0,
+          platformCost: null,
         };
 
         // 7. Determine aggregate Call status and Lead status
         const aggregateCallStatus = this.mapAggregateCallStatus(p);
         const targetLeadStatus = this.mapLeadStatus(p);
 
+        const isConnected = p.connectivity_status?.toLowerCase() === "connected";
+        const attemptDurationSec =
+          typeof p.duration === "number" ? Math.round(p.duration) : 0;
+        const isBillable = isConnected && attemptDurationSec > 0;
+
         let finalCallId = existingCall?.id;
+        let debitResult: DebitCallResult | null = null;
+        let attemptPlatformCostPaisa: number | null = null;
 
         if (existingCall) {
+          finalCallId = existingCall.id;
+
+          if (isBillable && this.debitWalletForCall) {
+            try {
+              debitResult = await this.debitWalletForCall.execute({
+                tenantId,
+                callId: finalCallId,
+                callAttemptId: p.attempt_id,
+                durationSec: attemptDurationSec,
+              });
+
+              if (debitResult && (this.sarvamCostPerMinutePaisa ?? 0) > 0) {
+                attemptPlatformCostPaisa = Math.ceil(
+                  (debitResult.billableSeconds / 60) *
+                    this.sarvamCostPerMinutePaisa!,
+                );
+              }
+            } catch (debitErr) {
+              this.logger?.error("Wallet debit failed for Sarvam attempt", debitErr, {
+                action: "webhook.sarvam.debit_failed",
+                callId: finalCallId,
+                attemptId: p.attempt_id,
+                tenantId,
+                durationSec: attemptDurationSec,
+              });
+            }
+          }
+
+          attemptEntry.chargedAmount = debitResult ? debitResult.amountPaisa : 0;
+          attemptEntry.billableSeconds = debitResult ? debitResult.billableSeconds : 0;
+          attemptEntry.platformCost = attemptPlatformCostPaisa;
+
           const updatedHistory = [...existingHistory, attemptEntry];
+          const priorCharged = existingCall.chargedAmount ?? 0;
+          const priorBillable = existingCall.billableSeconds ?? 0;
+          const priorPlatform = existingCall.platformCost ?? 0;
+
+          const updatedChargedAmount = debitResult
+            ? priorCharged + debitResult.amountPaisa
+            : existingCall.chargedAmount;
+
+          const updatedBillableSeconds = debitResult
+            ? priorBillable + debitResult.billableSeconds
+            : existingCall.billableSeconds;
+
+          const updatedPlatformCost =
+            attemptPlatformCostPaisa !== null
+              ? (existingCall.platformCost !== null && existingCall.platformCost !== undefined
+                  ? priorPlatform + attemptPlatformCostPaisa
+                  : attemptPlatformCostPaisa)
+              : existingCall.platformCost;
 
           await txRepo.updateAggregateCall(existingCall.id, {
             status: aggregateCallStatus,
             sarvamAttemptId: p.attempt_id,
             sarvamInteractionId:
-              p.interaction_id ?? existingCall.sarvamInteractionId,
+              p.interaction_id ?? existingCall.sarvamInteractionId ?? undefined,
             sarvamUserIdentifier: p.user_identifier,
             callHistory: updatedHistory,
             agentNumber: p.agent_phone_number ?? existingCall.agentNumber,
@@ -199,8 +265,20 @@ export class ProcessSarvamWebhookUseCase {
               p.output_agent_variables ??
               p.final_agent_variables ??
               existingCall.extractionResult,
+            ...(debitResult
+              ? {
+                  chargedAmount: updatedChargedAmount ?? undefined,
+                  billableSeconds: updatedBillableSeconds ?? undefined,
+                  platformCost: updatedPlatformCost,
+                  planVersionId: debitResult.planVersionId,
+                  appliedRate: debitResult.appliedRate,
+                  appliedMinSec: debitResult.appliedMinSec,
+                  appliedIncrementSec: debitResult.appliedIncrementSec,
+                }
+              : {}),
           });
         } else {
+          // Initial attempt for this Lead and Campaign
           const newCall = await txRepo.createAggregateCall({
             tenantId,
             campaignId: campaign.id,
@@ -214,8 +292,7 @@ export class ProcessSarvamWebhookUseCase {
             sarvamUserIdentifier: p.user_identifier,
             callHistory: [attemptEntry],
             agentNumber: p.agent_phone_number ?? null,
-            duration:
-              typeof p.duration === "number" ? Math.round(p.duration) : null,
+            duration: attemptDurationSec > 0 ? attemptDurationSec : null,
             startedAt,
             endedAt,
             transcript: formattedTranscript,
@@ -225,6 +302,53 @@ export class ProcessSarvamWebhookUseCase {
           });
 
           finalCallId = newCall.id;
+
+          if (isBillable && this.debitWalletForCall && finalCallId) {
+            try {
+              debitResult = await this.debitWalletForCall.execute({
+                tenantId,
+                callId: finalCallId,
+                callAttemptId: p.attempt_id,
+                durationSec: attemptDurationSec,
+              });
+
+              if (debitResult && (this.sarvamCostPerMinutePaisa ?? 0) > 0) {
+                attemptPlatformCostPaisa = Math.ceil(
+                  (debitResult.billableSeconds / 60) *
+                    this.sarvamCostPerMinutePaisa!,
+                );
+              }
+
+              attemptEntry.chargedAmount = debitResult ? debitResult.amountPaisa : 0;
+              attemptEntry.billableSeconds = debitResult ? debitResult.billableSeconds : 0;
+              attemptEntry.platformCost = attemptPlatformCostPaisa;
+
+              if (debitResult) {
+                await txRepo.updateAggregateCall(finalCallId, {
+                  status: aggregateCallStatus,
+                  sarvamAttemptId: p.attempt_id,
+                  sarvamInteractionId: p.interaction_id ?? undefined,
+                  sarvamUserIdentifier: p.user_identifier,
+                  callHistory: [attemptEntry],
+                  chargedAmount: debitResult.amountPaisa,
+                  billableSeconds: debitResult.billableSeconds,
+                  platformCost: attemptPlatformCostPaisa,
+                  planVersionId: debitResult.planVersionId,
+                  appliedRate: debitResult.appliedRate,
+                  appliedMinSec: debitResult.appliedMinSec,
+                  appliedIncrementSec: debitResult.appliedIncrementSec,
+                });
+              }
+            } catch (debitErr) {
+              this.logger?.error("Wallet debit failed for initial Sarvam attempt", debitErr, {
+                action: "webhook.sarvam.debit_failed",
+                callId: finalCallId,
+                attemptId: p.attempt_id,
+                tenantId,
+                durationSec: attemptDurationSec,
+              });
+            }
+          }
         }
 
         // 8. Resolve Sarvam Agent and match output variables dynamically
@@ -283,8 +407,6 @@ export class ProcessSarvamWebhookUseCase {
 
         // 11. Trigger automatic recording retrieval if completed + connected with interaction_id
         const isCompleted = p.completion_status?.toLowerCase() === "completed";
-        const isConnected =
-          p.connectivity_status?.toLowerCase() === "connected";
         const hasInteractionId = Boolean(p.interaction_id);
 
         if (isCompleted && isConnected && hasInteractionId && finalCallId) {

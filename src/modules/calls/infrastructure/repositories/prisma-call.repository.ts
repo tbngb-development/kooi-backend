@@ -42,6 +42,7 @@ export class PrismaCallRepository implements CallRepository {
 
     where.isDeleted = isDeleted ?? false;
 
+    if (filters.provider) where.provider = filters.provider;
     if (campaignId) where.campaignId = campaignId;
     if (filters.assistantId) where.assistantId = filters.assistantId;
     if (filters.type) where.type = filters.type;
@@ -139,6 +140,7 @@ export class PrismaCallRepository implements CallRepository {
           lead: { select: { id: true, name: true, phone: true } },
           campaign: { select: { id: true, name: true } },
           assistant: { select: { id: true, name: true } },
+          sarvamAgent: { select: { id: true, name: true } },
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -213,6 +215,8 @@ export class PrismaCallRepository implements CallRepository {
         lead: c.lead,
         campaign: c.campaign,
         assistant: c.assistant,
+        sarvamAgent: c.sarvamAgent,
+        sarvamAgentId: c.sarvamAgentId,
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
@@ -387,6 +391,12 @@ export class PrismaCallRepository implements CallRepository {
             name: true,
           },
         },
+        sarvamAgent: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         callAnalysis: {
           select: {
             id: true,
@@ -440,6 +450,8 @@ export class PrismaCallRepository implements CallRepository {
       lead: call.lead,
       campaign: call.campaign,
       assistant: call.assistant,
+      sarvamAgent: call.sarvamAgent,
+      sarvamAgentId: call.sarvamAgentId,
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,
@@ -493,11 +505,12 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult> {
-    const { campaignId, leadId } = filters;
+    const { campaignId, leadId, provider } = filters;
 
     const where: Prisma.CallWhereInput = {
       tenantId,
       isDeleted: false,
+      ...(provider && { provider }),
       ...(campaignId && { campaignId }),
       ...(leadId && { leadId }),
     };

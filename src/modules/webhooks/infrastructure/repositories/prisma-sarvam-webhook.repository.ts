@@ -27,6 +27,14 @@ const aggregateCallSelect = {
   startedAt: true,
   endedAt: true,
   agentNumber: true,
+  cost: true,
+  platformCost: true,
+  billableSeconds: true,
+  planVersionId: true,
+  appliedRate: true,
+  appliedMinSec: true,
+  appliedIncrementSec: true,
+  chargedAmount: true,
 };
 
 type DbCallRow = {
@@ -49,6 +57,14 @@ type DbCallRow = {
   startedAt: Date | null;
   endedAt: Date | null;
   agentNumber: string | null;
+  cost: number | null;
+  platformCost: number | null;
+  billableSeconds: number | null;
+  planVersionId: string | null;
+  appliedRate: number | null;
+  appliedMinSec: number | null;
+  appliedIncrementSec: number | null;
+  chargedAmount: number | null;
 };
 
 export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
@@ -114,6 +130,14 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         transcript: data.transcript ?? null,
         transcriptMessages: (data.transcriptMessages as any) ?? null,
         extractionResult: (data.extractionResult as any) ?? null,
+        cost: data.cost ?? null,
+        platformCost: data.platformCost ?? null,
+        billableSeconds: data.billableSeconds ?? null,
+        planVersionId: data.planVersionId ?? null,
+        appliedRate: data.appliedRate ?? null,
+        appliedMinSec: data.appliedMinSec ?? null,
+        appliedIncrementSec: data.appliedIncrementSec ?? null,
+        chargedAmount: data.chargedAmount ?? null,
       },
       select: aggregateCallSelect,
     });
@@ -148,6 +172,14 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         ...(data.extractionResult
           ? { extractionResult: data.extractionResult as any }
           : {}),
+        ...(data.cost !== undefined ? { cost: data.cost } : {}),
+        ...(data.platformCost !== undefined ? { platformCost: data.platformCost } : {}),
+        ...(data.billableSeconds !== undefined ? { billableSeconds: data.billableSeconds } : {}),
+        ...(data.planVersionId !== undefined ? { planVersionId: data.planVersionId } : {}),
+        ...(data.appliedRate !== undefined ? { appliedRate: data.appliedRate } : {}),
+        ...(data.appliedMinSec !== undefined ? { appliedMinSec: data.appliedMinSec } : {}),
+        ...(data.appliedIncrementSec !== undefined ? { appliedIncrementSec: data.appliedIncrementSec } : {}),
+        ...(data.chargedAmount !== undefined ? { chargedAmount: data.chargedAmount } : {}),
       },
     });
   }
@@ -228,6 +260,14 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       agentNumber: row.agentNumber,
+      cost: row.cost,
+      platformCost: row.platformCost,
+      billableSeconds: row.billableSeconds,
+      planVersionId: row.planVersionId,
+      appliedRate: row.appliedRate,
+      appliedMinSec: row.appliedMinSec,
+      appliedIncrementSec: row.appliedIncrementSec,
+      chargedAmount: row.chargedAmount,
     };
   }
 }

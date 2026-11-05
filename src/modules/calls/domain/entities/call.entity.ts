@@ -10,6 +10,7 @@ export interface CallEntityData {
   tenantId: string;
   campaignId: string | null;
   assistantId?: string | null;
+  sarvamAgentId?: string | null;
   leadId: string;
   batchId: string | null;
   type?: CallType;
@@ -68,6 +69,9 @@ export class CallEntity {
   }
   get assistantId(): string | null | undefined {
     return this.data.assistantId;
+  }
+  get sarvamAgentId(): string | null | undefined {
+    return this.data.sarvamAgentId;
   }
   get type(): CallType | undefined {
     return this.data.type;

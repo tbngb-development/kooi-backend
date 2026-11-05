@@ -56,6 +56,7 @@ export class AdminCallController {
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
         leadId: query.leadId,
         status: query.status,
@@ -120,7 +121,8 @@ export class AdminCallController {
         res,
         await this.getCallStatsUseCase.execute({
           tenantId,
-          campaignId: query.campaignId,
+          provider: query.provider as any,
+        campaignId: query.campaignId,
           leadId: query.leadId,
         }),
       );

@@ -1,9 +1,11 @@
 // modules/calls/application/dto/call.dto.ts
 
+import type { VoiceProvider } from "@prisma/client";
 import type { DynamicFilterMap } from "../../../../shared/types/bolna.types";
 
 export interface ListCallsInput {
   tenantId: string;
+  provider?: VoiceProvider;
   campaignId?: string;
   assistantId?: string;
   leadId?: string;

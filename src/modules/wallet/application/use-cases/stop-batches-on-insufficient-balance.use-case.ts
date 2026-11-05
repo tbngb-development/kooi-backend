@@ -55,10 +55,20 @@ export class StopBatchesOnInsufficientBalanceUseCase {
       batchCount: runningBatches.length,
     });
 
-    const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
+    let bolnaClient: any = null;
+    if (runningBatches.some((b) => Boolean(b.bolnaBatchId))) {
+      try {
+        bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
+      } catch (bolnaFactoryErr) {
+        this.logger.warn("Could not instantiate Bolna client during batch stop", {
+          error: bolnaFactoryErr,
+          tenantId: input.tenantId,
+        });
+      }
+    }
 
     for (const batch of runningBatches) {
-      if (batch.bolnaBatchId) {
+      if (batch.bolnaBatchId && bolnaClient) {
         try {
           await bolnaClient.batches.stop(batch.bolnaBatchId);
         } catch (bolnaErr) {
