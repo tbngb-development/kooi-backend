@@ -110,7 +110,11 @@ export class SarvamCohortClient implements ISarvamCohortClient {
 
   private handleError(contextMessage: string, err: unknown): never {
     const axiosError = err as AxiosError<{
-      error?: { code?: string; message?: string };
+      error?: {
+        code?: string | number;
+        message?: string;
+        data?: { details?: string } | Record<string, unknown>;
+      };
       message?: string;
       detail?: string | Array<{ msg?: string }>;
     }>;
@@ -120,7 +124,12 @@ export class SarvamCohortClient implements ISarvamCohortClient {
 
     const data = axiosError.response?.data;
     let detail = "";
-    if (data?.error?.message) {
+    const errorData = data?.error?.data as Record<string, unknown> | undefined;
+    if (typeof errorData?.details === "string") {
+      detail = errorData.details;
+    } else if (errorData && typeof errorData === "object" && Object.keys(errorData).length > 0) {
+      detail = JSON.stringify(errorData);
+    } else if (data?.error?.message) {
       detail = data.error.message;
     } else if (typeof data?.detail === "string") {
       detail = data.detail;
@@ -138,6 +147,7 @@ export class SarvamCohortClient implements ISarvamCohortClient {
       action: "sarvam_cohort_client.error",
       statusCode,
       detail,
+      responseBody: data,
     });
 
     throw new AppError(

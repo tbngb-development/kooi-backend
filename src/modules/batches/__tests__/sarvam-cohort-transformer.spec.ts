@@ -201,7 +201,55 @@ describe("SarvamCohortTransformer", () => {
     expect(lines[1]).toBe(
       '+919876543210,Rohan,Acme Realty,"Hi Rohan, calling on behalf of Acme Realty."',
     );
+    expect(result.transformationJson.app_variables.welcome_message).toBeUndefined();
+    expect(result.transformationJson.app_overrides).toEqual({
+      initial_bot_message: { column_name: "welcome_message" },
+    });
+  });
+
+  it("maps welcome_message to app_variables when welcome_message is an explicit agent variable", () => {
+    const agentVars: SarvamAgentVariable[] = [
+      {
+        key: "customer_name",
+        defaultValue: "",
+        required: false,
+        isTenantVisible: true,
+        isTenantEditable: true,
+      },
+      {
+        key: "welcome_message",
+        defaultValue: "Hello default",
+        required: false,
+        isTenantVisible: true,
+        isTenantEditable: true,
+      },
+    ];
+
+    const welcomeConfig: WelcomeMessageConfig = {
+      defaultMessage: "Hello, welcome to Acme.",
+      customTemplate: "Hi {{customer_name}}, welcome!",
+      interpolationVariables: ["customer_name"],
+    };
+
+    const leads: LeadRow[] = [
+      {
+        name: "Rohan",
+        phone: "9876543210",
+        customer_name: "Rohan",
+      },
+    ];
+
+    const result = transformer.transform(
+      leads,
+      agentVars,
+      {},
+      {},
+      welcomeConfig,
+    );
+
     expect(result.transformationJson.app_variables.welcome_message).toBeDefined();
+    expect(result.transformationJson.app_variables.welcome_message.column_name).toBe("welcome_message");
+    expect(result.transformationJson.app_overrides).toEqual({});
   });
 
   it("falls back to defaultMessage when any template variable is missing for a contact", () => {

@@ -173,7 +173,7 @@ export class SarvamCohortTransformer {
 
       // 3. Assemble CSV row values
       const rowValues: string[] = [normalizedPhone];
-      for (const varKey of matchedVariables) {
+      for (const varKey of baseVariables) {
         if (varKey === "welcome_message" && hasWelcomeMessageConfig) {
           rowValues.push(resolvedWelcomeMessage);
         } else {
@@ -193,13 +193,24 @@ export class SarvamCohortTransformer {
       { column_name: string; required: boolean; formatting_functions: unknown[] }
     > = {};
 
-    for (const varKey of matchedVariables) {
+    for (const varKey of baseVariables) {
       const isRequired = agentVarMap.get(varKey)?.required ?? false;
       appVariablesMap[varKey] = {
         column_name: varKey,
         required: isRequired,
         formatting_functions: [],
       };
+    }
+
+    const appOverridesMap: Record<string, unknown> = {};
+    if (hasWelcomeMessageConfig) {
+      // If welcome_message is an explicit agent variable in Sarvam, it's already mapped in appVariablesMap.
+      // Otherwise, map it to Sarvam's app_overrides.initial_bot_message so Sarvam overrides the greeting without error.
+      if (!agentVarMap.has("welcome_message")) {
+        appOverridesMap["initial_bot_message"] = {
+          column_name: "welcome_message",
+        };
+      }
     }
 
     const transformationJson = {
@@ -211,7 +222,7 @@ export class SarvamCohortTransformer {
       },
       user_identifier: null,
       app_variables: appVariablesMap,
-      app_overrides: {},
+      app_overrides: appOverridesMap,
       alternate_phone_numbers: [],
     };
 

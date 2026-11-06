@@ -132,4 +132,38 @@ describe("SarvamCohortClient", () => {
       }),
     ).rejects.toThrow(AppError);
   });
+
+  it("extracts detailed error from data.error.data.details when Sarvam returns 422", async () => {
+    const errorResponse = {
+      response: {
+        status: 422,
+        data: {
+          error: {
+            message: "(422) Invalid Parameter",
+            type: "invalid_parameter",
+            code: 422,
+            data: {
+              details: "The following app variables are not found in the agent's variables: welcome_message",
+            },
+          },
+        },
+      },
+    };
+    mockPost.mockRejectedValueOnce(errorResponse);
+
+    await expect(
+      client.uploadCohort({
+        organizationId: "org-1",
+        workspaceId: "ws-1",
+        campaignId: "camp-1",
+        apiKey: "test-api-key",
+        name: "Invalid Cohort",
+        cohortFile: Buffer.from("invalid"),
+        cohortFileName: "invalid.csv",
+        transformationJson: {},
+      }),
+    ).rejects.toThrow(
+      "Failed to upload cohort to Sarvam AI: The following app variables are not found in the agent's variables: welcome_message",
+    );
+  });
 });
