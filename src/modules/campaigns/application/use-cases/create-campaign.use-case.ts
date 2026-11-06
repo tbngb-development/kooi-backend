@@ -260,9 +260,12 @@ export class CreateCampaignUseCase {
     }
 
     const webhookSecret = env.sarvam.webhookSecret;
-    const webhookUrl = env.webhook.baseUrl
+    const baseWebhookUrl = env.webhook.baseUrl
       ? `${env.webhook.baseUrl}/api/webhooks/sarvam`
       : "https://apps.kooi.io/api/webhooks/sarvam";
+    const webhookUrl = webhookSecret
+      ? `${baseWebhookUrl}?secret=${encodeURIComponent(webhookSecret)}`
+      : baseWebhookUrl;
 
     const webhookConfig = {
       url: webhookUrl,

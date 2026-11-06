@@ -63,6 +63,7 @@ export class WebhookController {
       const result = await this.processSarvamWebhook.execute(
         req.body,
         req.headers,
+        req.query as Record<string, unknown>,
       );
       res.status(200).json({ received: true, ...result });
     } catch (err) {

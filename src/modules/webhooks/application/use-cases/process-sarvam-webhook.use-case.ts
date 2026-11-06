@@ -63,6 +63,7 @@ export class ProcessSarvamWebhookUseCase {
   async execute(
     payload: unknown,
     headers?: Record<string, string | string[] | undefined>,
+    query?: Record<string, unknown>,
   ): Promise<ProcessSarvamWebhookResult> {
     this.logger?.debug("sarvam webhook payload: ", {
       payload: payload,
@@ -78,8 +79,8 @@ export class ProcessSarvamWebhookUseCase {
 
     const p = payload as SarvamWebhookAttemptPayload;
 
-    // 2. Dual webhook verification
-    this.verifyWebhookAuth(p, headers);
+    // 2. Webhook verification (query token, payload metadata, headers, or correlation fallback)
+    const authState = this.verifyWebhookAuth(p, headers, query);
 
     // 3. Correlate with existing Kooi entities
     const correlation = await this.correlationService.correlate({
@@ -96,12 +97,29 @@ export class ProcessSarvamWebhookUseCase {
         failure: correlation.failure,
       });
 
+      // If no valid secret was provided AND correlation failed, reject as unauthorized
+      if (authState === "UNAUTHENTICATED") {
+        throw new UnauthorizedError(WebhookMessages.INVALID_SECRET);
+      }
+
       return {
         status: "CORRELATION_REJECTED",
         attemptId: p.attempt_id,
         reason: correlation.failure.message,
         code: correlation.failure.code,
       };
+    }
+
+    if (authState === "UNAUTHENTICATED") {
+      this.logger?.info(
+        "Sarvam webhook authenticated via database correlation fallback",
+        {
+          action: "webhook.sarvam.authenticated_via_correlation",
+          attemptId: p.attempt_id,
+          campaignId: correlation.data.campaign.id,
+          sarvamCampaignId: p.campaign_id,
+        },
+      );
     }
 
     const { tenantId, campaign, batch, lead } = correlation.data;
@@ -505,32 +523,71 @@ export class ProcessSarvamWebhookUseCase {
   private verifyWebhookAuth(
     payload: SarvamWebhookAttemptPayload,
     headers?: Record<string, string | string[] | undefined>,
-  ): void {
-    if (!this.expectedSecret) return;
+    query?: Record<string, unknown>,
+  ): "AUTHENTICATED" | "UNAUTHENTICATED" {
+    if (!this.expectedSecret) return "AUTHENTICATED";
 
+    // 1. Query parameter token (e.g. ?secret=... or ?token=... or ?key=...)
+    let querySecret: string | undefined;
+    if (query) {
+      const rawQuery =
+        query.secret ?? query.token ?? query.key ?? query.webhook_secret;
+      querySecret = typeof rawQuery === "string" ? rawQuery : undefined;
+    }
+
+    // 2. Payload metadata secret
     const payloadSecret = payload.metadata?.secret as string | undefined;
 
+    // 3. Custom headers (x-webhook-secret, x-api-key, or Authorization)
     let headerSecret: string | undefined;
     if (headers) {
       const rawHeader =
         headers[HEADER_WEBHOOK_SECRET] ??
         headers["x-webhook-secret"] ??
-        headers["X-Webhook-Secret"];
+        headers["X-Webhook-Secret"] ??
+        headers["x-api-key"] ??
+        headers["X-API-KEY"];
       headerSecret = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+
+      if (!headerSecret && headers["authorization"]) {
+        const auth = Array.isArray(headers["authorization"])
+          ? headers["authorization"][0]
+          : headers["authorization"];
+        if (auth) {
+          headerSecret = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
+        }
+      }
     }
 
-    const matchesPayload = payloadSecret === this.expectedSecret;
-    const matchesHeader = headerSecret === this.expectedSecret;
+    const hasAnySecret =
+      Boolean(querySecret) || Boolean(payloadSecret) || Boolean(headerSecret);
 
-    if (!matchesPayload && !matchesHeader) {
-      this.logger?.warn("Sarvam webhook authentication failed", {
-        action: "webhook.sarvam.unauthorized",
-        hasPayloadSecret: Boolean(payloadSecret),
-        hasHeaderSecret: Boolean(headerSecret),
-      });
+    // If an explicit secret was provided in any channel, it must match
+    if (hasAnySecret) {
+      const isMatch =
+        querySecret === this.expectedSecret ||
+        payloadSecret === this.expectedSecret ||
+        headerSecret === this.expectedSecret;
 
-      throw new UnauthorizedError(WebhookMessages.INVALID_SECRET);
+      if (!isMatch) {
+        this.logger?.warn(
+          "Sarvam webhook authentication failed: secret mismatch",
+          {
+            action: "webhook.sarvam.unauthorized",
+            hasQuerySecret: Boolean(querySecret),
+            hasPayloadSecret: Boolean(payloadSecret),
+            hasHeaderSecret: Boolean(headerSecret),
+          },
+        );
+
+        throw new UnauthorizedError(WebhookMessages.INVALID_SECRET);
+      }
+
+      return "AUTHENTICATED";
     }
+
+    // No secret provided in headers, query, or payload metadata
+    return "UNAUTHENTICATED";
   }
 
   private mapAttemptDisposition(p: SarvamWebhookAttemptPayload): string {

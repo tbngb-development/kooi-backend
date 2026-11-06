@@ -416,6 +416,57 @@ describe("ProcessSarvamWebhookUseCase", () => {
 
       expect(result.status).toBe("SUCCESS");
     });
+
+    it("accepts valid webhook via query secret even if metadata secret and headers are absent", async () => {
+      const noMetaPayload = {
+        ...basePayload,
+        metadata: null,
+      };
+
+      const result = await useCase.execute(noMetaPayload, {}, { secret: testSecret });
+
+      expect(result.status).toBe("SUCCESS");
+    });
+
+    it("rejects webhook when wrong query secret is provided", async () => {
+      const noMetaPayload = {
+        ...basePayload,
+        metadata: null,
+      };
+
+      await expect(
+        useCase.execute(noMetaPayload, {}, { secret: "wrong-secret" }),
+      ).rejects.toThrow(UnauthorizedError);
+    });
+
+    it("accepts webhook with metadata: null and no secrets when database correlation succeeds", async () => {
+      const noSecretPayload = {
+        ...basePayload,
+        metadata: null,
+      };
+
+      const result = await useCase.execute(noSecretPayload);
+
+      expect(result.status).toBe("SUCCESS");
+      expect(result.callId).toBe(callId);
+    });
+
+    it("rejects webhook with metadata: null and no secrets when database correlation fails", async () => {
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        success: false,
+        failure: {
+          code: "UNKNOWN_CAMPAIGN",
+          message: "No campaign found",
+        },
+      });
+
+      const noSecretPayload = {
+        ...basePayload,
+        metadata: null,
+      };
+
+      await expect(useCase.execute(noSecretPayload)).rejects.toThrow(UnauthorizedError);
+    });
   });
 
   describe("7. Correlation Rejection Handling", () => {
