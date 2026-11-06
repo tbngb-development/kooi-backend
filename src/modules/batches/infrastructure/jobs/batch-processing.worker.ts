@@ -560,11 +560,12 @@ export class BatchProcessingWorker {
     );
 
     if (transformResult.missingRequiredVariables.length > 0) {
-      await this.failBatch(
-        batchId,
-        campaignId,
-        `Missing required Sarvam agent variable(s): ${transformResult.missingRequiredVariables.join(", ")}. Please include these columns in your CSV.`,
-      );
+      const firstDetail = transformResult.missingRequiredDetails?.[0];
+      const failureReason = firstDetail
+        ? `Missing required variable '${firstDetail.variable}' for contact '${firstDetail.contactPhone}'. Variable is not set in campaign configuration or contact data.`
+        : `Missing required Sarvam agent variable(s): ${transformResult.missingRequiredVariables.join(", ")}. Variable is not set in campaign configuration or contact data.`;
+
+      await this.failBatch(batchId, campaignId, failureReason);
       return;
     }
 

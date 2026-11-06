@@ -206,7 +206,7 @@ export class CreateCampaignUseCase {
     }
 
     // Authoritative backend validation of required Sarvam agent variables
-    let agentVariablesList: Array<{ key: string; required?: boolean }> = [];
+    let agentVariablesList: Array<{ key: string; required?: boolean; defaultValue?: string }> = [];
     if (Array.isArray(sarvamAgent.agentVariables)) {
       agentVariablesList = sarvamAgent.agentVariables as any[];
     } else if (typeof sarvamAgent.agentVariables === "string") {
@@ -218,10 +218,24 @@ export class CreateCampaignUseCase {
       }
     }
 
+    const tenantOverrides =
+      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<string, string>) ?? {};
+
     const missingRequired: string[] = [];
     for (const v of agentVariablesList) {
-      if (v.required) {
-        const val = cleanedVariables[v.key];
+      // Phase 4: Only variables explicitly marked required === true are validated.
+      // Optional variables must never block campaign creation or cohort upload.
+      if (v.required === true) {
+        let val = cleanedVariables[v.key];
+        if (val === undefined || val === null || val === "") {
+          if (tenantOverrides[v.key] && tenantOverrides[v.key].trim() !== "") {
+            val = tenantOverrides[v.key].trim();
+            cleanedVariables[v.key] = val;
+          } else if (v.defaultValue && v.defaultValue.trim() !== "") {
+            val = v.defaultValue.trim();
+            cleanedVariables[v.key] = val;
+          }
+        }
         if (val === undefined || val === null || val === "") {
           missingRequired.push(v.key);
         }

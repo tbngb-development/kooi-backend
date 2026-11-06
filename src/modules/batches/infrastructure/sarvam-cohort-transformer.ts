@@ -7,6 +7,12 @@ import type {
 } from "../../sarvam-agents/domain/types/sarvam-agent.types";
 import type { Logger } from "../../../shared/logging/logger.interface";
 
+export interface MissingVariableDetail {
+  variable: string;
+  contactPhone: string;
+  rowIndex: number;
+}
+
 export interface SarvamCohortTransformResult {
   transformedCsvBuffer: Buffer;
   transformationJson: {
@@ -30,6 +36,7 @@ export interface SarvamCohortTransformResult {
   };
   matchedVariables: string[];
   missingRequiredVariables: string[];
+  missingRequiredDetails: MissingVariableDetail[];
   totalLeads: number;
 }
 
@@ -67,6 +74,7 @@ export class SarvamCohortTransformer {
     }
 
     const missingRequiredSet = new Set<string>();
+    const missingRequiredDetails: MissingVariableDetail[] = [];
     const headers = ["contact_number", ...matchedVariables];
     const dataRows: string[][] = [];
 
@@ -78,7 +86,8 @@ export class SarvamCohortTransformer {
       templatePlaceholders = matches.map((m) => m.slice(2, -2).trim());
     }
 
-    for (const lead of leads) {
+    for (let leadIndex = 0; leadIndex < leads.length; leadIndex++) {
+      const lead = leads[leadIndex];
       const normalizedPhone = normalizePhoneNumber(lead.phone);
       if (!normalizedPhone.startsWith("+91")) {
         continue;
@@ -127,10 +136,16 @@ export class SarvamCohortTransformer {
 
         contactMergedVars[varKey] = val;
 
-        // Validate required agent variables for each contact
-        const isRequired = agentVarMap.get(varKey)?.required ?? false;
+        // Validate required agent variables for each contact.
+        // Explicitly check required === true; optional variables (required: false) must NEVER enter missing-variable validation.
+        const isRequired = agentVarMap.get(varKey)?.required === true;
         if (isRequired && (!val || val.trim() === "")) {
           missingRequiredSet.add(varKey);
+          missingRequiredDetails.push({
+            variable: varKey,
+            contactPhone: normalizedPhone,
+            rowIndex: leadIndex + 1,
+          });
         }
       }
 
@@ -173,7 +188,7 @@ export class SarvamCohortTransformer {
 
       // 3. Assemble CSV row values
       const rowValues: string[] = [normalizedPhone];
-      for (const varKey of baseVariables) {
+      for (const varKey of matchedVariables) {
         if (varKey === "welcome_message" && hasWelcomeMessageConfig) {
           rowValues.push(resolvedWelcomeMessage);
         } else {
@@ -231,6 +246,7 @@ export class SarvamCohortTransformer {
       transformationJson,
       matchedVariables,
       missingRequiredVariables: Array.from(missingRequiredSet),
+      missingRequiredDetails,
       totalLeads: dataRows.length,
     };
   }
