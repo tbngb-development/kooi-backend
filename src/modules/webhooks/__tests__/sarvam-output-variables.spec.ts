@@ -187,6 +187,9 @@ describe("Dynamic Sarvam Output Variable Mapping and Persistence", () => {
           };
         },
       ),
+      findCampaignGoals: vi.fn().mockResolvedValue([]),
+      upsertCallGoalResults: vi.fn().mockResolvedValue(undefined),
+      markCallGoalPassed: vi.fn().mockResolvedValue(undefined),
     } as unknown as ISarvamWebhookRepository;
 
     mockLogger = {

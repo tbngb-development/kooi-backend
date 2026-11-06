@@ -16,10 +16,11 @@ import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/e
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
 import type { GetCampaignCallMetricsUseCase } from "../application/use-cases/get-campaign-call-metrics.use-case";
+import type { GetCampaignGoalMetricsUseCase } from "../application/use-cases/get-campaign-goal-metrics.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
 import type { ControlSarvamCampaignUseCase } from "../application/use-cases/control-sarvam-campaign.use-case";
-import { controlSarvamCampaignSchema } from "./campaign.schema";
+import { controlSarvamCampaignSchema, campaignGoalMetricsQuerySchema } from "./campaign.schema";
 import { AppError } from "../../../shared/errors/app.error";
 import type { ListCampaignsQuery } from "./campaign.schema";
 
@@ -37,6 +38,7 @@ export class TenantCampaignController {
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
     private readonly controlSarvamCampaignUseCase?: ControlSarvamCampaignUseCase,
+    private readonly getCampaignGoalMetricsUseCase?: GetCampaignGoalMetricsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -249,6 +251,36 @@ export class TenantCampaignController {
         campaignId,
         batchId,
         topN,
+      });
+
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  goalMetrics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      const { batchId } = campaignGoalMetricsQuerySchema.parse(req.query);
+
+      if (!this.getCampaignGoalMetricsUseCase) {
+        throw new AppError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Goal metrics use case is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const data = await this.getCampaignGoalMetricsUseCase.execute({
+        tenantId,
+        campaignId,
+        batchId,
       });
 
       sendSuccess(res, data);

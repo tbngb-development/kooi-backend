@@ -247,3 +247,30 @@ export interface CampaignCallMetricsResult {
   totalCalls: number;
   metrics: CampaignCallMetricItem[];
 }
+
+// ── Goal Metrics ─────────────────────────────────────────────────────────────
+
+export interface CampaignGoalMetricsInput {
+  tenantId: string;
+  campaignId: string;
+  batchId?: string;
+}
+
+export interface CampaignGoalMetricItem {
+  goalId: string;
+  displayName: string;
+  outputVariableName: string;
+  expectedValue: string;
+  reachedCalls: number;
+  totalCalls: number;
+  achievementRate: number;
+}
+
+export interface CampaignGoalMetricsResult {
+  campaignId: string;
+  batchId?: string | null;
+  totalCalls: number;
+  anyGoalPassedCalls: number;
+  overallGoalRate: number;
+  goals: CampaignGoalMetricItem[];
+}

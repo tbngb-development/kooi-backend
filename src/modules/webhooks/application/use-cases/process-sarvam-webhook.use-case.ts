@@ -427,6 +427,45 @@ export class ProcessSarvamWebhookUseCase {
           });
         }
 
+        // 9.5. Evaluate Campaign Goals
+        const connectivityStatus = (p.connectivity_status ?? "").toLowerCase();
+        const completionStatus = (p.completion_status ?? "").toLowerCase();
+        const isGoalEligible =
+          connectivityStatus === "connected" &&
+          (completionStatus === "completed" || completionStatus === "partial") &&
+          p.output_agent_variables !== null &&
+          typeof p.output_agent_variables === "object";
+
+        if (isGoalEligible && campaign.id && finalCallId) {
+          const campaignGoals = await txRepo.findCampaignGoals(campaign.id);
+          if (campaignGoals.length > 0) {
+            const matchedGoals: Array<{ campaignGoalId: string; attemptId: string }> = [];
+            const outputVars = p.output_agent_variables as Record<string, unknown>;
+
+            for (const goal of campaignGoals) {
+              const rawVal = outputVars[goal.outputVariableName];
+              if (typeof rawVal === "string" && rawVal === goal.expectedValue) {
+                matchedGoals.push({
+                  campaignGoalId: goal.id,
+                  attemptId: p.attempt_id,
+                });
+              }
+            }
+
+            if (matchedGoals.length > 0) {
+              await txRepo.upsertCallGoalResults(finalCallId, matchedGoals);
+              await txRepo.markCallGoalPassed(finalCallId);
+
+              this.logger?.info("Campaign goals matched and recorded", {
+                action: "webhook.sarvam.goals_matched",
+                callId: finalCallId,
+                attemptId: p.attempt_id,
+                matchedCount: matchedGoals.length,
+              });
+            }
+          }
+        }
+
         // 10. Update Lead status
         await txRepo.updateLeadStatus(lead.id, targetLeadStatus);
 

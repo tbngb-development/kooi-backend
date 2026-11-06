@@ -23,28 +23,40 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
         },
       },
     },
+    goals: true,
   } as const;
 
   async create(
     data: CreateSarvamAgentRecord,
   ): Promise<SarvamAgentWithApiKeyAndTenant> {
-    return prisma.sarvamAgent.create({
-      data: {
-        name: data.name,
-        apiKeyId: data.apiKeyId,
-        appId: data.appId,
-        appVersion: data.appVersion,
-        attemptsPerSecond: data.attemptsPerSecond,
-        agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
-        welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
-        outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
-        connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
-        retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
-        allowTenantVisible: data.allowTenantVisible ?? false,
-        status: data.status ?? "ACTIVE",
-        createdBy: data.createdBy,
-      },
-      include: this.agentWithApiKeyInclude,
+    return prisma.$transaction(async (tx) => {
+      return tx.sarvamAgent.create({
+        data: {
+          name: data.name,
+          apiKeyId: data.apiKeyId,
+          appId: data.appId,
+          appVersion: data.appVersion,
+          attemptsPerSecond: data.attemptsPerSecond,
+          agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
+          welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
+          outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
+          connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
+          retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
+          allowTenantVisible: data.allowTenantVisible ?? false,
+          status: data.status ?? "ACTIVE",
+          createdBy: data.createdBy,
+          ...(data.goals && data.goals.length > 0 && {
+            goals: {
+              create: data.goals.map((g) => ({
+                outputVariableName: g.outputVariableName,
+                expectedValue: g.expectedValue,
+                displayName: g.displayName,
+              })),
+            },
+          }),
+        },
+        include: this.agentWithApiKeyInclude,
+      });
     });
   }
 
@@ -52,36 +64,75 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
     id: string,
     data: UpdateSarvamAgentRecord,
   ): Promise<SarvamAgentWithApiKeyAndTenant> {
-    return prisma.sarvamAgent.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.appId !== undefined && { appId: data.appId }),
-        ...(data.appVersion !== undefined && { appVersion: data.appVersion }),
-        ...(data.attemptsPerSecond !== undefined && {
-          attemptsPerSecond: data.attemptsPerSecond,
-        }),
-        ...(data.agentVariables !== undefined && {
-          agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
-        }),
-        ...(data.welcomeMessage !== undefined && {
-          welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
-        }),
-        ...(data.outputVariables !== undefined && {
-          outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
-        }),
-        ...(data.connectionConfigs !== undefined && {
-          connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
-        }),
-        ...(data.retryConfig !== undefined && {
-          retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
-        }),
-        ...(data.allowTenantVisible !== undefined && {
-          allowTenantVisible: data.allowTenantVisible,
-        }),
-        ...(data.status !== undefined && { status: data.status }),
-      },
-      include: this.agentWithApiKeyInclude,
+    return prisma.$transaction(async (tx) => {
+      if (data.goals !== undefined) {
+        const incomingIds = data.goals
+          .map((g) => g.id)
+          .filter((gid): gid is string => Boolean(gid));
+
+        // Delete removed goals
+        await tx.sarvamAgentGoal.deleteMany({
+          where: {
+            agentId: id,
+            ...(incomingIds.length > 0 ? { id: { notIn: incomingIds } } : {}),
+          },
+        });
+
+        // Upsert/create incoming goals
+        for (const goal of data.goals) {
+          if (goal.id) {
+            await tx.sarvamAgentGoal.update({
+              where: { id: goal.id },
+              data: {
+                outputVariableName: goal.outputVariableName,
+                expectedValue: goal.expectedValue,
+                displayName: goal.displayName,
+              },
+            });
+          } else {
+            await tx.sarvamAgentGoal.create({
+              data: {
+                agentId: id,
+                outputVariableName: goal.outputVariableName,
+                expectedValue: goal.expectedValue,
+                displayName: goal.displayName,
+              },
+            });
+          }
+        }
+      }
+
+      return tx.sarvamAgent.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.appId !== undefined && { appId: data.appId }),
+          ...(data.appVersion !== undefined && { appVersion: data.appVersion }),
+          ...(data.attemptsPerSecond !== undefined && {
+            attemptsPerSecond: data.attemptsPerSecond,
+          }),
+          ...(data.agentVariables !== undefined && {
+            agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.welcomeMessage !== undefined && {
+            welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.outputVariables !== undefined && {
+            outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.connectionConfigs !== undefined && {
+            connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.retryConfig !== undefined && {
+            retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.allowTenantVisible !== undefined && {
+            allowTenantVisible: data.allowTenantVisible,
+          }),
+          ...(data.status !== undefined && { status: data.status }),
+        },
+        include: this.agentWithApiKeyInclude,
+      });
     });
   }
 
@@ -110,18 +161,18 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
     items: SarvamAgentWithApiKeyAndTenant[];
     total: number;
   }> {
-    const page = Math.max(1, filter.page ?? 1);
-    const limit = Math.max(1, Math.min(100, filter.limit ?? 10));
+    const page = filter.page ?? 1;
+    const limit = filter.limit ?? 10;
     const skip = (page - 1) * limit;
 
     const where: Prisma.SarvamAgentWhereInput = {};
 
-    if (filter.apiKeyId) {
-      where.apiKeyId = filter.apiKeyId;
-    }
-
     if (filter.status) {
       where.status = filter.status;
+    }
+
+    if (filter.apiKeyId) {
+      where.apiKeyId = filter.apiKeyId;
     }
 
     if (filter.tenantId) {
@@ -130,21 +181,11 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
       };
     }
 
-    if (filter.search && filter.search.trim().length > 0) {
-      const search = filter.search.trim();
+    if (filter.search) {
+      const search = filter.search;
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
         { appId: { contains: search, mode: "insensitive" } },
-        {
-          apiKey: {
-            workspaceId: { contains: search, mode: "insensitive" },
-          },
-        },
-        {
-          apiKey: {
-            organizationId: { contains: search, mode: "insensitive" },
-          },
-        },
         {
           apiKey: {
             tenant: {
@@ -179,9 +220,7 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
   async archive(id: string): Promise<SarvamAgentWithApiKeyAndTenant> {
     return prisma.sarvamAgent.update({
       where: { id },
-      data: {
-        status: "ARCHIVED",
-      },
+      data: { status: "ARCHIVED" },
       include: this.agentWithApiKeyInclude,
     });
   }
@@ -203,13 +242,17 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
     return prisma.sarvamAgent.findMany({
       where: {
         status: "ACTIVE",
-        allowTenantVisible: true,
-        apiKey: {
-          tenantId,
-          isActive: true,
-        },
+        OR: [
+          { allowTenantVisible: true },
+          {
+            apiKey: {
+              tenantId,
+              isActive: true,
+            },
+          },
+        ],
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { name: "asc" },
     });
   }
 
@@ -221,11 +264,15 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
       where: {
         id,
         status: "ACTIVE",
-        allowTenantVisible: true,
-        apiKey: {
-          tenantId,
-          isActive: true,
-        },
+        OR: [
+          { allowTenantVisible: true },
+          {
+            apiKey: {
+              tenantId,
+              isActive: true,
+            },
+          },
+        ],
       },
     });
   }
@@ -245,4 +292,3 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
     return count > 0;
   }
 }
-

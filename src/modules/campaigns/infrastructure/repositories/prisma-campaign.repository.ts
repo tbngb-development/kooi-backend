@@ -24,6 +24,8 @@ import type {
   ExtractionOverviewResult,
   CampaignCallMetricsResult,
   CampaignCallMetricItem,
+  CampaignGoalMetricsResult,
+  CampaignGoalMetricItem,
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../../application/dto/campaign.dto";
@@ -558,6 +560,16 @@ export class PrismaCampaignRepository implements CampaignRepository {
         tenantId,
         assistantId: data.assistantId ?? null,
         sarvamAgentId: data.sarvamAgentId ?? null,
+        ...(data.goals && data.goals.length > 0 && {
+          goals: {
+            create: data.goals.map((g) => ({
+              agentGoalId: g.agentGoalId ?? null,
+              outputVariableName: g.outputVariableName,
+              expectedValue: g.expectedValue,
+              displayName: g.displayName,
+            })),
+          },
+        }),
         startTimestamp: data.startTimestamp ? new Date(data.startTimestamp) : null,
         endTimestamp: data.endTimestamp ? new Date(data.endTimestamp) : null,
         allowedSchedule: (data.allowedSchedule as any) ?? undefined,
@@ -1239,6 +1251,109 @@ export class PrismaCampaignRepository implements CampaignRepository {
     return { campaignId, totalCalls, metrics };
   }
 
+  async getCampaignGoalMetrics(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignGoalMetricsResult> {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId, isDeleted: false },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      throw new CampaignNotFoundError();
+    }
+
+    const campaignGoals = await prisma.campaignGoal.findMany({
+      where: { campaignId },
+      select: {
+        id: true,
+        displayName: true,
+        outputVariableName: true,
+        expectedValue: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const callWhere: Prisma.CallWhereInput = {
+      campaignId,
+      tenantId,
+      isDeleted: false,
+      ...(batchId ? { batchId } : {}),
+    };
+
+    const totalCalls = await prisma.call.count({
+      where: callWhere,
+    });
+
+    if (campaignGoals.length === 0) {
+      return {
+        campaignId,
+        batchId: batchId ?? null,
+        totalCalls,
+        anyGoalPassedCalls: 0,
+        overallGoalRate: 0,
+        goals: [],
+      };
+    }
+
+    const anyGoalPassedCalls = await prisma.call.count({
+      where: {
+        ...callWhere,
+        goalPassed: true,
+      },
+    });
+
+    const overallGoalRate =
+      totalCalls > 0
+        ? parseFloat(((anyGoalPassedCalls / totalCalls) * 100).toFixed(1))
+        : 0;
+
+    const goalGroupCounts = await prisma.callGoalResult.groupBy({
+      by: ["campaignGoalId"],
+      where: {
+        campaignGoal: { campaignId },
+        call: callWhere,
+      },
+      _count: {
+        callId: true,
+      },
+    });
+
+    const countMap = new Map<string, number>();
+    for (const group of goalGroupCounts) {
+      countMap.set(group.campaignGoalId, group._count.callId);
+    }
+
+    const goals: CampaignGoalMetricItem[] = campaignGoals.map((goal) => {
+      const reachedCalls = countMap.get(goal.id) ?? 0;
+      const achievementRate =
+        totalCalls > 0
+          ? parseFloat(((reachedCalls / totalCalls) * 100).toFixed(1))
+          : 0;
+
+      return {
+        goalId: goal.id,
+        displayName: goal.displayName,
+        outputVariableName: goal.outputVariableName,
+        expectedValue: goal.expectedValue,
+        reachedCalls,
+        totalCalls,
+        achievementRate,
+      };
+    });
+
+    return {
+      campaignId,
+      batchId: batchId ?? null,
+      totalCalls,
+      anyGoalPassedCalls,
+      overallGoalRate,
+      goals,
+    };
+  }
+
   async findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
@@ -1288,6 +1403,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
       include: {
         apiKey: true,
+        goals: true,
         overrides: {
           where: { tenantId },
         },
@@ -1317,6 +1433,12 @@ export class PrismaCampaignRepository implements CampaignRepository {
         isActive: agent.apiKey.isActive,
       },
       overrides: agent.overrides,
+      goals: (agent.goals || []).map((g) => ({
+        id: g.id,
+        outputVariableName: g.outputVariableName,
+        expectedValue: g.expectedValue,
+        displayName: g.displayName,
+      })),
     };
   }
 

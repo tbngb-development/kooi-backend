@@ -29,6 +29,7 @@ export interface AggregateCallCandidate {
   appliedMinSec?: number | null;
   appliedIncrementSec?: number | null;
   chargedAmount?: number | null;
+  goalPassed?: boolean;
 }
 
 export interface SarvamAttemptHistoryEntry {
@@ -58,11 +59,10 @@ export interface SarvamAttemptHistoryEntry {
   recording_error?: string | null;
   recording_attempts?: number;
   recording_retrieved_at?: string | null;
-  recording_source?: "AUTOMATIC" | "MANUAL" | null;
-  cost?: number | null;
-  platformCost?: number | null;
-  billableSeconds?: number | null;
+  recording_source?: string | null;
   chargedAmount?: number | null;
+  billableSeconds?: number | null;
+  platformCost?: number | null;
 }
 
 export interface CreateAggregateCallData {
@@ -70,7 +70,7 @@ export interface CreateAggregateCallData {
   campaignId: string;
   batchId: string;
   leadId: string;
-  sarvamAgentId: string;
+  sarvamAgentId?: string | null;
   provider: VoiceProvider;
   status: CallStatus;
   sarvamAttemptId: string;
@@ -92,6 +92,7 @@ export interface CreateAggregateCallData {
   appliedMinSec?: number | null;
   appliedIncrementSec?: number | null;
   chargedAmount?: number | null;
+  goalPassed?: boolean;
 }
 
 export interface UpdateAggregateCallData {
@@ -115,6 +116,15 @@ export interface UpdateAggregateCallData {
   appliedMinSec?: number | null;
   appliedIncrementSec?: number | null;
   chargedAmount?: number | null;
+  goalPassed?: boolean;
+}
+
+export interface CampaignGoalSnapshot {
+  id: string;
+  campaignId: string;
+  outputVariableName: string;
+  expectedValue: string;
+  displayName: string;
 }
 
 export interface ISarvamWebhookRepository {
@@ -171,6 +181,15 @@ export interface ISarvamWebhookRepository {
     agentId: string,
     tenantId: string,
   ): Promise<{ id: string; outputVariables: unknown } | null>;
+
+  findCampaignGoals(campaignId: string): Promise<CampaignGoalSnapshot[]>;
+
+  upsertCallGoalResults(
+    callId: string,
+    matchedGoals: Array<{ campaignGoalId: string; attemptId: string }>,
+  ): Promise<void>;
+
+  markCallGoalPassed(callId: string): Promise<void>;
 
   getCallAnalysis(
     callId: string,

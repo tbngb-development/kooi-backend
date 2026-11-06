@@ -25,4 +25,6 @@ export interface ListCallsInput {
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
   isDeleted?: boolean;
+  goalId?: string;
+  goalPassed?: boolean;
 }

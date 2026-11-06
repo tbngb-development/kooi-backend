@@ -13,6 +13,15 @@ export interface WelcomeMessageConfig {
 }
 
 export type SarvamOutputVariableType = "string" | "enum";
+export interface SarvamAgentGoal {
+  id?: string;
+  agentId?: string;
+  outputVariableName: string;
+  expectedValue: string;
+  displayName: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
 
 export interface SarvamOutputVariable {
   name: string;

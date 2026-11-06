@@ -62,6 +62,7 @@ export function buildTenantCampaignRoutes(
   router.get("/:id/extraction-overview", controller.extractionOverview);
   router.get("/:id/extraction-insights", controller.extractionInsights);
   router.get("/:id/call-metrics", controller.callMetrics);
+  router.get("/:id/goal-metrics", controller.goalMetrics);
   router.post(
     "/:id/parse-leads",
     ...verificationGuard,

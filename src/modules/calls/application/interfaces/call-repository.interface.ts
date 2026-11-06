@@ -24,6 +24,8 @@ export interface ListCallsFilters {
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
   isDeleted?: boolean;
+  goalId?: string;
+  goalPassed?: boolean;
 }
 
 export interface PaginatedCallsResult {
@@ -99,6 +101,17 @@ export interface DetailedCallResult extends CallEntityData {
     extractionResult: string | null;
     outputVariables?: unknown;
   } | null;
+  goalResults?: Array<{
+    id: string;
+    campaignGoalId: string;
+    attemptId: string;
+    createdAt: Date;
+    campaignGoal: {
+      displayName: string;
+      outputVariableName: string;
+      expectedValue: string;
+    };
+  }>;
 }
 
 export interface CallTranscriptResult {

@@ -57,6 +57,8 @@ export class TenantCallController {
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
         isDeleted: query.isDeleted,
+        goalId: query.goalId,
+        goalPassed: query.goalPassed ? query.goalPassed === "true" : undefined,
       });
 
       sendSuccess(res, data);

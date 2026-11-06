@@ -10,12 +10,14 @@ import type {
   SarvamOutputVariable,
   SarvamConnectionConfig,
   SarvamRetryConfig,
+  SarvamAgentGoal,
 } from "../../domain/types/sarvam-agent.types";
 
 export type SarvamAgentWithApiKeyAndTenant = SarvamAgent & {
   apiKey: SarvamApiKey & {
     tenant: Pick<Tenant, "id" | "name" | "email" | "isActive">;
   };
+  goals?: SarvamAgentGoal[];
 };
 
 export interface CreateSarvamAgentRecord {
@@ -31,6 +33,7 @@ export interface CreateSarvamAgentRecord {
   retryConfig: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
+  goals?: SarvamAgentGoal[];
   createdBy: string;
 }
 
@@ -46,6 +49,7 @@ export interface UpdateSarvamAgentRecord {
   retryConfig?: SarvamRetryConfig;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
+  goals?: SarvamAgentGoal[];
 }
 
 export interface ListSarvamAgentsFilter {

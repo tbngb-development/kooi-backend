@@ -209,6 +209,7 @@ model Campaign {
   leads       Lead[]
   calls       Call[]
   batches     LeadBatch[]
+  goals       CampaignGoal[]
 
   @@index([tenantId, isDeleted])
   @@index([sarvamCampaignId])
@@ -404,6 +405,8 @@ model Call {
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
   callMetrics        CallMetric[]
+  goalPassed         Boolean                  @default(false)
+  goalResults        CallGoalResult[]
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   campaign    Campaign?    @relation(fields: [campaignId], references: [id])
@@ -417,6 +420,7 @@ model Call {
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
   @@index([campaignId, isDeleted, status])
+  @@index([campaignId, isDeleted, goalPassed])
   @@index([assistantId, isDeleted])
   @@index([sarvamAgentId])
   @@index([type, source])
@@ -856,6 +860,7 @@ model SarvamAgent {
   overrides SarvamAgentTenantOverride[]
   campaigns Campaign[]
   calls     Call[]
+  goals     SarvamAgentGoal[]
 
   @@unique([apiKeyId, appId])
   @@index([apiKeyId])
@@ -1343,4 +1348,58 @@ enum PhoneCapability {
   INBOUND
   OUTBOUND
   BOTH
+}
+
+
+// ==========================================
+// CALL GOAL EVALUATION SYSTEM MODELS
+// ==========================================
+
+model SarvamAgentGoal {
+  id                 String            @id @default(uuid())
+  agentId            String
+  outputVariableName String
+  expectedValue      String
+  displayName        String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  agent              SarvamAgent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  campaignSnapshots  CampaignGoal[]
+
+  @@unique([agentId, outputVariableName, expectedValue])
+  @@index([agentId])
+}
+
+model CampaignGoal {
+  id                 String            @id @default(uuid())
+  campaignId         String
+  agentGoalId        String?
+  outputVariableName String
+  expectedValue      String
+  displayName        String
+  createdAt          DateTime          @default(now())
+
+  campaign           Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  agentGoal          SarvamAgentGoal?  @relation(fields: [agentGoalId], references: [id], onDelete: SetNull)
+  callResults        CallGoalResult[]
+
+  @@unique([campaignId, outputVariableName, expectedValue])
+  @@index([campaignId])
+}
+
+model CallGoalResult {
+  id             String       @id @default(uuid())
+  callId         String
+  campaignGoalId String
+  attemptId      String
+  createdAt      DateTime     @default(now())
+
+  call           Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
+  campaignGoal   CampaignGoal @relation(fields: [campaignGoalId], references: [id], onDelete: Restrict)
+
+  @@unique([callId, campaignGoalId])
+  @@index([callId])
+  @@index([campaignGoalId])
+  @@index([attemptId])
 }

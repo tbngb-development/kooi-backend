@@ -47,6 +47,16 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),
+  goalId: z.string().uuid("Invalid goal ID").optional(),
+  goalPassed: z.enum(["true", "false"]).optional(),
+}).superRefine((data, ctx) => {
+  if (data.goalId && data.goalPassed === "false") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Cannot filter by specific goalId when goalPassed is false",
+      path: ["goalPassed"],
+    });
+  }
 });
 
 export const getCallStatsQuerySchema = z.object({

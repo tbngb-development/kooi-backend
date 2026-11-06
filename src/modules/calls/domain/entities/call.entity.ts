@@ -38,6 +38,8 @@ export interface CallEntityData {
   updatedAt: Date;
   isDeleted: boolean;
   deletedAt: Date | null;
+  goalPassed?: boolean;
+  goalResultCount?: number;
 }
 
 export class CallEntity {
@@ -114,6 +116,9 @@ export class CallEntity {
   }
   get deletedAt(): Date | null {
     return this.data.deletedAt;
+  }
+  get goalPassed(): boolean {
+    return this.data.goalPassed ?? false;
   }
 
   toPrimitives(): CallEntityData {

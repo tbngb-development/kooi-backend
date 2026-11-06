@@ -265,6 +265,12 @@ export class CreateCampaignUseCase {
       endTimestamp: endIso,
       allowedSchedule: input.allowedSchedule,
       variables: cleanedVariables,
+      goals: (sarvamAgent.goals || []).map((g) => ({
+        agentGoalId: g.id,
+        outputVariableName: g.outputVariableName,
+        expectedValue: g.expectedValue,
+        displayName: g.displayName,
+      })),
       defaultRetryConfig: finalRetryConfig,
     });
 

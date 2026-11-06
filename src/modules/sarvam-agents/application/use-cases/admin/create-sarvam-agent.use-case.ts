@@ -151,6 +151,7 @@ export class CreateSarvamAgentUseCase {
       connectionConfigs,
       retryConfig,
       allowTenantVisible: dto.allowTenantVisible ?? false,
+      goals: dto.goals ?? [],
       status: "ACTIVE",
       createdBy: dto.createdBy,
     });

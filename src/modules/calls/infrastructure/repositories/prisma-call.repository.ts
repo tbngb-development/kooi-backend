@@ -50,6 +50,22 @@ export class PrismaCallRepository implements CallRepository {
     if (filters.agentNumber) where.agentNumber = filters.agentNumber;
     if (leadId) where.leadId = leadId;
 
+    if (filters.goalId) {
+      where.goalResults = {
+        some: {
+          campaignGoalId: filters.goalId,
+        },
+      };
+    }
+
+    if (filters.goalPassed === true) {
+      where.goalPassed = true;
+    } else if (filters.goalPassed === false) {
+      where.goalPassed = false;
+      where.status = { in: ["COMPLETED", "FAILED", "BUSY", "NO_ANSWER"] };
+      where.campaign = { goals: { some: {} } };
+    }
+
     if (status) {
       const statuses = status
         .split(",")
@@ -141,6 +157,9 @@ export class PrismaCallRepository implements CallRepository {
           campaign: { select: { id: true, name: true } },
           assistant: { select: { id: true, name: true } },
           sarvamAgent: { select: { id: true, name: true } },
+          _count: {
+            select: { goalResults: true },
+          },
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -212,6 +231,8 @@ export class PrismaCallRepository implements CallRepository {
         updatedAt: c.updatedAt,
         isDeleted: c.isDeleted,
         deletedAt: c.deletedAt,
+        goalPassed: c.goalPassed,
+        goalResultCount: (c as any)._count?.goalResults ?? 0,
         lead: c.lead,
         campaign: c.campaign,
         assistant: c.assistant,
@@ -405,6 +426,21 @@ export class PrismaCallRepository implements CallRepository {
             outputVariables: true,
           },
         },
+        goalResults: {
+          select: {
+            id: true,
+            campaignGoalId: true,
+            attemptId: true,
+            createdAt: true,
+            campaignGoal: {
+              select: {
+                displayName: true,
+                outputVariableName: true,
+                expectedValue: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -462,6 +498,8 @@ export class PrismaCallRepository implements CallRepository {
             outputVariables: call.callAnalysis.outputVariables,
           }
         : null,
+      goalPassed: call.goalPassed,
+      goalResults: call.goalResults,
     };
   }
 

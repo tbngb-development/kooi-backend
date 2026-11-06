@@ -131,6 +131,28 @@ export class UpdateSarvamAgentUseCase {
     }
 
     // Validate welcome message template
+    if (
+      dto.outputVariables !== undefined &&
+      dto.goals === undefined &&
+      existing.goals &&
+      existing.goals.length > 0
+    ) {
+      for (const goal of existing.goals) {
+        const outVar = validatedOutputVariables?.find(
+          (v) => v.name.trim() === goal.outputVariableName.trim(),
+        );
+        if (
+          !outVar ||
+          outVar.type !== "enum" ||
+          !outVar.options?.includes(goal.expectedValue)
+        ) {
+          throw new SarvamAgentInvalidOverrideError(
+            `Cannot modify or remove output variable '${goal.outputVariableName}' because goal '${goal.displayName}' depends on it. Update or remove the goal first.`,
+          );
+        }
+      }
+    }
+
     let validatedWelcomeMessage = dto.welcomeMessage;
     if (validatedWelcomeMessage !== undefined) {
       if (
@@ -206,6 +228,7 @@ export class UpdateSarvamAgentUseCase {
       ...(dto.allowTenantVisible !== undefined && {
         allowTenantVisible: dto.allowTenantVisible,
       }),
+      ...(dto.goals !== undefined && { goals: dto.goals }),
       ...(dto.status !== undefined && { status: dto.status }),
     });
 

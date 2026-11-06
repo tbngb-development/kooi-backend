@@ -177,3 +177,8 @@ export const controlSarvamCampaignSchema = z.object({
   action: z.enum(["pause", "resume", "cancel"]),
 });
 export type ControlSarvamCampaignBody = z.infer<typeof controlSarvamCampaignSchema>;
+
+export const campaignGoalMetricsQuerySchema = z.object({
+  batchId: z.string().uuid("Invalid batch ID").optional(),
+});
+export type CampaignGoalMetricsQuery = z.infer<typeof campaignGoalMetricsQuerySchema>;

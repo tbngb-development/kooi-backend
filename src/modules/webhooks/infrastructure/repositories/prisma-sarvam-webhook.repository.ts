@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient, CallStatus, LeadStatus, BatchStatus, Campaig
 import type {
   ISarvamWebhookRepository,
   AggregateCallCandidate,
+  CampaignGoalSnapshot,
   CreateAggregateCallData,
   UpdateAggregateCallData,
 } from "../../application/interfaces/sarvam-webhook-repository.interface";
@@ -35,6 +36,7 @@ const aggregateCallSelect = {
   appliedMinSec: true,
   appliedIncrementSec: true,
   chargedAmount: true,
+  goalPassed: true,
 };
 
 type DbCallRow = {
@@ -65,6 +67,7 @@ type DbCallRow = {
   appliedMinSec: number | null;
   appliedIncrementSec: number | null;
   chargedAmount: number | null;
+  goalPassed: boolean;
 };
 
 export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
@@ -138,6 +141,7 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         appliedMinSec: data.appliedMinSec ?? null,
         appliedIncrementSec: data.appliedIncrementSec ?? null,
         chargedAmount: data.chargedAmount ?? null,
+        goalPassed: data.goalPassed ?? false,
       },
       select: aggregateCallSelect,
     });
@@ -180,6 +184,7 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         ...(data.appliedMinSec !== undefined ? { appliedMinSec: data.appliedMinSec } : {}),
         ...(data.appliedIncrementSec !== undefined ? { appliedIncrementSec: data.appliedIncrementSec } : {}),
         ...(data.chargedAmount !== undefined ? { chargedAmount: data.chargedAmount } : {}),
+        ...(data.goalPassed !== undefined ? { goalPassed: data.goalPassed } : {}),
       },
     });
   }
@@ -236,6 +241,50 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
       update: {
         outputVariables: outputVariables as Prisma.InputJsonValue,
       },
+    });
+  }
+
+  async findCampaignGoals(campaignId: string): Promise<CampaignGoalSnapshot[]> {
+    return this.client.campaignGoal.findMany({
+      where: { campaignId },
+      select: {
+        id: true,
+        campaignId: true,
+        outputVariableName: true,
+        expectedValue: true,
+        displayName: true,
+      },
+    });
+  }
+
+  async upsertCallGoalResults(
+    callId: string,
+    matchedGoals: Array<{ campaignGoalId: string; attemptId: string }>,
+  ): Promise<void> {
+    for (const match of matchedGoals) {
+      await this.client.callGoalResult.upsert({
+        where: {
+          callId_campaignGoalId: {
+            callId,
+            campaignGoalId: match.campaignGoalId,
+          },
+        },
+        create: {
+          callId,
+          campaignGoalId: match.campaignGoalId,
+          attemptId: match.attemptId,
+        },
+        update: {
+          attemptId: match.attemptId,
+        },
+      });
+    }
+  }
+
+  async markCallGoalPassed(callId: string): Promise<void> {
+    await this.client.call.update({
+      where: { id: callId },
+      data: { goalPassed: true },
     });
   }
 
@@ -394,6 +443,7 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
       appliedMinSec: row.appliedMinSec,
       appliedIncrementSec: row.appliedIncrementSec,
       chargedAmount: row.chargedAmount,
+      goalPassed: row.goalPassed,
     };
   }
 }

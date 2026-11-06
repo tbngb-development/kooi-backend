@@ -8,6 +8,7 @@ import type {
   ExtractionInsightResult,
   ExtractionOverviewResult,
   CampaignCallMetricsResult,
+  CampaignGoalMetricsResult,
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../dto/campaign.dto";
@@ -25,6 +26,12 @@ export interface CreateCampaignData {
   sarvamCampaignId?: string | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
+  goals?: Array<{
+    agentGoalId?: string;
+    outputVariableName: string;
+    expectedValue: string;
+    displayName: string;
+  }>;
 }
 
 export interface UpdateCampaignData {
@@ -127,6 +134,12 @@ export interface SarvamAgentWithApiKeyData {
     isActive: boolean;
   };
   overrides?: Array<{ variableOverrides: unknown }> | null;
+  goals?: Array<{
+    id: string;
+    outputVariableName: string;
+    expectedValue: string;
+    displayName: string;
+  }>;
 }
 
 export interface CampaignCascadeResult {
@@ -223,6 +236,12 @@ export interface CampaignRepository {
     campaignId: string,
     batchId?: string,
   ): Promise<CampaignCallMetricsResult>;
+
+  getCampaignGoalMetrics(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignGoalMetricsResult>;
 
   findAssistantWithAgent(
     tenantId: string,

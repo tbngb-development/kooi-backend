@@ -95,38 +95,131 @@ export const sarvamRetryConfigSchema = z
   })
   .strict();
 
-export const createSarvamAgentSchema = z.object({
-  name: z.string().trim().min(1, "Agent name is required").max(255),
-  apiKeyId: z.string().uuid("A valid Sarvam API Key ID is required"),
-  appId: z.string().trim().min(1, "App ID is required").max(255),
-  appVersion: z.number().int().min(1, "App Version must be at least 1").default(1),
-  attemptsPerSecond: z.number().int().positive().nullable().optional(),
-  agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
-  welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "", interpolationVariables: [] }),
-  outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
-  connectionConfigs: z
-    .array(sarvamConnectionConfigSchema)
-    .min(1, "At least one telephony connection configuration is required"),
-  retryConfig: sarvamRetryConfigSchema.optional().default({ max_retries: 0 }),
-  allowTenantVisible: z.boolean().optional().default(false),
+export const sarvamAgentGoalSchema = z.object({
+  id: z.string().uuid().optional(),
+  outputVariableName: z.string().trim().min(1, "Variable name is required"),
+  expectedValue: z.string().min(1, "Expected value is required"),
+  displayName: z.string().trim().min(1, "Display name is required"),
 });
 
-export const updateSarvamAgentSchema = z.object({
-  name: z.string().trim().min(1, "Agent name cannot be empty").max(255).optional(),
-  appId: z.string().trim().min(1, "App ID cannot be empty").max(255).optional(),
-  appVersion: z.number().int().min(1, "App Version must be at least 1").optional(),
-  attemptsPerSecond: z.number().int().positive().nullable().optional(),
-  agentVariables: z.array(sarvamAgentVariableSchema).optional(),
-  welcomeMessage: welcomeMessageConfigSchema.optional(),
-  outputVariables: z.array(sarvamOutputVariableSchema).optional(),
-  connectionConfigs: z
-    .array(sarvamConnectionConfigSchema)
-    .min(1, "At least one telephony connection configuration is required")
-    .optional(),
-  retryConfig: sarvamRetryConfigSchema.optional(),
-  allowTenantVisible: z.boolean().optional(),
-  status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
-});
+export const createSarvamAgentSchema = z
+  .object({
+    name: z.string().trim().min(1, "Agent name is required").max(255),
+    apiKeyId: z.string().uuid("A valid Sarvam API Key ID is required"),
+    appId: z.string().trim().min(1, "App ID is required").max(255),
+    appVersion: z.number().int().min(1, "App Version must be at least 1").default(1),
+    attemptsPerSecond: z.number().int().positive().nullable().optional(),
+    agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
+    welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "", interpolationVariables: [] }),
+    outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
+    connectionConfigs: z
+      .array(sarvamConnectionConfigSchema)
+      .min(1, "At least one telephony connection configuration is required"),
+    retryConfig: sarvamRetryConfigSchema.optional().default({ max_retries: 0 }),
+    allowTenantVisible: z.boolean().optional().default(false),
+    goals: z.array(sarvamAgentGoalSchema).optional().default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.goals && data.goals.length > 0) {
+      const seen = new Set<string>();
+      for (let i = 0; i < data.goals.length; i++) {
+        const goal = data.goals[i];
+        const key = `${goal.outputVariableName.trim()}:${goal.expectedValue.trim()}`;
+        if (seen.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["goals", i],
+            message: `Duplicate goal for variable "${goal.outputVariableName}" and value "${goal.expectedValue}".`,
+          });
+        }
+        seen.add(key);
+
+        const variable = (data.outputVariables || []).find(
+          (v) => v.name.trim() === goal.outputVariableName.trim(),
+        );
+        if (!variable) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["goals", i, "outputVariableName"],
+            message: `Referenced output variable "${goal.outputVariableName}" does not exist.`,
+          });
+        } else if (variable.type !== "enum") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["goals", i, "outputVariableName"],
+            message: `Only enum output variables can be used for goals. "${goal.outputVariableName}" is ${variable.type}.`,
+          });
+        } else if (!variable.options?.map((o) => o.trim()).includes(goal.expectedValue.trim())) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["goals", i, "expectedValue"],
+            message: `Expected value "${goal.expectedValue}" is not among configured options for "${goal.outputVariableName}".`,
+          });
+        }
+      }
+    }
+  });
+
+export const updateSarvamAgentSchema = z
+  .object({
+    name: z.string().trim().min(1, "Agent name cannot be empty").max(255).optional(),
+    appId: z.string().trim().min(1, "App ID cannot be empty").max(255).optional(),
+    appVersion: z.number().int().min(1, "App Version must be at least 1").optional(),
+    attemptsPerSecond: z.number().int().positive().nullable().optional(),
+    agentVariables: z.array(sarvamAgentVariableSchema).optional(),
+    welcomeMessage: welcomeMessageConfigSchema.optional(),
+    outputVariables: z.array(sarvamOutputVariableSchema).optional(),
+    connectionConfigs: z
+      .array(sarvamConnectionConfigSchema)
+      .min(1, "At least one telephony connection configuration is required")
+      .optional(),
+    retryConfig: sarvamRetryConfigSchema.optional(),
+    allowTenantVisible: z.boolean().optional(),
+    status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
+    goals: z.array(sarvamAgentGoalSchema).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.goals && data.goals.length > 0) {
+      const seen = new Set<string>();
+      for (let i = 0; i < data.goals.length; i++) {
+        const goal = data.goals[i];
+        const key = `${goal.outputVariableName.trim()}:${goal.expectedValue.trim()}`;
+        if (seen.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["goals", i],
+            message: `Duplicate goal for variable "${goal.outputVariableName}" and value "${goal.expectedValue}".`,
+          });
+        }
+        seen.add(key);
+
+        if (data.outputVariables !== undefined) {
+          const variable = data.outputVariables.find(
+            (v) => v.name.trim() === goal.outputVariableName.trim(),
+          );
+          if (!variable) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["goals", i, "outputVariableName"],
+              message: `Referenced output variable "${goal.outputVariableName}" does not exist.`,
+            });
+          } else if (variable.type !== "enum") {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["goals", i, "outputVariableName"],
+              message: `Only enum output variables can be used for goals. "${goal.outputVariableName}" is ${variable.type}.`,
+            });
+          } else if (!variable.options?.map((o) => o.trim()).includes(goal.expectedValue.trim())) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["goals", i, "expectedValue"],
+              message: `Expected value "${goal.expectedValue}" is not among configured options for "${goal.outputVariableName}".`,
+            });
+          }
+        }
+      }
+    }
+  });
 
 export const listSarvamAgentsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
