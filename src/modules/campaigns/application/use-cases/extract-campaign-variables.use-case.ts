@@ -12,6 +12,8 @@ import type {
   ExtractVariablesOutput,
 } from "../dto/campaign.dto";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { RequiredVariable } from "../../../../shared/types/bolna.types";
+import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sarvam-agent.mapper";
 
 export class ExtractCampaignVariablesUseCase {
   constructor(
@@ -31,30 +33,55 @@ export class ExtractCampaignVariablesUseCase {
       );
     }
 
-    // 1. Validate assistant belongs to tenant and fetch required variables
+    // 1. Resolve assistant or sarvam agent belonging to tenant and fetch extractable variables
+    let extractableVariables: RequiredVariable[] = [];
+
     const assistant = await this.campaignRepo.findAssistantWithAgent(
       tenantId,
       input.assistantId,
     );
 
-    if (!assistant) {
-      this.logger?.warn("Assistant not found for variable extraction", {
-        action: "campaign.extract_variables",
-        tenantId,
-        assistantId: input.assistantId,
-      });
-      throw new AppError(
-        HttpStatus.NOT_FOUND,
-        "Assistant not found or does not belong to this tenant",
-        "ASSISTANT_NOT_FOUND",
+    if (assistant) {
+      const allVariables = assistant.platformAgent.requiredVariables ?? [];
+      extractableVariables = allVariables.filter(
+        (v) => v.required && v.isEditable,
       );
-    }
+    } else {
+      // Check if assistantId is a SarvamAgent
+      const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+        tenantId,
+        input.assistantId,
+      );
 
-    // 2. Filter to only required + editable variables
-    const allVariables = assistant.platformAgent.requiredVariables ?? [];
-    const extractableVariables = allVariables.filter(
-      (v) => v.required && v.isEditable,
-    );
+      if (!sarvamAgent) {
+        this.logger?.warn("Assistant/SarvamAgent not found for variable extraction", {
+          action: "campaign.extract_variables",
+          tenantId,
+          assistantId: input.assistantId,
+        });
+        throw new AppError(
+          HttpStatus.NOT_FOUND,
+          "Assistant not found or does not belong to this tenant",
+          "ASSISTANT_NOT_FOUND",
+        );
+      }
+
+      const sarvamVariables = new SarvamAgentMapper().parseAgentVariables(
+        sarvamAgent.agentVariables,
+      );
+      extractableVariables = sarvamVariables
+        .filter((v) => v.required && v.isTenantEditable && v.isTenantVisible)
+        .map((v) => ({
+          name: v.key,
+          label: v.key
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+          required: v.required,
+          isEditable: v.isTenantEditable,
+          inputType: v.inputType === "textarea" ? "textarea" : "text",
+          defaultValue: v.defaultValue ?? null,
+        }));
+    }
 
     // 3. If nothing to extract, return early
     if (extractableVariables.length === 0) {

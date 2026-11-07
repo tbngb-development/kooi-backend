@@ -115,6 +115,17 @@ export class MissingRequiredVariablesError extends AppError {
   }
 }
 
+export class InvalidCampaignVariableValueError extends AppError {
+  constructor(invalidVariables: Array<{ key: string; reason: string }>) {
+    const details = invalidVariables.map((iv) => `${iv.key} (${iv.reason})`).join(", ");
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Invalid campaign variable value(s): ${details}`,
+      "INVALID_CAMPAIGN_VARIABLE_VALUE",
+    );
+  }
+}
+
 export class RetryConfigNotAllowedError extends AppError {
   constructor() {
     super(

@@ -136,10 +136,13 @@ export class SarvamCohortTransformer {
 
         contactMergedVars[varKey] = val;
 
-        // Validate required agent variables for each contact.
-        // Explicitly check required === true; optional variables (required: false) must NEVER enter missing-variable validation.
-        const isRequired = agentVarMap.get(varKey)?.required === true;
-        if (isRequired && (!val || val.trim() === "")) {
+        // Validate required agent variables and data types for each contact.
+        // Explicitly check required === true; optional variables (required: false) must NEVER enter missing-variable validation unless an invalid non-empty value is supplied.
+        const varDef = agentVarMap.get(varKey);
+        const isRequired = varDef?.required === true;
+        const isEmpty = !val || val.trim() === "";
+
+        if (isRequired && isEmpty) {
           missingRequiredSet.add(varKey);
           missingRequiredDetails.push({
             variable: varKey,

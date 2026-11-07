@@ -1,9 +1,15 @@
+export type SarvamVariableDataType = "string";
+export type SarvamVariableInputType = "text" | "textarea";
+
 export interface SarvamAgentVariable {
   key: string;
   defaultValue: string;
   isTenantVisible: boolean;
   isTenantEditable: boolean;
   required: boolean;
+  dataType?: SarvamVariableDataType;
+  inputType?: SarvamVariableInputType;
+  description?: string | null;
 }
 
 export interface WelcomeMessageConfig {
@@ -62,6 +68,9 @@ export interface EffectiveSarvamVariable {
   isTenantEditable: boolean;
   isOverridden: boolean;
   required: boolean;
+  dataType: SarvamVariableDataType;
+  inputType: SarvamVariableInputType;
+  description?: string | null;
 }
 
 export interface ResolvedTenantSarvamAgent {

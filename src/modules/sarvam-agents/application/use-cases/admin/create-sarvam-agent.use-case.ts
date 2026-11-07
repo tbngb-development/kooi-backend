@@ -21,6 +21,7 @@ import type {
 import {
   validateConnectionConfigs,
   validateRetryConfig,
+  validateSarvamAgentVariables,
 } from "../../../domain/rules/sarvam-agent-config.rules";
 
 export class CreateSarvamAgentUseCase {
@@ -52,21 +53,9 @@ export class CreateSarvamAgentUseCase {
       throw new SarvamAgentDuplicateAppIdError(dto.apiKeyId, trimmedAppId);
     }
 
-    // Validate unique variable keys
-    const agentVariables = dto.agentVariables ?? [];
-    const varKeys = new Set<string>();
-    for (const v of agentVariables) {
-      const key = v.key.trim();
-      if (!key) {
-        throw new SarvamAgentInvalidOverrideError("Variable key cannot be empty.");
-      }
-      if (varKeys.has(key)) {
-        throw new SarvamAgentInvalidOverrideError(
-          `Duplicate variable key '${key}' defined in agent variables.`,
-        );
-      }
-      varKeys.add(key);
-    }
+    // Validate variable definitions
+    const agentVariables = validateSarvamAgentVariables(dto.agentVariables);
+    const varKeys = new Set<string>(agentVariables.map((v) => v.key));
 
     // Validate unique output variable names & enum options
     const outputVariables = dto.outputVariables ?? [];

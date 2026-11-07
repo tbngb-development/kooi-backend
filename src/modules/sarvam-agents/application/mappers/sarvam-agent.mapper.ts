@@ -34,13 +34,27 @@ export class SarvamAgentMapper {
 
     return items
       .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-      .map((item) => ({
-        key: String(item.key ?? "").trim(),
-        defaultValue: String(item.defaultValue ?? ""),
-        isTenantVisible: item.isTenantVisible !== undefined ? Boolean(item.isTenantVisible) : true,
-        isTenantEditable: item.isTenantEditable !== undefined ? Boolean(item.isTenantEditable) : true,
-        required: Boolean(item.required ?? false),
-      }));
+      .map((item) => {
+        const key = String(item.key ?? "").trim();
+        const dataType: "string" = "string";
+        const inputType: "text" | "textarea" =
+          item.inputType === "textarea" ? "textarea" : "text";
+        const description =
+          typeof item.description === "string" ? item.description.trim() : null;
+
+        return {
+          key,
+          dataType,
+          inputType,
+          required: Boolean(item.required ?? false),
+          defaultValue: String(item.defaultValue ?? ""),
+          description,
+          isTenantVisible:
+            item.isTenantVisible !== undefined ? Boolean(item.isTenantVisible) : true,
+          isTenantEditable:
+            item.isTenantEditable !== undefined ? Boolean(item.isTenantEditable) : true,
+        };
+      });
   }
 
   parseWelcomeMessage(data: unknown): WelcomeMessageConfig {
@@ -289,11 +303,14 @@ export class SarvamAgentMapper {
 
         return {
           key: v.key,
+          dataType: "string",
+          inputType: v.inputType ?? "text",
+          required: v.required,
           defaultValue: v.defaultValue,
           effectiveValue,
+          description: v.description,
           isTenantEditable: v.isTenantEditable,
           isOverridden: hasCustomOverride,
-          required: v.required,
         };
       });
 

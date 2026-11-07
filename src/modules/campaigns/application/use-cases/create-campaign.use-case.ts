@@ -18,10 +18,13 @@ import {
   CampaignScheduleRequiredError,
   ExternalCampaignCreationFailedError,
   MissingRequiredVariablesError,
+  InvalidCampaignVariableValueError,
   RetryConfigNotAllowedError,
   MaxActiveCampaignsReachedError,
 } from "../../domain/errors/campaign.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
+import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sarvam-agent.mapper";
+import { validateSarvamCampaignVariables } from "../../../sarvam-agents/domain/rules/sarvam-variable.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 import { env } from "../../../../shared/config/env";
@@ -196,55 +199,30 @@ export class CreateCampaignUseCase {
       throw new CampaignSarvamAgentNotFoundError();
     }
 
-    const cleanedVariables: Record<string, string> = {};
-    if (input.variables) {
-      for (const [k, v] of Object.entries(input.variables)) {
-        if (typeof v === "string") {
-          cleanedVariables[k] = v.trim();
-        }
-      }
-    }
-
-    // Authoritative backend validation of required Sarvam agent variables
-    let agentVariablesList: Array<{ key: string; required?: boolean; defaultValue?: string }> = [];
-    if (Array.isArray(sarvamAgent.agentVariables)) {
-      agentVariablesList = sarvamAgent.agentVariables as any[];
-    } else if (typeof sarvamAgent.agentVariables === "string") {
-      try {
-        const parsed = JSON.parse(sarvamAgent.agentVariables);
-        if (Array.isArray(parsed)) agentVariablesList = parsed;
-      } catch {
-        agentVariablesList = [];
-      }
-    }
-
+    // Authoritative backend validation of Sarvam agent variables
+    const sarvamMapper = new SarvamAgentMapper();
+    const agentVariablesList = sarvamMapper.parseAgentVariables(
+      sarvamAgent.agentVariables,
+    );
     const tenantOverrides =
       (sarvamAgent.overrides?.[0]?.variableOverrides as Record<string, string>) ?? {};
 
-    const missingRequired: string[] = [];
-    for (const v of agentVariablesList) {
-      // Phase 4: Only variables explicitly marked required === true are validated.
-      // Optional variables must never block campaign creation or cohort upload.
-      if (v.required === true) {
-        let val = cleanedVariables[v.key];
-        if (val === undefined || val === null || val === "") {
-          if (tenantOverrides[v.key] && tenantOverrides[v.key].trim() !== "") {
-            val = tenantOverrides[v.key].trim();
-            cleanedVariables[v.key] = val;
-          } else if (v.defaultValue && v.defaultValue.trim() !== "") {
-            val = v.defaultValue.trim();
-            cleanedVariables[v.key] = val;
-          }
-        }
-        if (val === undefined || val === null || val === "") {
-          missingRequired.push(v.key);
-        }
-      }
-    }
+    const { cleaned: validatedVariables, missing: missingRequired, invalidValues } =
+      validateSarvamCampaignVariables(
+        agentVariablesList,
+        input.variables,
+        tenantOverrides,
+      );
 
     if (missingRequired.length > 0) {
       throw new MissingRequiredVariablesError(missingRequired);
     }
+
+    if (invalidValues.length > 0) {
+      throw new InvalidCampaignVariableValueError(invalidValues);
+    }
+
+    const cleanedVariables = validatedVariables;
 
     // Decrypt API key
     if (!this.sarvamEncryptionService) {
@@ -258,7 +236,7 @@ export class CreateCampaignUseCase {
     const campaign = await this.campaignRepo.create(tenantId, {
       name: input.name,
       description: input.description,
-      status: "DRAFT",
+      status: "SCHEDULED",
       provider: selectedProvider,
       sarvamAgentId: input.sarvamAgentId,
       startTimestamp: startIso,

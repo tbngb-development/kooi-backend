@@ -14,8 +14,10 @@ import type { Logger } from "../../../../../shared/logging/logger.interface";
 import {
   validateConnectionConfigs,
   validateRetryConfig,
+  validateSarvamAgentVariables,
 } from "../../../domain/rules/sarvam-agent-config.rules";
 import type {
+  SarvamAgentVariable,
   SarvamConnectionConfig,
   SarvamRetryConfig,
   SarvamOutputVariable,
@@ -55,21 +57,12 @@ export class UpdateSarvamAgentUseCase {
     }
 
     // Validate variables if provided
+    let validatedVariables: SarvamAgentVariable[] | undefined = undefined;
     const effectiveVarKeys = new Set<string>();
     if (dto.agentVariables !== undefined) {
-      for (const v of dto.agentVariables) {
-        const key = v.key.trim();
-        if (!key) {
-          throw new SarvamAgentInvalidOverrideError(
-            "Variable key cannot be empty.",
-          );
-        }
-        if (effectiveVarKeys.has(key)) {
-          throw new SarvamAgentInvalidOverrideError(
-            `Duplicate variable key '${key}' defined in agent variables.`,
-          );
-        }
-        effectiveVarKeys.add(key);
+      validatedVariables = validateSarvamAgentVariables(dto.agentVariables);
+      for (const v of validatedVariables) {
+        effectiveVarKeys.add(v.key);
       }
     } else {
       const existingVars = this.mapper.parseAgentVariables(existing.agentVariables);
@@ -210,8 +203,8 @@ export class UpdateSarvamAgentUseCase {
       ...(dto.attemptsPerSecond !== undefined && {
         attemptsPerSecond: dto.attemptsPerSecond,
       }),
-      ...(dto.agentVariables !== undefined && {
-        agentVariables: dto.agentVariables,
+      ...(validatedVariables !== undefined && {
+        agentVariables: validatedVariables,
       }),
       ...(validatedWelcomeMessage !== undefined && {
         welcomeMessage: validatedWelcomeMessage,

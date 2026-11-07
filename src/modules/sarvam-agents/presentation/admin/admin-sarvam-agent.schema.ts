@@ -1,12 +1,36 @@
 import { z } from "zod";
 
-export const sarvamAgentVariableSchema = z.object({
-  key: z.string().trim().min(1, "Variable key is required"),
-  defaultValue: z.string().default(""),
-  isTenantVisible: z.boolean().default(true),
-  isTenantEditable: z.boolean().default(true),
-  required: z.boolean().default(false),
-});
+export const sarvamVariableDataTypeSchema = z.literal("string").default("string");
+export const sarvamVariableInputTypeSchema = z.enum(["text", "textarea"]).default("text");
+
+export const sarvamAgentVariableSchema = z
+  .object({
+    key: z
+      .string()
+      .trim()
+      .min(1, "Variable key is required")
+      .max(60, "Variable key must be at most 60 characters")
+      .regex(
+        /^[a-zA-Z0-9_-]+$/,
+        "Variable key can only contain alphanumeric characters, underscores, and hyphens",
+      ),
+    dataType: sarvamVariableDataTypeSchema,
+    inputType: sarvamVariableInputTypeSchema,
+    required: z.boolean().default(false),
+    defaultValue: z.string().default(""),
+    description: z.string().trim().max(500).nullable().optional(),
+    isTenantVisible: z.boolean().default(true),
+    isTenantEditable: z.boolean().default(true),
+  })
+  .superRefine((data, ctx) => {
+    if (data.inputType !== "text" && data.inputType !== "textarea") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["inputType"],
+        message: "String variables only support 'text' or 'textarea' input types.",
+      });
+    }
+  });
 
 export const welcomeMessageConfigSchema = z.object({
   defaultMessage: z.string().default(""),
