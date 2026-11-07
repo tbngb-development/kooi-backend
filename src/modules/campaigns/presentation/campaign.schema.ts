@@ -35,6 +35,10 @@ export const allowedScheduleSchema = z.object({
   timezone: z.string().optional().default("Asia/Kolkata"),
 });
 
+export const MAX_CAMPAIGN_DURATION_DAYS = 90;
+export const MAX_CAMPAIGN_DURATION_MS =
+  MAX_CAMPAIGN_DURATION_DAYS * 24 * 60 * 60 * 1000;
+
 export const createCampaignSchema = z
   .object({
     name: z.string().min(1, "Campaign name is required").max(200),
@@ -56,11 +60,22 @@ export const createCampaignSchema = z
   .superRefine((data, ctx) => {
     if (data.sarvamAgentId) {
       if (data.startTimestamp && data.endTimestamp) {
-        if (new Date(data.endTimestamp) <= new Date(data.startTimestamp)) {
+        const start = new Date(data.startTimestamp);
+        const end = new Date(data.endTimestamp);
+
+        if (end <= start) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["endTimestamp"],
             message: "endTimestamp must be after startTimestamp",
+          });
+        }
+
+        if (end.getTime() - start.getTime() > MAX_CAMPAIGN_DURATION_MS) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["endTimestamp"],
+            message: `Campaign duration cannot exceed ${MAX_CAMPAIGN_DURATION_DAYS} days from start date`,
           });
         }
       }

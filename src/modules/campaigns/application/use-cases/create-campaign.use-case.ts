@@ -175,7 +175,7 @@ export class CreateCampaignUseCase {
 
     if (!sarvamAgent.allowedSchedule) {
       throw new CampaignScheduleRequiredError(
-        "Assigned Sarvam voice agent does not have a calling window configured. Please contact your administrator.",
+        "Assigned voice agent does not have a calling window configured. Please contact your administrator.",
       );
     }
 
@@ -185,9 +185,12 @@ export class CreateCampaignUseCase {
     );
     if (!agentSchedule) {
       throw new CampaignScheduleRequiredError(
-        "Assigned Sarvam voice agent does not have a valid calling window configured. Please contact your administrator.",
+        "Assigned voice agent does not have a valid calling window configured. Please contact your administrator.",
       );
     }
+
+    const MAX_DURATION_DAYS = 90;
+    const MAX_DURATION_MS = MAX_DURATION_DAYS * 24 * 60 * 60 * 1000;
 
     const now = Date.now();
     const startDate = input.startTimestamp
@@ -195,7 +198,7 @@ export class CreateCampaignUseCase {
       : new Date(now + 3 * 60 * 1000);
     const endDate = input.endTimestamp
       ? new Date(input.endTimestamp)
-      : new Date(now + 365 * 24 * 60 * 60 * 1000);
+      : new Date(startDate.getTime() + MAX_DURATION_MS);
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw new CampaignScheduleRequiredError(
@@ -206,6 +209,12 @@ export class CreateCampaignUseCase {
     if (endDate <= startDate) {
       throw new CampaignScheduleRequiredError(
         "endTimestamp must be after startTimestamp",
+      );
+    }
+
+    if (endDate.getTime() - startDate.getTime() > MAX_DURATION_MS) {
+      throw new CampaignScheduleRequiredError(
+        `Campaign duration cannot exceed ${MAX_DURATION_DAYS} days from start date`,
       );
     }
 
@@ -244,11 +253,11 @@ export class CreateCampaignUseCase {
       sarvamAgent.apiKey.apiKeyEncrypted,
     );
 
-    // 1. Create internal Kooi Campaign first with SCHEDULED status
+    // 1. Create internal Kooi Campaign first with Draft status
     const campaign = await this.campaignRepo.create(tenantId, {
       name: input.name,
       description: input.description,
-      status: "SCHEDULED",
+      status: "DRAFT",
       provider: selectedProvider,
       sarvamAgentId: input.sarvamAgentId,
       startTimestamp: startIso,

@@ -119,6 +119,39 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
     });
 
     
+    it("should accept Sarvam payload with duration up to 90 days", () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const payload = {
+        name: "90 Days Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+        endTimestamp: end.toISOString(),
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject Sarvam payload where duration exceeds 90 days", () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 91 * 24 * 60 * 60 * 1000);
+      const payload = {
+        name: "Excessive Duration Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+        endTimestamp: end.toISOString(),
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some((i) =>
+          i.message.includes("Campaign duration cannot exceed 90 days from start date"),
+        ),
+      ).toBe(true);
+    });
+
     it("should reject Sarvam payload where endTimestamp is before startTimestamp", () => {
       const payload = {
         name: "Inverted Schedule Campaign",
@@ -504,6 +537,45 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           sarvamAgentId: validAgentId,
         }),
       ).rejects.toThrow(CampaignScheduleRequiredError);
+    });
+
+    it("should reject campaign creation if campaign duration exceeds 90 days", async () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 91 * 24 * 60 * 60 * 1000);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Too Long Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: start.toISOString(),
+          endTimestamp: end.toISOString(),
+        }),
+      ).rejects.toThrow(
+        new CampaignScheduleRequiredError(
+          "Campaign duration cannot exceed 90 days from start date",
+        ),
+      );
+    });
+
+    it("should default campaign end date to 90 days from start date when omitted", async () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const expectedEnd = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+      await useCase.execute(tenantId, {
+        name: "Default 90 Days Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          start_timestamp: start.toISOString(),
+          end_timestamp: expectedEnd.toISOString(),
+        }),
+      );
     });
   });
 });
