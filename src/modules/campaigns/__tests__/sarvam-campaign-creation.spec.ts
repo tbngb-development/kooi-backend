@@ -55,6 +55,7 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
       { connection_id: "conn-1", agent_phone_number: "+918000000000" },
     ],
     retryConfig: { max_retries: 2 },
+    allowedSchedule: validSchedule,
     allowTenantVisible: true,
     status: "ACTIVE",
     apiKey: {
@@ -105,20 +106,19 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
       ).toBe(true);
     });
 
-    it("should reject Sarvam payload missing startTimestamp, endTimestamp, or allowedSchedule", () => {
+    it("should accept Sarvam payload without allowedSchedule", () => {
       const payload = {
-        name: "Incomplete Sarvam Campaign",
+        name: "Sarvam Campaign Without Tenant Schedule",
         sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
       };
 
       const result = createCampaignSchema.safeParse(payload);
-      expect(result.success).toBe(false);
-      const messages = result.error?.issues.map((i) => i.message) ?? [];
-      expect(messages).toContain("startTimestamp is required for Sarvam campaigns");
-      expect(messages).toContain("endTimestamp is required for Sarvam campaigns");
-      expect(messages).toContain("allowedSchedule is required for Sarvam campaigns");
+      expect(result.success).toBe(true);
     });
 
+    
     it("should reject Sarvam payload where endTimestamp is before startTimestamp", () => {
       const payload = {
         name: "Inverted Schedule Campaign",
@@ -334,7 +334,11 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
       ).rejects.toThrow(CampaignSarvamAgentRequiredError);
     });
 
-    it("should reject if schedule is missing for SARVAM provider", async () => {
+    it("should reject if schedule is missing on Sarvam agent", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue({
+        ...sampleSarvamAgent,
+        allowedSchedule: null,
+      });
       await expect(
         useCase.execute(tenantId, {
           name: "Missing Schedule",
@@ -463,6 +467,43 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
         }),
       );
       expect(campaign.status).toBe("SCHEDULED");
+    });
+
+    it("should successfully create Sarvam campaign using agent allowedSchedule when tenant does not supply allowedSchedule", async () => {
+      const campaign = await useCase.execute(tenantId, {
+        name: "Campaign with agent allowedSchedule",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          allowed_schedule: expect.objectContaining({
+            allowed_start_time: validSchedule.allowed_start_time,
+            allowed_end_time: validSchedule.allowed_end_time,
+          }),
+        }),
+      );
+      expect(campaign.status).toBe("SCHEDULED");
+    });
+
+    it("should reject campaign creation if sarvam agent is missing allowedSchedule", async () => {
+      const agentWithoutSchedule = {
+        ...sampleSarvamAgent,
+        allowedSchedule: null,
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithoutSchedule);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Campaign with unscheduled agent",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(CampaignScheduleRequiredError);
     });
   });
 });

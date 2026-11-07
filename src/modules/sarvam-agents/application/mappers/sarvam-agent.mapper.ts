@@ -8,6 +8,7 @@ import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
   SarvamRetryCondition,
+  SarvamAllowedSchedule,
 } from "../../domain/types/sarvam-agent.types";
 import type {
   SarvamAgentAdminResponseDTO,
@@ -224,6 +225,34 @@ export class SarvamAgentMapper {
     return result;
   }
 
+  parseAllowedSchedule(data: unknown): SarvamAllowedSchedule | undefined {
+    if (!data) return undefined;
+    let obj: Record<string, unknown> | null = null;
+    if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+      obj = data as Record<string, unknown>;
+    } else if (typeof data === "string") {
+      try {
+        const parsed = JSON.parse(data);
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          obj = parsed;
+        }
+      } catch {
+        return undefined;
+      }
+    }
+    if (!obj) return undefined;
+    return {
+      allowed_start_time:
+        typeof obj.allowed_start_time === "string" ? obj.allowed_start_time : "09:30",
+      allowed_end_time:
+        typeof obj.allowed_end_time === "string" ? obj.allowed_end_time : "18:30",
+      allowed_days: Array.isArray(obj.allowed_days)
+        ? obj.allowed_days.map((d) => String(d))
+        : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      timezone: typeof obj.timezone === "string" ? obj.timezone : "Asia/Kolkata",
+    };
+  }
+
   toAdminDTO(agent: SarvamAgentWithApiKeyAndTenant): SarvamAgentAdminResponseDTO {
     return {
       id: agent.id,
@@ -237,6 +266,7 @@ export class SarvamAgentMapper {
       outputVariables: this.parseOutputVariables(agent.outputVariables),
       connectionConfigs: this.parseConnectionConfigs(agent.connectionConfigs),
       retryConfig: this.parseRetryConfig(agent.retryConfig),
+      allowedSchedule: this.parseAllowedSchedule(agent.allowedSchedule),
       allowTenantVisible: agent.allowTenantVisible,
       status: agent.status as "ACTIVE" | "ARCHIVED",
       goals: (agent.goals || []).map((g) => ({

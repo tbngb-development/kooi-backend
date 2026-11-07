@@ -6,6 +6,7 @@ import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
   SarvamAgentGoal,
+  SarvamAllowedSchedule,
 } from "../../domain/types/sarvam-agent.types";
 
 export interface CreateSarvamAgentDTO {
@@ -19,6 +20,7 @@ export interface CreateSarvamAgentDTO {
   outputVariables?: SarvamOutputVariable[];
   connectionConfigs: SarvamConnectionConfig[];
   retryConfig?: SarvamRetryConfig;
+  allowedSchedule?: SarvamAllowedSchedule;
   allowTenantVisible?: boolean;
   goals?: SarvamAgentGoal[];
   createdBy: string;
@@ -35,6 +37,7 @@ export interface UpdateSarvamAgentDTO {
   outputVariables?: SarvamOutputVariable[];
   connectionConfigs?: SarvamConnectionConfig[];
   retryConfig?: SarvamRetryConfig;
+  allowedSchedule?: SarvamAllowedSchedule;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
   goals?: SarvamAgentGoal[];
@@ -62,6 +65,7 @@ export interface SarvamAgentAdminResponseDTO {
   outputVariables: SarvamOutputVariable[];
   connectionConfigs: SarvamConnectionConfig[];
   retryConfig: SarvamRetryConfig;
+  allowedSchedule?: SarvamAllowedSchedule;
   allowTenantVisible: boolean;
   status: "ACTIVE" | "ARCHIVED";
   goals: SarvamAgentGoal[];

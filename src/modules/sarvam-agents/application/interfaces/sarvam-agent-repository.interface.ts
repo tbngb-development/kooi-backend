@@ -11,6 +11,7 @@ import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
   SarvamAgentGoal,
+  SarvamAllowedSchedule,
 } from "../../domain/types/sarvam-agent.types";
 
 export type SarvamAgentWithApiKeyAndTenant = SarvamAgent & {
@@ -31,6 +32,7 @@ export interface CreateSarvamAgentRecord {
   outputVariables: SarvamOutputVariable[];
   connectionConfigs: SarvamConnectionConfig[];
   retryConfig: SarvamRetryConfig;
+  allowedSchedule?: SarvamAllowedSchedule;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
   goals?: SarvamAgentGoal[];
@@ -47,6 +49,7 @@ export interface UpdateSarvamAgentRecord {
   outputVariables?: SarvamOutputVariable[];
   connectionConfigs?: SarvamConnectionConfig[];
   retryConfig?: SarvamRetryConfig;
+  allowedSchedule?: SarvamAllowedSchedule;
   allowTenantVisible?: boolean;
   status?: "ACTIVE" | "ARCHIVED";
   goals?: SarvamAgentGoal[];

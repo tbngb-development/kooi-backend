@@ -165,16 +165,37 @@ export class CreateCampaignUseCase {
       throw new CampaignSarvamAgentRequiredError();
     }
 
-    if (
-      !input.startTimestamp ||
-      !input.endTimestamp ||
-      !input.allowedSchedule
-    ) {
-      throw new CampaignScheduleRequiredError();
+    const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+      tenantId,
+      input.sarvamAgentId,
+    );
+    if (!sarvamAgent) {
+      throw new CampaignSarvamAgentNotFoundError();
     }
 
-    const startDate = new Date(input.startTimestamp);
-    const endDate = new Date(input.endTimestamp);
+    if (!sarvamAgent.allowedSchedule) {
+      throw new CampaignScheduleRequiredError(
+        "Assigned Sarvam voice agent does not have a calling window configured. Please contact your administrator.",
+      );
+    }
+
+    const sarvamMapper = new SarvamAgentMapper();
+    const agentSchedule = sarvamMapper.parseAllowedSchedule(
+      sarvamAgent.allowedSchedule,
+    );
+    if (!agentSchedule) {
+      throw new CampaignScheduleRequiredError(
+        "Assigned Sarvam voice agent does not have a valid calling window configured. Please contact your administrator.",
+      );
+    }
+
+    const now = Date.now();
+    const startDate = input.startTimestamp
+      ? new Date(input.startTimestamp)
+      : new Date(now + 3 * 60 * 1000);
+    const endDate = input.endTimestamp
+      ? new Date(input.endTimestamp)
+      : new Date(now + 365 * 24 * 60 * 60 * 1000);
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw new CampaignScheduleRequiredError(
@@ -191,16 +212,7 @@ export class CreateCampaignUseCase {
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
 
-    const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
-      tenantId,
-      input.sarvamAgentId,
-    );
-    if (!sarvamAgent) {
-      throw new CampaignSarvamAgentNotFoundError();
-    }
-
     // Authoritative backend validation of Sarvam agent variables
-    const sarvamMapper = new SarvamAgentMapper();
     const agentVariablesList = sarvamMapper.parseAgentVariables(
       sarvamAgent.agentVariables,
     );
@@ -241,7 +253,7 @@ export class CreateCampaignUseCase {
       sarvamAgentId: input.sarvamAgentId,
       startTimestamp: startIso,
       endTimestamp: endIso,
-      allowedSchedule: input.allowedSchedule,
+      allowedSchedule: agentSchedule as unknown as Record<string, unknown>,
       variables: cleanedVariables,
       goals: (sarvamAgent.goals || []).map((g) => ({
         agentGoalId: g.id,
@@ -280,10 +292,10 @@ export class CreateCampaignUseCase {
       start_timestamp: startIso,
       end_timestamp: endIso,
       allowed_schedule: {
-        allowed_start_time: input.allowedSchedule.allowed_start_time,
-        allowed_end_time: input.allowedSchedule.allowed_end_time,
-        allowed_days: input.allowedSchedule.allowed_days,
-        timezone: input.allowedSchedule.timezone || "Asia/Kolkata",
+        allowed_start_time: agentSchedule.allowed_start_time,
+        allowed_end_time: agentSchedule.allowed_end_time,
+        allowed_days: agentSchedule.allowed_days,
+        timezone: agentSchedule.timezone || "Asia/Kolkata",
       },
       app_config: {
         app_id: sarvamAgent.appId,

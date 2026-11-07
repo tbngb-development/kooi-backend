@@ -141,6 +141,12 @@ describe("Campaign Voice Provider Snapshotting & Immutability", () => {
         agentVariables: [],
         connectionConfigs: [],
         retryConfig: { max_retries: 0 },
+        allowedSchedule: {
+          allowed_start_time: "09:30",
+          allowed_end_time: "18:30",
+          allowed_days: ["Monday", "Tuesday", "Wednesday"],
+          timezone: "Asia/Kolkata",
+        },
         allowTenantVisible: true,
         status: "ACTIVE",
         apiKey: {

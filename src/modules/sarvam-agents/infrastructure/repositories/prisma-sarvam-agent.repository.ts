@@ -42,6 +42,9 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
           outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
           connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
           retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
+          ...(data.allowedSchedule !== undefined && {
+            allowedSchedule: data.allowedSchedule as unknown as Prisma.InputJsonValue,
+          }),
           allowTenantVisible: data.allowTenantVisible ?? false,
           status: data.status ?? "ACTIVE",
           createdBy: data.createdBy,
@@ -125,6 +128,9 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
           }),
           ...(data.retryConfig !== undefined && {
             retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
+          }),
+          ...(data.allowedSchedule !== undefined && {
+            allowedSchedule: data.allowedSchedule as unknown as Prisma.InputJsonValue,
           }),
           ...(data.allowTenantVisible !== undefined && {
             allowTenantVisible: data.allowTenantVisible,

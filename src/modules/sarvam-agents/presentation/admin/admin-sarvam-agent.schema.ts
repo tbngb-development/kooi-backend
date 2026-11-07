@@ -126,6 +126,39 @@ export const sarvamAgentGoalSchema = z.object({
   displayName: z.string().trim().min(1, "Display name is required"),
 });
 
+export const allowedScheduleSchema = z.object({
+  allowed_start_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format")
+    .default("09:30"),
+  allowed_end_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format")
+    .default("18:30"),
+  allowed_days: z
+    .array(
+      z.enum([
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ]),
+    )
+    .min(1, "At least one day must be allowed")
+    .default([
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ]),
+  timezone: z.string().optional().default("Asia/Kolkata"),
+});
+
 export const createSarvamAgentSchema = z
   .object({
     name: z.string().trim().min(1, "Agent name is required").max(255),
@@ -140,6 +173,7 @@ export const createSarvamAgentSchema = z
       .array(sarvamConnectionConfigSchema)
       .min(1, "At least one telephony connection configuration is required"),
     retryConfig: sarvamRetryConfigSchema.optional().default({ max_retries: 0 }),
+    allowedSchedule: allowedScheduleSchema.optional(),
     allowTenantVisible: z.boolean().optional().default(false),
     goals: z.array(sarvamAgentGoalSchema).optional().default([]),
   })
@@ -198,6 +232,7 @@ export const updateSarvamAgentSchema = z
       .min(1, "At least one telephony connection configuration is required")
       .optional(),
     retryConfig: sarvamRetryConfigSchema.optional(),
+    allowedSchedule: allowedScheduleSchema.optional(),
     allowTenantVisible: z.boolean().optional(),
     status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
     goals: z.array(sarvamAgentGoalSchema).optional(),

@@ -139,6 +139,7 @@ export class CreateSarvamAgentUseCase {
       outputVariables: validatedOutputVariables,
       connectionConfigs,
       retryConfig,
+      allowedSchedule: dto.allowedSchedule,
       allowTenantVisible: dto.allowTenantVisible ?? false,
       goals: dto.goals ?? [],
       status: "ACTIVE",

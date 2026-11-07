@@ -55,27 +55,6 @@ export const createCampaignSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.sarvamAgentId) {
-      if (!data.startTimestamp) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["startTimestamp"],
-          message: "startTimestamp is required for Sarvam campaigns",
-        });
-      }
-      if (!data.endTimestamp) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["endTimestamp"],
-          message: "endTimestamp is required for Sarvam campaigns",
-        });
-      }
-      if (!data.allowedSchedule) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["allowedSchedule"],
-          message: "allowedSchedule is required for Sarvam campaigns",
-        });
-      }
       if (data.startTimestamp && data.endTimestamp) {
         if (new Date(data.endTimestamp) <= new Date(data.startTimestamp)) {
           ctx.addIssue({

@@ -218,6 +218,9 @@ export class UpdateSarvamAgentUseCase {
       ...(validatedRetryConfig !== undefined && {
         retryConfig: validatedRetryConfig,
       }),
+      ...(dto.allowedSchedule !== undefined && {
+        allowedSchedule: dto.allowedSchedule,
+      }),
       ...(dto.allowTenantVisible !== undefined && {
         allowTenantVisible: dto.allowTenantVisible,
       }),

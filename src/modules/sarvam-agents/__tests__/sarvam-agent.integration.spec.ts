@@ -53,6 +53,7 @@ class InMemorySarvamAgentRepository implements ISarvamAgentRepository {
       outputVariables: data.outputVariables as any,
       connectionConfigs: (data.connectionConfigs ?? []) as any,
       retryConfig: (data.retryConfig ?? { max_retries: 0 }) as any,
+      allowedSchedule: (data.allowedSchedule ?? null) as any,
       allowTenantVisible: data.allowTenantVisible ?? false,
       status: data.status ?? "ACTIVE",
       createdBy: data.createdBy,

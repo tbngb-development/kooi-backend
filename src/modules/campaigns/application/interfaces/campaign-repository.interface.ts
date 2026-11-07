@@ -123,6 +123,7 @@ export interface SarvamAgentWithApiKeyData {
   agentVariables: unknown;
   connectionConfigs: unknown;
   retryConfig: unknown;
+  allowedSchedule?: unknown;
   allowTenantVisible: boolean;
   status: string;
   apiKey: {

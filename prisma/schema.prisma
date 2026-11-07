@@ -850,6 +850,7 @@ model SarvamAgent {
   outputVariables    Json              @default("[]")
   connectionConfigs  Json              @default("[]")
   retryConfig        Json              @default("{\"max_retries\":0}")
+  allowedSchedule    Json?
   allowTenantVisible Boolean           @default(false)
   status             SarvamAgentStatus @default(ACTIVE)
   createdBy          String

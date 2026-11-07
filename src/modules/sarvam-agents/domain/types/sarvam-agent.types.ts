@@ -53,6 +53,13 @@ export interface SarvamRetryConfig {
   retry_interval_minutes?: number | number[] | null;
 }
 
+export interface SarvamAllowedSchedule {
+  allowed_start_time: string;
+  allowed_end_time: string;
+  allowed_days: string[];
+  timezone?: string;
+}
+
 export interface TenantWelcomeMessageOverride {
   customMessage?: string | null;
 }

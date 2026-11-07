@@ -1422,6 +1422,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       agentVariables: agent.agentVariables,
       connectionConfigs: agent.connectionConfigs,
       retryConfig: agent.retryConfig,
+      allowedSchedule: agent.allowedSchedule,
       allowTenantVisible: agent.allowTenantVisible,
       status: agent.status,
       apiKey: {
