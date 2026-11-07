@@ -70,7 +70,12 @@ export class AdminCallController {
         dynamicFilters: query.dynamicFilters,
         isDeleted: query.isDeleted,
         goalId: query.goalId,
-        goalPassed: query.goalPassed ? query.goalPassed === "true" : undefined,
+        goalPassed:
+          query.goalPassed === "true"
+            ? true
+            : query.goalPassed === "false"
+              ? false
+              : undefined,
       });
 
       sendSuccess(res, data);

@@ -63,7 +63,9 @@ export class PrismaCallRepository implements CallRepository {
     } else if (filters.goalPassed === false) {
       where.goalPassed = false;
       where.status = { in: ["COMPLETED", "FAILED", "BUSY", "NO_ANSWER"] };
-      where.campaign = { goals: { some: {} } };
+      if (!campaignId) {
+        where.campaign = { goals: { some: {} } };
+      }
     }
 
     if (status) {

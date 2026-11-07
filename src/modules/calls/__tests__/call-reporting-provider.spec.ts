@@ -89,6 +89,40 @@ describe("Call Reporting & Provider Filtering", () => {
     }));
   });
 
+  it("passes goalId and goalPassed filters to CallRepository.list", async () => {
+    await listCallsUseCase.execute({
+      tenantId,
+      campaignId: "camp-1",
+      goalId: "goal-uuid-1",
+      goalPassed: true,
+    });
+
+    expect(mockCallRepo.list).toHaveBeenCalledWith(
+      tenantId,
+      expect.objectContaining({
+        campaignId: "camp-1",
+        goalId: "goal-uuid-1",
+        goalPassed: true,
+      }),
+    );
+  });
+
+  it("passes goalPassed=false filter to CallRepository.list", async () => {
+    await listCallsUseCase.execute({
+      tenantId,
+      campaignId: "camp-1",
+      goalPassed: false,
+    });
+
+    expect(mockCallRepo.list).toHaveBeenCalledWith(
+      tenantId,
+      expect.objectContaining({
+        campaignId: "camp-1",
+        goalPassed: false,
+      }),
+    );
+  });
+
   it("passes provider filter to CallRepository.getStats", async () => {
     await getCallStatsUseCase.execute({
       tenantId,

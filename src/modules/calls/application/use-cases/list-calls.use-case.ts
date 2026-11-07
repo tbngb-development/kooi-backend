@@ -28,6 +28,8 @@ export class ListCallsUseCase {
       limit: input.limit,
       dynamicFilters: input.dynamicFilters,
       isDeleted: input.isDeleted,
+      goalId: input.goalId,
+      goalPassed: input.goalPassed,
     });
   }
 }

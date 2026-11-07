@@ -47,8 +47,16 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),
-  goalId: z.string().uuid("Invalid goal ID").optional(),
-  goalPassed: z.enum(["true", "false"]).optional(),
+  goalId: z
+    .preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid("Invalid goal ID").optional(),
+    ),
+  goalPassed: z
+    .preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.enum(["true", "false"]).optional(),
+    ),
 }).superRefine((data, ctx) => {
   if (data.goalId && data.goalPassed === "false") {
     ctx.addIssue({
