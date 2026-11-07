@@ -24,10 +24,6 @@ export interface SarvamCampaignAppConfig {
   phone_rotation?: {
     agent: boolean;
   };
-  webhook_config?: {
-    url: string;
-    metadata?: Record<string, unknown> | null;
-  } | null;
 }
 
 export interface CreateSarvamCampaignPayload {

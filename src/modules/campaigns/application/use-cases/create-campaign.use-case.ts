@@ -258,7 +258,7 @@ export class CreateCampaignUseCase {
     const campaign = await this.campaignRepo.create(tenantId, {
       name: input.name,
       description: input.description,
-      status: "SCHEDULED",
+      status: "DRAFT",
       provider: selectedProvider,
       sarvamAgentId: input.sarvamAgentId,
       startTimestamp: startIso,
@@ -326,7 +326,6 @@ export class CreateCampaignUseCase {
                 : [],
         })),
         retry_config: (sarvamAgent.retryConfig as any) ?? { max_retries: 0 },
-        webhook_config: webhookConfig,
       },
       webhook_config: webhookConfig,
     };
