@@ -130,6 +130,8 @@ describe("Sarvam Agent Use Cases", () => {
       listAccessibleForTenant: vi.fn(),
       findAccessibleForTenant: vi.fn(),
       existsForApiKeyAndAppId: vi.fn(),
+      hasDependentRecords: vi.fn(),
+      cloneWithNewApiKey: vi.fn(),
     };
 
     mockOverrideRepo = {
@@ -783,7 +785,7 @@ describe("Sarvam Agent Use Cases", () => {
         }),
       }));
 
-      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
       const res = await useCase.execute({
         id: "agent-uuid-1",
         connectionConfigs: [
@@ -798,7 +800,7 @@ describe("Sarvam Agent Use Cases", () => {
     it("rejects saving an empty connection list on update", async () => {
       vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
 
-      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
       await expect(
         useCase.execute({
           id: "agent-uuid-1",
@@ -816,7 +818,7 @@ describe("Sarvam Agent Use Cases", () => {
         incompleteRecord as any,
       );
 
-      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
 
       // Omitting connectionConfigs on incomplete record fails
       await expect(
@@ -855,7 +857,7 @@ describe("Sarvam Agent Use Cases", () => {
         ...(data.name && { name: data.name }),
       }));
 
-      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
       const res = await useCase.execute({
         id: "agent-uuid-1",
         name: "Renamed Complete Agent",
@@ -873,7 +875,7 @@ describe("Sarvam Agent Use Cases", () => {
         ...(data.retryConfig && { retryConfig: data.retryConfig as any }),
       }));
 
-      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mapper);
+      const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
       const res = await useCase.execute({
         id: "agent-uuid-1",
         retryConfig: {
@@ -884,6 +886,155 @@ describe("Sarvam Agent Use Cases", () => {
 
       expect(res.retryConfig.max_retries).toBe(5);
       expect(res.retryConfig.retry_interval_minutes).toBe(10);
+    });
+
+    describe("API Key Reassignment & Copy-on-Write Safeguards", () => {
+      const targetApiKey: SarvamApiKeyWithTenant = {
+        id: "key-uuid-2",
+        tenantId: "tenant-uuid-2",
+        apiKeyEncrypted: "encrypted_key_2",
+        workspaceId: "wrk-sarvam-02",
+        organizationId: "org-sarvam-02",
+        isActive: true,
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-02-01T00:00:00.000Z"),
+        createdBy: "admin-1",
+        updatedBy: null,
+        tenant: {
+          id: "tenant-uuid-2",
+          name: "Beta Corp",
+          email: "admin@beta.com",
+          isActive: true,
+        },
+      };
+
+      it("reassigns API key in-place when agent has zero dependent records", async () => {
+        vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+        vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(targetApiKey);
+        vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+        vi.mocked(mockAgentRepo.hasDependentRecords).mockResolvedValue({
+          hasDependents: false,
+          campaignCount: 0,
+          callCount: 0,
+        });
+        vi.mocked(mockAgentRepo.update).mockImplementation(async (id, data) => ({
+          ...sampleAgentWithApiKey,
+          apiKeyId: data.apiKeyId ?? sampleAgentWithApiKey.apiKeyId,
+          apiKey: {
+            ...targetApiKey,
+            tenant: {
+              id: targetApiKey.tenant.id,
+              name: targetApiKey.tenant.name,
+              email: targetApiKey.tenant.email,
+              isActive: targetApiKey.tenant.isActive,
+            },
+          },
+        }));
+
+        const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
+        const res = await useCase.execute({
+          id: "agent-uuid-1",
+          apiKeyId: "key-uuid-2",
+        });
+
+        expect(mockApiKeyRepo.findById).toHaveBeenCalledWith("key-uuid-2");
+        expect(mockAgentRepo.hasDependentRecords).toHaveBeenCalledWith("agent-uuid-1");
+        expect(mockAgentRepo.update).toHaveBeenCalledWith("agent-uuid-1", expect.objectContaining({
+          apiKeyId: "key-uuid-2",
+        }));
+        expect(mockAgentRepo.cloneWithNewApiKey).not.toHaveBeenCalled();
+        expect(res.apiKeyId).toBe("key-uuid-2");
+      });
+
+      it("triggers Copy-on-Write and preserves original agent when agent has dependent campaigns or calls", async () => {
+        vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+        vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(targetApiKey);
+        vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(false);
+        vi.mocked(mockAgentRepo.hasDependentRecords).mockResolvedValue({
+          hasDependents: true,
+          campaignCount: 2,
+          callCount: 15,
+        });
+
+        const clonedAgent: SarvamAgentWithApiKeyAndTenant = {
+          ...sampleAgentWithApiKey,
+          id: "new-cloned-agent-uuid",
+          apiKeyId: "key-uuid-2",
+          apiKey: {
+            ...targetApiKey,
+            tenant: {
+              id: targetApiKey.tenant.id,
+              name: targetApiKey.tenant.name,
+              email: targetApiKey.tenant.email,
+              isActive: targetApiKey.tenant.isActive,
+            },
+          },
+        };
+        vi.mocked(mockAgentRepo.cloneWithNewApiKey).mockResolvedValue(clonedAgent);
+
+        const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
+        const res = await useCase.execute({
+          id: "agent-uuid-1",
+          apiKeyId: "key-uuid-2",
+          updatedBy: "admin-1",
+        });
+
+        expect(mockAgentRepo.hasDependentRecords).toHaveBeenCalledWith("agent-uuid-1");
+        expect(mockAgentRepo.cloneWithNewApiKey).toHaveBeenCalledWith(
+          "agent-uuid-1",
+          expect.objectContaining({
+            apiKeyId: "key-uuid-2",
+            appId: sampleAgentWithApiKey.appId,
+            name: sampleAgentWithApiKey.name,
+          }),
+        );
+        expect(mockAgentRepo.update).not.toHaveBeenCalled();
+        expect(res.id).toBe("new-cloned-agent-uuid");
+        expect(res.apiKeyId).toBe("key-uuid-2");
+      });
+
+      it("throws SarvamAgentInvalidApiKeyError when target apiKeyId does not exist", async () => {
+        vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+        vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(null);
+
+        const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
+        await expect(
+          useCase.execute({
+            id: "agent-uuid-1",
+            apiKeyId: "non-existent-key",
+          }),
+        ).rejects.toThrow(SarvamAgentInvalidApiKeyError);
+      });
+
+      it("throws SarvamAgentInactiveApiKeyError when target apiKeyId is inactive", async () => {
+        vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+        vi.mocked(mockApiKeyRepo.findById).mockResolvedValue({
+          ...targetApiKey,
+          isActive: false,
+        });
+
+        const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
+        await expect(
+          useCase.execute({
+            id: "agent-uuid-1",
+            apiKeyId: "key-uuid-2",
+          }),
+        ).rejects.toThrow(SarvamAgentInactiveApiKeyError);
+      });
+
+      it("throws SarvamAgentDuplicateAppIdError when target apiKeyId already has an agent with same appId", async () => {
+        vi.mocked(mockAgentRepo.findById).mockResolvedValue(sampleAgentWithApiKey);
+        vi.mocked(mockApiKeyRepo.findById).mockResolvedValue(targetApiKey);
+        vi.mocked(mockAgentRepo.existsForApiKeyAndAppId).mockResolvedValue(true);
+
+        const useCase = new UpdateSarvamAgentUseCase(mockAgentRepo, mockApiKeyRepo, mapper);
+        await expect(
+          useCase.execute({
+            id: "agent-uuid-1",
+            apiKeyId: "key-uuid-2",
+          }),
+        ).rejects.toThrow(SarvamAgentDuplicateAppIdError);
+      });
     });
   });
 

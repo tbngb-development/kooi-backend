@@ -36,6 +36,7 @@ export interface CreateSarvamAgentDTO {
 export interface UpdateSarvamAgentDTO {
   id: string;
   name?: string;
+  apiKeyId?: string;
   appId?: string;
   appVersion?: number;
   attemptsPerSecond?: number | null;

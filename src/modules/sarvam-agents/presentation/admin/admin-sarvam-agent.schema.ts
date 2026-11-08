@@ -254,6 +254,7 @@ export const createSarvamAgentSchema = z
 export const updateSarvamAgentSchema = z
   .object({
     name: z.string().trim().min(1, "Agent name cannot be empty").max(255).optional(),
+    apiKeyId: z.string().uuid("A valid Sarvam API Key ID is required").optional(),
     appId: z.string().trim().min(1, "App ID cannot be empty").max(255).optional(),
     appVersion: z.number().int().min(1, "App Version must be at least 1").optional(),
     attemptsPerSecond: z.number().int().positive().nullable().optional(),

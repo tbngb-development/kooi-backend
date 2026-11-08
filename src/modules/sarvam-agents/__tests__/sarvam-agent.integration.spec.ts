@@ -159,6 +159,14 @@ class InMemorySarvamAgentRepository implements ISarvamAgentRepository {
   async existsForApiKeyAndAppId(apiKeyId: string, appId: string, excludeId?: string): Promise<boolean> {
     return this.agents.some((a) => a.apiKeyId === apiKeyId && a.appId === appId && a.id !== excludeId);
   }
+
+  async hasDependentRecords(id: string): Promise<{ hasDependents: boolean; campaignCount: number; callCount: number }> {
+    return { hasDependents: false, campaignCount: 0, callCount: 0 };
+  }
+
+  async cloneWithNewApiKey(sourceAgentId: string, data: CreateSarvamAgentRecord): Promise<SarvamAgentWithApiKeyAndTenant> {
+    return this.create(data);
+  }
 }
 
 class InMemorySarvamAgentOverrideRepository implements ISarvamAgentOverrideRepository {
@@ -279,7 +287,7 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
     const createUseCase = new CreateSarvamAgentUseCase(agentRepo, apiKeyRepo, mapper);
     const getUseCase = new GetSarvamAgentUseCase(agentRepo, mapper);
     const listUseCase = new ListSarvamAgentsUseCase(agentRepo, mapper);
-    const updateUseCase = new UpdateSarvamAgentUseCase(agentRepo, mapper);
+    const updateUseCase = new UpdateSarvamAgentUseCase(agentRepo, apiKeyRepo, mapper);
     const archiveUseCase = new ArchiveSarvamAgentUseCase(agentRepo, mapper);
 
     const listTenantUseCase = new ListTenantSarvamAgentsUseCase(agentRepo, mapper);

@@ -1,4 +1,5 @@
 import type { ISarvamAgentRepository } from "../../interfaces/sarvam-agent-repository.interface";
+import type { ISarvamApiKeyRepository } from "../../../../sarvam-api-keys/application/interfaces/sarvam-api-key-repository.interface";
 import type { SarvamAgentMapper } from "../../mappers/sarvam-agent.mapper";
 import type {
   UpdateSarvamAgentDTO,
@@ -8,6 +9,8 @@ import {
   SarvamAgentNotFoundError,
   SarvamAgentDuplicateAppIdError,
   SarvamAgentInvalidOverrideError,
+  SarvamAgentInvalidApiKeyError,
+  SarvamAgentInactiveApiKeyError,
 } from "../../../domain/errors/sarvam-agent.errors";
 import { ValidationError } from "../../../../../shared/errors/validation.error";
 import type { Logger } from "../../../../../shared/logging/logger.interface";
@@ -26,6 +29,7 @@ import type {
 export class UpdateSarvamAgentUseCase {
   constructor(
     private readonly repository: ISarvamAgentRepository,
+    private readonly apiKeyRepository: ISarvamApiKeyRepository,
     private readonly mapper: SarvamAgentMapper,
     private readonly logger?: Logger,
   ) {}
@@ -38,20 +42,39 @@ export class UpdateSarvamAgentUseCase {
       throw new SarvamAgentNotFoundError(dto.id);
     }
 
-    if (dto.appId !== undefined) {
-      const trimmedAppId = dto.appId.trim();
-      if (!trimmedAppId) {
-        throw new SarvamAgentInvalidOverrideError("appId cannot be empty.");
+    const isApiKeyChanged =
+      dto.apiKeyId !== undefined &&
+      dto.apiKeyId.trim() !== "" &&
+      dto.apiKeyId !== existing.apiKeyId;
+
+    const targetApiKeyId = isApiKeyChanged ? dto.apiKeyId! : existing.apiKeyId;
+
+    if (isApiKeyChanged) {
+      const apiKey = await this.apiKeyRepository.findById(targetApiKeyId);
+      if (!apiKey) {
+        throw new SarvamAgentInvalidApiKeyError(targetApiKeyId);
       }
+      if (!apiKey.isActive) {
+        throw new SarvamAgentInactiveApiKeyError(targetApiKeyId);
+      }
+    }
+
+    const effectiveAppId =
+      dto.appId !== undefined ? dto.appId.trim() : existing.appId;
+    if (!effectiveAppId) {
+      throw new SarvamAgentInvalidOverrideError("appId cannot be empty.");
+    }
+
+    if (isApiKeyChanged || dto.appId !== undefined) {
       const duplicateExists = await this.repository.existsForApiKeyAndAppId(
-        existing.apiKeyId,
-        trimmedAppId,
-        existing.id,
+        targetApiKeyId,
+        effectiveAppId,
+        isApiKeyChanged ? undefined : existing.id,
       );
       if (duplicateExists) {
         throw new SarvamAgentDuplicateAppIdError(
-          existing.apiKeyId,
-          trimmedAppId,
+          targetApiKeyId,
+          effectiveAppId,
         );
       }
     }
@@ -194,8 +217,92 @@ export class UpdateSarvamAgentUseCase {
       validatedRetryConfig = validateRetryConfig(dto.retryConfig);
     }
 
+    if (isApiKeyChanged) {
+      const { hasDependents, campaignCount, callCount } =
+        await this.repository.hasDependentRecords(existing.id);
+
+      if (hasDependents) {
+        const newAgent = await this.repository.cloneWithNewApiKey(existing.id, {
+          name: dto.name !== undefined ? dto.name.trim() : existing.name,
+          apiKeyId: targetApiKeyId,
+          appId: effectiveAppId,
+          appVersion:
+            dto.appVersion !== undefined
+              ? Math.max(1, dto.appVersion)
+              : existing.appVersion,
+          attemptsPerSecond:
+            dto.attemptsPerSecond !== undefined
+              ? dto.attemptsPerSecond
+              : existing.attemptsPerSecond,
+          gender: dto.gender !== undefined ? dto.gender : existing.gender,
+          type: dto.type ?? existing.type,
+          audioUrl: dto.audioUrl !== undefined ? dto.audioUrl : existing.audioUrl,
+          audioRecordings:
+            dto.audioRecordings !== undefined
+              ? dto.audioRecordings
+              : this.mapper.parseAudioRecordings(
+                  existing.audioRecordings,
+                  existing.audioUrl,
+                ),
+          agentVariables:
+            validatedVariables ??
+            this.mapper.parseAgentVariables(existing.agentVariables),
+          welcomeMessage:
+            validatedWelcomeMessage ??
+            this.mapper.parseWelcomeMessage(existing.welcomeMessage),
+          outputVariables:
+            validatedOutputVariables ??
+            this.mapper.parseOutputVariables(existing.outputVariables),
+          connectionConfigs:
+            validatedConnectionConfigs ??
+            this.mapper.parseConnectionConfigs(existing.connectionConfigs),
+          retryConfig:
+            validatedRetryConfig ??
+            this.mapper.parseRetryConfig(existing.retryConfig),
+          allowedSchedule:
+            dto.allowedSchedule !== undefined
+              ? dto.allowedSchedule
+              : this.mapper.parseAllowedSchedule(existing.allowedSchedule),
+          allowTenantVisible:
+            dto.allowTenantVisible !== undefined
+              ? dto.allowTenantVisible
+              : existing.allowTenantVisible,
+          status: dto.status ?? (existing.status as "ACTIVE" | "ARCHIVED"),
+          goals:
+            dto.goals !== undefined
+              ? dto.goals.map((g) => ({
+                  outputVariableName: g.outputVariableName,
+                  expectedValue: g.expectedValue,
+                  displayName: g.displayName,
+                }))
+              : (existing.goals || []).map((g) => ({
+                  outputVariableName: g.outputVariableName,
+                  expectedValue: g.expectedValue,
+                  displayName: g.displayName,
+                })),
+          createdBy: dto.updatedBy ?? existing.createdBy,
+        });
+
+        this.logger?.info(
+          "Sarvam Agent reassigned via Copy-on-Write due to dependent records",
+          {
+            action: "sarvam_agent.reassigned_cow",
+            originalAgentId: existing.id,
+            newAgentId: newAgent.id,
+            targetApiKeyId,
+            campaignCount,
+            callCount,
+            updatedBy: dto.updatedBy,
+          },
+        );
+
+        return this.mapper.toAdminDTO(newAgent);
+      }
+    }
+
     const updated = await this.repository.update(dto.id, {
       ...(dto.name !== undefined && { name: dto.name.trim() }),
+      ...(isApiKeyChanged && { apiKeyId: targetApiKeyId }),
       ...(dto.appId !== undefined && { appId: dto.appId.trim() }),
       ...(dto.appVersion !== undefined && {
         appVersion: Math.max(1, dto.appVersion),
@@ -234,11 +341,19 @@ export class UpdateSarvamAgentUseCase {
       ...(dto.status !== undefined && { status: dto.status }),
     });
 
-    this.logger?.info("Updated Sarvam Agent", {
-      action: "sarvam_agent.updated",
-      agentId: updated.id,
-      updatedBy: dto.updatedBy,
-    });
+    this.logger?.info(
+      isApiKeyChanged
+        ? "Reassigned Sarvam Agent in-place (no dependent records)"
+        : "Updated Sarvam Agent",
+      {
+        action: isApiKeyChanged
+          ? "sarvam_agent.reassigned_in_place"
+          : "sarvam_agent.updated",
+        agentId: updated.id,
+        apiKeyId: updated.apiKeyId,
+        updatedBy: dto.updatedBy,
+      },
+    );
 
     return this.mapper.toAdminDTO(updated);
   }

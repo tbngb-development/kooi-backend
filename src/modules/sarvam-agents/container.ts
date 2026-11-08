@@ -55,6 +55,7 @@ export function buildSarvamAgentModule(
   const listUseCase = new ListSarvamAgentsUseCase(repository, mapper);
   const updateUseCase = new UpdateSarvamAgentUseCase(
     repository,
+    config.sarvamApiKeyRepository,
     mapper,
     config.logger,
   );

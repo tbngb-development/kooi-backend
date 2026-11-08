@@ -46,6 +46,7 @@ export interface CreateSarvamAgentRecord {
 
 export interface UpdateSarvamAgentRecord {
   name?: string;
+  apiKeyId?: string;
   appId?: string;
   appVersion?: number;
   attemptsPerSecond?: number | null;
@@ -100,4 +101,13 @@ export interface ISarvamAgentRepository {
     appId: string,
     excludeId?: string,
   ): Promise<boolean>;
+  hasDependentRecords(id: string): Promise<{
+    hasDependents: boolean;
+    campaignCount: number;
+    callCount: number;
+  }>;
+  cloneWithNewApiKey(
+    sourceAgentId: string,
+    data: CreateSarvamAgentRecord,
+  ): Promise<SarvamAgentWithApiKeyAndTenant>;
 }

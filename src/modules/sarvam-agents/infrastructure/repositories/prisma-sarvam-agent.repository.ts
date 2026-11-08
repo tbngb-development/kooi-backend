@@ -8,6 +8,7 @@ import type {
   SarvamAgentWithApiKeyAndTenant,
 } from "../../application/interfaces/sarvam-agent-repository.interface";
 import type { SarvamAgent } from "@prisma/client";
+import { SarvamAgentDuplicateAppIdError } from "../../domain/errors/sarvam-agent.errors";
 
 export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
   private readonly agentWithApiKeyInclude = {
@@ -113,6 +114,7 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
         where: { id },
         data: {
           ...(data.name !== undefined && { name: data.name }),
+          ...(data.apiKeyId !== undefined && { apiKeyId: data.apiKeyId }),
           ...(data.appId !== undefined && { appId: data.appId }),
           ...(data.appVersion !== undefined && { appVersion: data.appVersion }),
           ...(data.attemptsPerSecond !== undefined && {
@@ -306,5 +308,89 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
       },
     });
     return count > 0;
+  }
+
+  async hasDependentRecords(id: string): Promise<{
+    hasDependents: boolean;
+    campaignCount: number;
+    callCount: number;
+  }> {
+    const [campaignCount, callCount] = await Promise.all([
+      prisma.campaign.count({ where: { sarvamAgentId: id } }),
+      prisma.call.count({ where: { sarvamAgentId: id } }),
+    ]);
+    return {
+      hasDependents: campaignCount > 0 || callCount > 0,
+      campaignCount,
+      callCount,
+    };
+  }
+
+  async cloneWithNewApiKey(
+    sourceAgentId: string,
+    data: CreateSarvamAgentRecord,
+  ): Promise<SarvamAgentWithApiKeyAndTenant> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const newAgent = await tx.sarvamAgent.create({
+          data: {
+            name: data.name,
+            apiKeyId: data.apiKeyId,
+            appId: data.appId,
+            appVersion: data.appVersion,
+            attemptsPerSecond: data.attemptsPerSecond,
+            gender: data.gender ?? null,
+            type: data.type ?? "OUTBOUND",
+            audioUrl: data.audioUrl ?? (data.audioRecordings?.[0]?.audioUrl ?? null),
+            audioRecordings: (data.audioRecordings ?? []) as unknown as Prisma.InputJsonValue,
+            agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
+            welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
+            outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
+            connectionConfigs: data.connectionConfigs as unknown as Prisma.InputJsonValue,
+            retryConfig: data.retryConfig as unknown as Prisma.InputJsonValue,
+            ...(data.allowedSchedule !== undefined && {
+              allowedSchedule: data.allowedSchedule as unknown as Prisma.InputJsonValue,
+            }),
+            allowTenantVisible: data.allowTenantVisible ?? false,
+            status: data.status ?? "ACTIVE",
+            createdBy: data.createdBy,
+            ...(data.goals && data.goals.length > 0 && {
+              goals: {
+                create: data.goals.map((g) => ({
+                  outputVariableName: g.outputVariableName,
+                  expectedValue: g.expectedValue,
+                  displayName: g.displayName,
+                })),
+              },
+            }),
+          },
+          include: this.agentWithApiKeyInclude,
+        });
+
+        const sourceOverrides = await tx.sarvamAgentTenantOverride.findMany({
+          where: { agentId: sourceAgentId },
+        });
+
+        if (sourceOverrides.length > 0) {
+          for (const ov of sourceOverrides) {
+            await tx.sarvamAgentTenantOverride.create({
+              data: {
+                agentId: newAgent.id,
+                tenantId: ov.tenantId,
+                variableOverrides: ov.variableOverrides as unknown as Prisma.InputJsonValue,
+                welcomeMessage: ov.welcomeMessage,
+              },
+            });
+          }
+        }
+
+        return newAgent;
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === "P2002") {
+        throw new SarvamAgentDuplicateAppIdError(data.apiKeyId, data.appId);
+      }
+      throw err;
+    }
   }
 }
