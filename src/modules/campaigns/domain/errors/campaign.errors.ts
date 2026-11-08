@@ -44,11 +44,11 @@ export class CampaignSarvamAgentRequiredError extends AppError {
 }
 
 export class ExternalCampaignCreationFailedError extends AppError {
-  constructor(reason: string) {
+  constructor(_reason?: string) {
     super(
       HttpStatus.BAD_GATEWAY,
-      `Failed to create external campaign: ${reason}`,
-      "EXTERNAL_CAMPAIGN_CREATION_FAILED",
+      "Unable to create campaign at this time. Please contact support if the issue persists.",
+      "CAMPAIGN_CREATION_FAILED",
     );
   }
 }

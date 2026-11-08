@@ -1,5 +1,6 @@
 // modules/campaigns/application/use-cases/create-campaign.use-case.ts
 
+import { randomUUID } from "node:crypto";
 import type { VoiceProvider } from "@prisma/client";
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
@@ -259,30 +260,12 @@ export class CreateCampaignUseCase {
       sarvamAgent.apiKey.apiKeyEncrypted,
     );
 
-    // 1. Create internal Kooi Campaign first with Draft status
-    const campaign = await this.campaignRepo.create(tenantId, {
-      name: input.name,
-      description: input.description,
-      status: "DRAFT",
-      provider: selectedProvider,
-      sarvamAgentId: input.sarvamAgentId,
-      startTimestamp: startIso,
-      endTimestamp: endIso,
-      allowedSchedule: agentSchedule as unknown as Record<string, unknown>,
-      variables: cleanedVariables,
-      goals: (sarvamAgent.goals || []).map((g) => ({
-        agentGoalId: g.id,
-        outputVariableName: g.outputVariableName,
-        expectedValue: g.expectedValue,
-        displayName: g.displayName,
-      })),
-      defaultRetryConfig: finalRetryConfig,
-    });
-
-    // 2. Dispatch external creation to Sarvam API
     if (!this.sarvamCampaignClient) {
       throw new Error("Sarvam campaign client is not configured");
     }
+
+    // 1. Allocate deterministic local campaign UUID for metadata linking
+    const localCampaignId = randomUUID();
 
     const webhookSecret = env.sarvam.webhookSecret;
     const baseWebhookUrl = env.webhook.baseUrl
@@ -296,7 +279,7 @@ export class CreateCampaignUseCase {
       url: webhookUrl,
       metadata: {
         tenantId,
-        campaignId: campaign.id,
+        campaignId: localCampaignId,
         secret: webhookSecret,
       },
     };
@@ -335,52 +318,114 @@ export class CreateCampaignUseCase {
       },
     };
 
+    // 2. Dispatch external creation to Sarvam API FIRST
+    let sarvamRes;
     try {
-      this.logger?.info("sarvam campaign payload: ", {
+      this.logger?.info("Creating external Sarvam campaign", {
+        action: "campaign.sarvam.create_request",
+        tenantId,
+        localCampaignId,
         orgId: sarvamAgent.apiKey.organizationId,
-        workId: sarvamAgent.apiKey.workspaceId,
-        apiKey: decryptedApiKey,
-        campaignDetails: sarvamPayload,
+        workspaceId: sarvamAgent.apiKey.workspaceId,
       });
-      const sarvamRes = await this.sarvamCampaignClient.createCampaign(
+
+      sarvamRes = await this.sarvamCampaignClient.createCampaign(
         sarvamAgent.apiKey.organizationId,
         sarvamAgent.apiKey.workspaceId,
         decryptedApiKey,
         sarvamPayload,
       );
-
-      // Save external campaign ID
-      const updatedCampaign = await this.campaignRepo.update(
+    } catch (err: any) {
+      this.logger?.error("External Sarvam campaign creation failed", {
+        action: "campaign.create.provider_error",
         tenantId,
-        campaign.id,
-        {
-          sarvamCampaignId: sarvamRes.campaign_id,
-        },
-      );
+        localCampaignId,
+        error: err?.message || String(err),
+        statusCode: err?.statusCode,
+        details: err?.details,
+      });
 
-      this.logger?.info("Sarvam campaign created and linked", {
-        action: "campaign.create",
+      // Provider creation failed: do NOT create local campaign
+      throw new ExternalCampaignCreationFailedError();
+    }
+
+    // 3. Persist local KOOI campaign with DRAFT status only after provider success
+    try {
+      const campaign = await this.campaignRepo.create(tenantId, {
+        id: localCampaignId,
+        name: input.name,
+        description: input.description,
+        status: "DRAFT",
+        provider: selectedProvider,
+        sarvamAgentId: input.sarvamAgentId,
+        sarvamCampaignId: sarvamRes.campaign_id,
+        startTimestamp: startIso,
+        endTimestamp: endIso,
+        allowedSchedule: agentSchedule as unknown as Record<string, unknown>,
+        variables: cleanedVariables,
+        goals: (sarvamAgent.goals || []).map((g) => ({
+          agentGoalId: g.id,
+          outputVariableName: g.outputVariableName,
+          expectedValue: g.expectedValue,
+          displayName: g.displayName,
+        })),
+        defaultRetryConfig: finalRetryConfig,
+      });
+
+      this.logger?.info("Sarvam campaign created and linked successfully", {
+        action: "campaign.create.success",
         tenantId,
         campaignId: campaign.id,
         sarvamCampaignId: sarvamRes.campaign_id,
         provider: selectedProvider,
+        status: campaign.status,
       });
 
-      return updatedCampaign;
-    } catch (err: any) {
-      this.logger?.error("External Sarvam campaign creation failed", {
-        action: "campaign.create",
-        tenantId,
-        campaignId: campaign.id,
-        error: err?.message || String(err),
-      });
-
-      // Mark the Kooi campaign as FAILED and retain diagnostics
-      await this.campaignRepo.updateStatus(campaign.id, "FAILED");
-
-      throw new ExternalCampaignCreationFailedError(
-        err?.message || "Provider returned an error during campaign creation",
+      return campaign;
+    } catch (dbErr: any) {
+      this.logger?.error(
+        "Local campaign persistence failed after external Sarvam campaign creation succeeded",
+        {
+          action: "campaign.create.db_persistence_failed",
+          tenantId,
+          localCampaignId,
+          sarvamCampaignId: sarvamRes.campaign_id,
+          error: dbErr?.message || String(dbErr),
+        },
       );
+
+      // Compensate: attempt to cancel the newly created external campaign to prevent orphaned execution
+      try {
+        await this.sarvamCampaignClient.updateStatus(
+          sarvamAgent.apiKey.organizationId,
+          sarvamAgent.apiKey.workspaceId,
+          sarvamRes.campaign_id,
+          decryptedApiKey,
+          "cancel",
+        );
+        this.logger?.warn(
+          "Orphaned Sarvam campaign cancelled via compensation after local DB failure",
+          {
+            action: "campaign.create.compensation_cancelled",
+            tenantId,
+            localCampaignId,
+            sarvamCampaignId: sarvamRes.campaign_id,
+          },
+        );
+      } catch (cancelErr: any) {
+        this.logger?.error(
+          "Failed to cancel orphaned Sarvam campaign during compensation",
+          {
+            action: "campaign.create.compensation_failed",
+            tenantId,
+            localCampaignId,
+            sarvamCampaignId: sarvamRes.campaign_id,
+            error: cancelErr?.message || String(cancelErr),
+          },
+        );
+      }
+
+      throw new ExternalCampaignCreationFailedError();
     }
   }
 }

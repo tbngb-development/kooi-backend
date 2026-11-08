@@ -310,4 +310,84 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
       }),
     );
   });
+
+  it("defaults scheduledAt to current timestamp when runImmediately is true", async () => {
+    const csvContent =
+      "Contact Number,Customer Name,account_number\n+919876543210,Aarav Sharma,ACC-101";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    const before = Date.now();
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        scheduledAt: null,
+        runImmediately: true,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({
+        sarvamCohortId: "cohort-sarvam-ext-1",
+        status: "RUNNING",
+        scheduledAt: expect.any(Date),
+      }),
+    );
+
+    const updateCalls = vi.mocked(mockBatchRepo.update).mock.calls;
+    const lastCall = updateCalls[updateCalls.length - 1];
+    const savedDate = lastCall[1].scheduledAt as Date;
+    expect(savedDate.getTime()).toBeGreaterThanOrEqual(before);
+    expect(savedDate.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("preserves supplied future timestamp when scheduledAt is provided", async () => {
+    const csvContent =
+      "Contact Number,Customer Name,account_number\n+919876543210,Aarav Sharma,ACC-101";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    const scheduledDateStr = "2026-06-15T10:00:00.000Z";
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        scheduledAt: scheduledDateStr,
+        runImmediately: false,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({
+        sarvamCohortId: "cohort-sarvam-ext-1",
+        status: "SCHEDULED",
+        scheduledAt: new Date(scheduledDateStr),
+      }),
+    );
+  });
 });

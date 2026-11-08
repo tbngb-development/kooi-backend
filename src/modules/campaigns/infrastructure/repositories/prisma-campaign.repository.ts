@@ -560,6 +560,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
   ): Promise<CampaignEntityData> {
     const campaign = await prisma.campaign.create({
       data: {
+        ...(data.id ? { id: data.id } : {}),
         name: data.name,
         description: data.description,
         tenantId,

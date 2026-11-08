@@ -255,6 +255,10 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
       };
 
       mockSarvamClient = {
+        updateStatus: vi.fn().mockResolvedValue({
+          campaign_id: "ext-sarvam-camp-999",
+          status: "cancelled",
+        }),
         createCampaign: vi.fn().mockResolvedValue({
           campaign_id: "ext-sarvam-camp-999",
           name: "Sarvam Support Campaign",
@@ -279,7 +283,7 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
       );
     });
 
-    it("should successfully create Sarvam campaign internally and externally", async () => {
+    it("should create Sarvam campaign first externally and persist locally with DRAFT status", async () => {
       const result = await useCase.execute(tenantId, {
         name: "Sarvam Support Campaign",
         sarvamAgentId: validAgentId,
@@ -288,22 +292,12 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
         allowedSchedule: validSchedule,
       });
 
-      // 1. Verify internal creation occurred with SCHEDULED status
-      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
-        tenantId,
-        expect.objectContaining({
-          provider: "SARVAM",
-          status: "SCHEDULED",
-          sarvamAgentId: validAgentId,
-        }),
-      );
-
-      // 2. Verify decryption occurred
+      // 1. Verify decryption occurred
       expect(mockEncryptionService.decrypt).toHaveBeenCalledWith(
         sampleSarvamAgent.apiKey.apiKeyEncrypted,
       );
 
-      // 3. Verify external Sarvam API call
+      // 2. Verify external Sarvam API call was dispatched FIRST
       expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
         "org-456",
         "workspace-123",
@@ -316,44 +310,90 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
             app_id: "sarvam-app-999",
             app_version: 1,
             attempts_per_second: 2,
+            webhook_config: expect.objectContaining({
+              metadata: expect.objectContaining({
+                tenantId,
+                campaignId: expect.any(String),
+              }),
+            }),
           }),
         }),
       );
 
-      // 4. Verify external campaign ID saved
-      expect(mockCampaignRepo.update).toHaveBeenCalledWith(
+      // 3. Verify local campaign creation occurred AFTER provider success with DRAFT status
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
         tenantId,
-        "kooi-camp-100",
-        {
+        expect.objectContaining({
+          provider: "SARVAM",
+          status: "DRAFT",
+          sarvamAgentId: validAgentId,
           sarvamCampaignId: "ext-sarvam-camp-999",
-        },
+          id: expect.any(String),
+        }),
       );
 
+      expect(result.status).toBe("DRAFT");
       expect(result.sarvamCampaignId).toBe("ext-sarvam-camp-999");
       expect(result.provider).toBe("SARVAM");
     });
 
-    it("should mark internal campaign as FAILED and throw when external API fails", async () => {
+    it("should NOT create a local campaign if external Sarvam API fails, and throw sanitized error", async () => {
       mockSarvamClient.createCampaign = vi
         .fn()
         .mockRejectedValue(new Error("Sarvam 422: Invalid connection_id"));
 
-      await expect(
-        useCase.execute(tenantId, {
+      let thrownError: any;
+      try {
+        await useCase.execute(tenantId, {
           name: "Failing Campaign",
           sarvamAgentId: validAgentId,
           startTimestamp: "2026-05-01T09:00:00.000Z",
           endTimestamp: "2026-05-15T18:00:00.000Z",
           allowedSchedule: validSchedule,
-        }),
-      ).rejects.toThrow(ExternalCampaignCreationFailedError);
+        });
+      } catch (err) {
+        thrownError = err;
+      }
 
-      // Verify status was flipped to FAILED
-      expect(mockCampaignRepo.updateStatus).toHaveBeenCalledWith(
-        "kooi-camp-100",
-        "FAILED",
+      expect(thrownError).toBeInstanceOf(ExternalCampaignCreationFailedError);
+      // Verify tenant-safe generic error message
+      expect(thrownError.message).toBe("Unable to create campaign at this time. Please contact support if the issue persists.");
+      expect(thrownError.code).toBe("CAMPAIGN_CREATION_FAILED");
+      expect(thrownError.statusCode).toBe(502);
+
+      // Verify no local campaign was created or updated
+      expect(mockCampaignRepo.create).not.toHaveBeenCalled();
+      expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it("should trigger compensating cancellation of external campaign when local DB persistence fails", async () => {
+      mockCampaignRepo.create = vi.fn().mockRejectedValue(new Error("Database connection pool exhausted"));
+
+      let thrownError: any;
+      try {
+        await useCase.execute(tenantId, {
+          name: "DB Failure Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      expect(thrownError).toBeInstanceOf(ExternalCampaignCreationFailedError);
+      // Verify external campaign was created first
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledTimes(1);
+
+      // Verify compensation: external campaign was cancelled via Sarvam API
+      expect(mockSarvamClient.updateStatus).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "ext-sarvam-camp-999",
+        "decrypted-api-key-test",
+        "cancel",
       );
-      expect(storedCampaign.status).toBe("FAILED");
     });
 
     it("should reject if sarvamAgentId is missing for SARVAM provider", async () => {
@@ -499,7 +539,7 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           },
         }),
       );
-      expect(campaign.status).toBe("SCHEDULED");
+      expect(campaign.status).toBe("DRAFT");
     });
 
     it("should successfully create Sarvam campaign using agent allowedSchedule when tenant does not supply allowedSchedule", async () => {
@@ -521,7 +561,7 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           }),
         }),
       );
-      expect(campaign.status).toBe("SCHEDULED");
+      expect(campaign.status).toBe("DRAFT");
     });
 
     it("should reject campaign creation if sarvam agent is missing allowedSchedule", async () => {

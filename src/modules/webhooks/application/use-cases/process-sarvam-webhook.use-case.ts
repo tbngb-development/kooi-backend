@@ -469,6 +469,22 @@ export class ProcessSarvamWebhookUseCase {
         // 10. Update Lead status
         await txRepo.updateLeadStatus(lead.id, targetLeadStatus);
 
+        // 10b. Transition Campaign from DRAFT to RUNNING on first valid call webhook event regardless of call outcome
+        if (campaign.status === "DRAFT") {
+          await txRepo.updateCampaignStatus(campaign.id, "RUNNING");
+          campaign.status = "RUNNING";
+          this.logger?.info(
+            "Campaign transitioned from DRAFT to RUNNING on first webhook event",
+            {
+              action: "webhook.sarvam.campaign_started",
+              campaignId: campaign.id,
+              tenantId,
+              attemptId: p.attempt_id,
+              callStatus: aggregateCallStatus,
+            },
+          );
+        }
+
         // 11. Trigger automatic recording retrieval if completed + connected with interaction_id
         const isCompleted = p.completion_status?.toLowerCase() === "completed";
         const hasInteractionId = Boolean(p.interaction_id);

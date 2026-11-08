@@ -163,6 +163,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
       findCampaignGoals: vi.fn().mockResolvedValue([]),
       upsertCallGoalResults: vi.fn().mockResolvedValue(undefined),
       markCallGoalPassed: vi.fn().mockResolvedValue(undefined),
+      updateCampaignStatus: vi.fn().mockResolvedValue(undefined),
     } as unknown as ISarvamWebhookRepository;
 
     mockLogger = {
@@ -487,6 +488,106 @@ describe("ProcessSarvamWebhookUseCase", () => {
       expect(result.status).toBe("CORRELATION_REJECTED");
       expect(result.reason).toBe("No campaign found");
       expect(mockRepo.createAggregateCall).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("8. Campaign Status Lifecycle: DRAFT to RUNNING Transition", () => {
+    it("transitions campaign from DRAFT to RUNNING on first valid call webhook event when call is connected", async () => {
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        ...defaultCorrelationSuccess,
+        data: {
+          ...defaultCorrelationSuccess.data,
+          campaign: {
+            ...defaultCorrelationSuccess.data.campaign,
+            status: "DRAFT" as any,
+          },
+        },
+      });
+
+      const result = await useCase.execute(basePayload);
+
+      expect(result.status).toBe("SUCCESS");
+      expect(mockRepo.updateCampaignStatus).toHaveBeenCalledWith(campaignId, "RUNNING");
+    });
+
+    it("transitions campaign from DRAFT to RUNNING on first valid call webhook event even when call outcome is failed", async () => {
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        ...defaultCorrelationSuccess,
+        data: {
+          ...defaultCorrelationSuccess.data,
+          campaign: {
+            ...defaultCorrelationSuccess.data.campaign,
+            status: "DRAFT" as any,
+          },
+        },
+      });
+
+      const failedPayload: SarvamWebhookAttemptPayload = {
+        ...basePayload,
+        attempt_id: "attempt-failed-001",
+        completion_status: "failed",
+        connectivity_status: "not_connected",
+        failure_reason: "user_busy",
+        duration: 0,
+      };
+
+      const result = await useCase.execute(failedPayload);
+
+      expect(result.status).toBe("SUCCESS");
+      expect(mockRepo.updateCampaignStatus).toHaveBeenCalledWith(campaignId, "RUNNING");
+    });
+
+    it("does not re-transition campaign if campaign is already in RUNNING status", async () => {
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        ...defaultCorrelationSuccess,
+        data: {
+          ...defaultCorrelationSuccess.data,
+          campaign: {
+            ...defaultCorrelationSuccess.data.campaign,
+            status: "RUNNING",
+          },
+        },
+      });
+
+      const result = await useCase.execute(basePayload);
+
+      expect(result.status).toBe("SUCCESS");
+      // updateCampaignStatus was not called for DRAFT transition
+      expect(mockRepo.updateCampaignStatus).not.toHaveBeenCalled();
+    });
+
+    it("does not transition campaign on duplicate idempotent webhook event", async () => {
+      // Simulate existing call already has this attempt_id in callHistory
+      vi.mocked(mockRepo.findAggregateCall).mockResolvedValueOnce({
+        id: callId,
+        tenantId,
+        campaignId,
+        batchId,
+        leadId,
+        status: "COMPLETED",
+        callHistory: [
+          {
+            attempt_id: basePayload.attempt_id,
+            status: "COMPLETED",
+          } as SarvamAttemptHistoryEntry,
+        ],
+      } as AggregateCallCandidate);
+
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        ...defaultCorrelationSuccess,
+        data: {
+          ...defaultCorrelationSuccess.data,
+          campaign: {
+            ...defaultCorrelationSuccess.data.campaign,
+            status: "DRAFT" as any,
+          },
+        },
+      });
+
+      const result = await useCase.execute(basePayload);
+
+      expect(result.status).toBe("IDEMPOTENT_IGNORED");
+      expect(mockRepo.updateCampaignStatus).not.toHaveBeenCalled();
     });
   });
 });

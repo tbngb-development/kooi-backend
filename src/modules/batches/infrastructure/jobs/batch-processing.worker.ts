@@ -413,7 +413,9 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.update(batchId, {
         name: finalCheck.name || bolnaFileName.replace(/\.csv$/, ""),
-        fileName: finalCheck.fileName?.startsWith("batch-manual-") ? bolnaFileName : undefined,
+        fileName: finalCheck.fileName?.startsWith("batch-manual-")
+          ? bolnaFileName
+          : undefined,
         bolnaBatchId,
         status: finalStatus,
         scheduledAt: localScheduledAt,
@@ -544,11 +546,15 @@ export class BatchProcessingWorker {
     const agentVariables =
       (sarvamAgent.agentVariables as SarvamAgentVariable[]) ?? [];
     const variableOverrides =
-      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<string, string>) ?? {};
+      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<
+        string,
+        string
+      >) ?? {};
     const campaignVariables =
       (campaign.variables as Record<string, string>) ?? {};
     const welcomeMessageConfig =
-      (sarvamAgent.welcomeMessage as WelcomeMessageConfig | undefined) ?? undefined;
+      (sarvamAgent.welcomeMessage as WelcomeMessageConfig | undefined) ??
+      undefined;
 
     const transformResult = this.sarvamCohortTransformer.transform(
       leadsForSarvam,
@@ -656,7 +662,9 @@ export class BatchProcessingWorker {
 
     await this.batchRepo.updateProgress(batchId, "FINALIZING", 90);
 
-    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" = "SCHEDULED";
+    // eslint-disable-next-line no-useless-assignment
+    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" =
+      "SCHEDULED";
 
     if (cohortStatus === "failed") {
       await this.failBatch(
@@ -668,10 +676,7 @@ export class BatchProcessingWorker {
     } else if (cohortStatus === "processing") {
       finalStatus = "PROCESSING";
     } else {
-      finalStatus =
-        campaign.status === "RUNNING" || runImmediately
-          ? "RUNNING"
-          : "SCHEDULED";
+      finalStatus = runImmediately ? "RUNNING" : "SCHEDULED";
     }
 
     const finalCheck = await this.batchRepo.findById(
@@ -686,12 +691,20 @@ export class BatchProcessingWorker {
       return;
     }
 
+    const resolvedScheduledAt = scheduledAt
+      ? new Date(scheduledAt)
+      : runImmediately
+        ? new Date()
+        : null;
+
     await this.batchRepo.update(batchId, {
       name: finalCheck.name || resolvedBatchName,
       sarvamCohortId,
       status: finalStatus,
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      scheduledAt: resolvedScheduledAt,
     });
+
+    await this.campaignRepo.updateStatus(campaignId, "RUNNING");
 
     await this.batchRepo.recalculateCampaignStats(campaignId);
 

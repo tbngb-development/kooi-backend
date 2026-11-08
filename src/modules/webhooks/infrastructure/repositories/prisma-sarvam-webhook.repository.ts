@@ -366,10 +366,15 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
     status: CampaignStatus,
     completedAt?: Date,
   ): Promise<void> {
+    const existing = await this.client.campaign.findUnique({
+      where: { id: campaignId },
+      select: { startedAt: true },
+    });
     await this.client.campaign.update({
       where: { id: campaignId },
       data: {
         status,
+        ...(status === "RUNNING" && !existing?.startedAt ? { startedAt: new Date() } : {}),
         ...(completedAt !== undefined ? { completedAt } : {}),
       },
     });

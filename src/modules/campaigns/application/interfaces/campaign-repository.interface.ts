@@ -14,6 +14,7 @@ import type {
 } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
+  id?: string;
   name: string;
   description?: string;
   assistantId?: string;

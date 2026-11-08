@@ -207,6 +207,8 @@ export class EnqueueBatchUploadUseCase {
     await this.batchRepo.updateRawFileUrl(batch.id, rawFileUrl);
 
     // 8. Enqueue the heavy processing job
+    const resolvedScheduledAt = input.scheduledAt ?? (input.runImmediately ? new Date().toISOString() : null);
+
     await queue.add(
       "process-batch",
       {
@@ -215,7 +217,7 @@ export class EnqueueBatchUploadUseCase {
         campaignId: input.campaignId,
         rawFileUrl,
         fileName: finalFileName,
-        scheduledAt: input.scheduledAt ?? null,
+        scheduledAt: resolvedScheduledAt,
         runImmediately: input.runImmediately ?? false,
         retryConfig: input.retryConfig ?? null,
         termsVersion: input.termsVersion,

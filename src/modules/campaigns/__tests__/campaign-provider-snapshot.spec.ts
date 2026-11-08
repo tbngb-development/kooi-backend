@@ -198,7 +198,7 @@ describe("Campaign Voice Provider Snapshotting & Immutability", () => {
       expect(mockVoiceProviderService.resolveActiveProvider).toHaveBeenCalledWith(tenantId);
       expect(mockCampaignRepo.create).toHaveBeenCalledWith(
         tenantId,
-        expect.objectContaining({ provider: "SARVAM", status: "SCHEDULED" }),
+        expect.objectContaining({ provider: "SARVAM", status: "DRAFT" }),
       );
       expect(campaign.provider).toBe("SARVAM");
     });
