@@ -37,6 +37,9 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
           appId: data.appId,
           appVersion: data.appVersion,
           attemptsPerSecond: data.attemptsPerSecond,
+          gender: data.gender ?? null,
+          type: data.type ?? "OUTBOUND",
+          audioUrl: data.audioUrl ?? null,
           agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
           welcomeMessage: data.welcomeMessage as unknown as Prisma.InputJsonValue,
           outputVariables: data.outputVariables as unknown as Prisma.InputJsonValue,
@@ -114,6 +117,9 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
           ...(data.attemptsPerSecond !== undefined && {
             attemptsPerSecond: data.attemptsPerSecond,
           }),
+          ...(data.gender !== undefined && { gender: data.gender }),
+          ...(data.type !== undefined && { type: data.type }),
+          ...(data.audioUrl !== undefined && { audioUrl: data.audioUrl }),
           ...(data.agentVariables !== undefined && {
             agentVariables: data.agentVariables as unknown as Prisma.InputJsonValue,
           }),

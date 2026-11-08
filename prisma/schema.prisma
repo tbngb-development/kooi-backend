@@ -845,6 +845,9 @@ model SarvamAgent {
   appId              String
   appVersion         Int               @default(1)
   attemptsPerSecond  Int?
+  gender             AgentGender?
+  type               PlatformAgentType @default(OUTBOUND)
+  audioUrl           String?
   agentVariables     Json              @default("[]")
   welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
   outputVariables    Json              @default("[]")
@@ -867,6 +870,8 @@ model SarvamAgent {
   @@index([apiKeyId])
   @@index([status])
   @@index([allowTenantVisible])
+  @@index([type])
+  @@index([gender])
 }
 
 model SarvamAgentTenantOverride {

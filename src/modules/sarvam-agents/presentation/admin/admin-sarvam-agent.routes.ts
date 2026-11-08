@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import type { AdminSarvamAgentController } from "./admin-sarvam-agent.controller";
 import type { AuthenticateMiddleware } from "../../../../shared/middleware/authenticate";
 import type { AuthorizeMiddleware } from "../../../../shared/middleware/authorize";
@@ -8,6 +9,11 @@ import {
   updateSarvamAgentSchema,
   listSarvamAgentsQuerySchema,
 } from "./admin-sarvam-agent.schema";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+});
 
 export function buildAdminSarvamAgentRoutes(
   controller: AdminSarvamAgentController,
@@ -25,6 +31,7 @@ export function buildAdminSarvamAgentRoutes(
     controller.list,
   );
   router.post("/", validate(createSarvamAgentSchema), controller.create);
+  router.post("/upload-audio", upload.single("audio"), controller.uploadAudio);
   router.get("/:id", controller.getById);
   router.patch(
     "/:id",

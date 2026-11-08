@@ -166,6 +166,18 @@ export const createSarvamAgentSchema = z
     appId: z.string().trim().min(1, "App ID is required").max(255),
     appVersion: z.number().int().min(1, "App Version must be at least 1").default(1),
     attemptsPerSecond: z.number().int().positive().nullable().optional(),
+    gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
+    type: z.enum(["OUTBOUND", "INBOUND", "BOTH"]).default("OUTBOUND"),
+    audioUrl: z
+      .string()
+      .trim()
+      .nullable()
+      .optional()
+      .transform((val) => (val === "" ? null : val))
+      .refine(
+        (val) => !val || /^https?:\/\/.+/i.test(val),
+        "Audio URL must be a valid HTTP/HTTPS URL",
+      ),
     agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
     welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "", interpolationVariables: [] }),
     outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
@@ -224,6 +236,18 @@ export const updateSarvamAgentSchema = z
     appId: z.string().trim().min(1, "App ID cannot be empty").max(255).optional(),
     appVersion: z.number().int().min(1, "App Version must be at least 1").optional(),
     attemptsPerSecond: z.number().int().positive().nullable().optional(),
+    gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
+    type: z.enum(["OUTBOUND", "INBOUND", "BOTH"]).optional(),
+    audioUrl: z
+      .string()
+      .trim()
+      .nullable()
+      .optional()
+      .transform((val) => (val === "" ? null : val))
+      .refine(
+        (val) => !val || /^https?:\/\/.+/i.test(val),
+        "Audio URL must be a valid HTTP/HTTPS URL",
+      ),
     agentVariables: z.array(sarvamAgentVariableSchema).optional(),
     welcomeMessage: welcomeMessageConfigSchema.optional(),
     outputVariables: z.array(sarvamOutputVariableSchema).optional(),

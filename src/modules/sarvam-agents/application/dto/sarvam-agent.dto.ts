@@ -1,4 +1,6 @@
 import type {
+  AgentGender,
+  PlatformAgentType,
   SarvamAgentVariable,
   WelcomeMessageConfig,
   SarvamOutputVariable,
@@ -15,6 +17,9 @@ export interface CreateSarvamAgentDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond?: number | null;
+  gender?: AgentGender | null;
+  type?: PlatformAgentType;
+  audioUrl?: string | null;
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -32,6 +37,9 @@ export interface UpdateSarvamAgentDTO {
   appId?: string;
   appVersion?: number;
   attemptsPerSecond?: number | null;
+  gender?: AgentGender | null;
+  type?: PlatformAgentType;
+  audioUrl?: string | null;
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -60,6 +68,9 @@ export interface SarvamAgentAdminResponseDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond: number | null;
+  gender: AgentGender | null;
+  type: PlatformAgentType;
+  audioUrl: string | null;
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
@@ -104,6 +115,9 @@ export interface TenantSarvamAgentSummaryDTO {
   name: string;
   appId: string;
   appVersion: number;
+  gender: AgentGender | null;
+  type: PlatformAgentType;
+  audioUrl: string | null;
   status: "ACTIVE";
   allowTenantVisible: boolean;
   createdAt: string;
@@ -116,6 +130,9 @@ export interface TenantSarvamAgentDetailDTO {
   appId: string;
   appVersion: number;
   attemptsPerSecond: number | null;
+  gender: AgentGender | null;
+  type: PlatformAgentType;
+  audioUrl: string | null;
   status: "ACTIVE";
   welcomeMessage: {
     defaultMessage: string;

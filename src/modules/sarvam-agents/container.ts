@@ -10,6 +10,8 @@ import { GetSarvamAgentUseCase } from "./application/use-cases/admin/get-sarvam-
 import { ListSarvamAgentsUseCase } from "./application/use-cases/admin/list-sarvam-agents.use-case";
 import { UpdateSarvamAgentUseCase } from "./application/use-cases/admin/update-sarvam-agent.use-case";
 import { ArchiveSarvamAgentUseCase } from "./application/use-cases/admin/archive-sarvam-agent.use-case";
+import { UploadSarvamAgentAudioUseCase } from "./application/use-cases/admin/upload-sarvam-agent-audio.use-case";
+import { cloudinaryService } from "../../shared/services/cloudinary.service";
 import { ListTenantSarvamAgentsUseCase } from "./application/use-cases/tenant/list-tenant-sarvam-agents.use-case";
 import { GetTenantSarvamAgentUseCase } from "./application/use-cases/tenant/get-tenant-sarvam-agent.use-case";
 import { UpdateTenantSarvamAgentVariablesUseCase } from "./application/use-cases/tenant/update-tenant-sarvam-agent-variables.use-case";
@@ -61,6 +63,10 @@ export function buildSarvamAgentModule(
     mapper,
     config.logger,
   );
+  const uploadAudioUseCase = new UploadSarvamAgentAudioUseCase(
+    cloudinaryService,
+    config.logger,
+  );
 
   // Tenant Use Cases
   const listTenantUseCase = new ListTenantSarvamAgentsUseCase(repository, mapper);
@@ -90,6 +96,7 @@ export function buildSarvamAgentModule(
     getUseCase,
     listUseCase,
     archiveUseCase,
+    uploadAudioUseCase,
   );
 
   const tenantController = new TenantSarvamAgentController(

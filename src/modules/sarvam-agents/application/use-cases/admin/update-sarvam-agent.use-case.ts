@@ -203,6 +203,9 @@ export class UpdateSarvamAgentUseCase {
       ...(dto.attemptsPerSecond !== undefined && {
         attemptsPerSecond: dto.attemptsPerSecond,
       }),
+      ...(dto.gender !== undefined && { gender: dto.gender }),
+      ...(dto.type !== undefined && { type: dto.type }),
+      ...(dto.audioUrl !== undefined && { audioUrl: dto.audioUrl }),
       ...(validatedVariables !== undefined && {
         agentVariables: validatedVariables,
       }),

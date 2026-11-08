@@ -60,6 +60,9 @@ describe("Sarvam Agent Use Cases", () => {
     appId: "sarvam_app_01",
     appVersion: 1,
     attemptsPerSecond: 5,
+    gender: null,
+    type: "OUTBOUND",
+    audioUrl: null,
     agentVariables: [
       {
         key: "company_name",
@@ -891,6 +894,9 @@ describe("Sarvam Agent Use Cases", () => {
       appId: "sarvam_app_01",
       appVersion: 1,
       attemptsPerSecond: 5,
+    gender: null,
+    type: "OUTBOUND",
+    audioUrl: null,
       agentVariables: sampleAgentWithApiKey.agentVariables,
       welcomeMessage: sampleAgentWithApiKey.welcomeMessage,
       outputVariables: sampleAgentWithApiKey.outputVariables,
