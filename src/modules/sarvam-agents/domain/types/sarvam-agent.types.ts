@@ -1,6 +1,11 @@
 export type AgentGender = "MALE" | "FEMALE";
 export type PlatformAgentType = "OUTBOUND" | "INBOUND" | "BOTH";
 
+export interface SarvamAudioRecording {
+  language: string;
+  audioUrl: string;
+}
+
 export type SarvamVariableDataType = "string";
 export type SarvamVariableInputType = "text" | "textarea";
 
@@ -92,6 +97,7 @@ export interface ResolvedTenantSarvamAgent {
   gender?: AgentGender | null;
   type?: PlatformAgentType;
   audioUrl?: string | null;
+  audioRecordings: SarvamAudioRecording[];
   status: "ACTIVE" | "ARCHIVED";
   welcomeMessage: {
     defaultMessage: string;

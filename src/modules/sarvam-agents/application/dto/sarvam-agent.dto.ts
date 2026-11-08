@@ -1,6 +1,7 @@
 import type {
   AgentGender,
   PlatformAgentType,
+  SarvamAudioRecording,
   SarvamAgentVariable,
   WelcomeMessageConfig,
   SarvamOutputVariable,
@@ -20,6 +21,7 @@ export interface CreateSarvamAgentDTO {
   gender?: AgentGender | null;
   type?: PlatformAgentType;
   audioUrl?: string | null;
+  audioRecordings?: SarvamAudioRecording[];
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -40,6 +42,7 @@ export interface UpdateSarvamAgentDTO {
   gender?: AgentGender | null;
   type?: PlatformAgentType;
   audioUrl?: string | null;
+  audioRecordings?: SarvamAudioRecording[];
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];
@@ -71,6 +74,7 @@ export interface SarvamAgentAdminResponseDTO {
   gender: AgentGender | null;
   type: PlatformAgentType;
   audioUrl: string | null;
+  audioRecordings: SarvamAudioRecording[];
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
@@ -118,6 +122,7 @@ export interface TenantSarvamAgentSummaryDTO {
   gender: AgentGender | null;
   type: PlatformAgentType;
   audioUrl: string | null;
+  audioRecordings: SarvamAudioRecording[];
   status: "ACTIVE";
   allowTenantVisible: boolean;
   createdAt: string;
@@ -133,6 +138,7 @@ export interface TenantSarvamAgentDetailDTO {
   gender: AgentGender | null;
   type: PlatformAgentType;
   audioUrl: string | null;
+  audioRecordings: SarvamAudioRecording[];
   status: "ACTIVE";
   welcomeMessage: {
     defaultMessage: string;

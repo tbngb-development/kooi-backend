@@ -61,6 +61,17 @@ export class CloudinaryService {
       streamifier.createReadStream(buffer).pipe(uploadStream);
     });
   }
+
+  /**
+   * Delete an uploaded audio asset from Cloudinary by its publicId.
+   */
+  async deleteAudio(publicId: string): Promise<void> {
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: "video" });
+    } catch (error) {
+      this.logger?.warn("Failed to delete audio from Cloudinary", { publicId, error });
+    }
+  }
 }
 
 export const cloudinaryService = new CloudinaryService();

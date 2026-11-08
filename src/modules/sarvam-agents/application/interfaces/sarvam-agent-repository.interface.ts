@@ -12,6 +12,7 @@ import type {
   SarvamRetryConfig,
   SarvamAgentGoal,
   SarvamAllowedSchedule,
+  SarvamAudioRecording,
 } from "../../domain/types/sarvam-agent.types";
 
 export type SarvamAgentWithApiKeyAndTenant = SarvamAgent & {
@@ -30,6 +31,7 @@ export interface CreateSarvamAgentRecord {
   gender?: "MALE" | "FEMALE" | null;
   type?: "OUTBOUND" | "INBOUND" | "BOTH";
   audioUrl?: string | null;
+  audioRecordings?: SarvamAudioRecording[];
   agentVariables: SarvamAgentVariable[];
   welcomeMessage: WelcomeMessageConfig;
   outputVariables: SarvamOutputVariable[];
@@ -50,6 +52,7 @@ export interface UpdateSarvamAgentRecord {
   gender?: "MALE" | "FEMALE" | null;
   type?: "OUTBOUND" | "INBOUND" | "BOTH";
   audioUrl?: string | null;
+  audioRecordings?: SarvamAudioRecording[];
   agentVariables?: SarvamAgentVariable[];
   welcomeMessage?: WelcomeMessageConfig;
   outputVariables?: SarvamOutputVariable[];

@@ -9,6 +9,7 @@ import type {
   SarvamRetryConfig,
   SarvamRetryCondition,
   SarvamAllowedSchedule,
+  SarvamAudioRecording,
 } from "../../domain/types/sarvam-agent.types";
 import type {
   SarvamAgentAdminResponseDTO,
@@ -253,7 +254,44 @@ export class SarvamAgentMapper {
     };
   }
 
+  parseAudioRecordings(
+    data: unknown,
+    fallbackAudioUrl?: string | null,
+  ): SarvamAudioRecording[] {
+    let items: unknown[] = [];
+    if (Array.isArray(data)) {
+      items = data;
+    } else if (typeof data === "string") {
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) items = parsed;
+      } catch {
+        items = [];
+      }
+    }
+
+    const recordings: SarvamAudioRecording[] = items
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item) => ({
+        language: String(item.language ?? "").trim(),
+        audioUrl: String(item.audioUrl ?? "").trim(),
+      }))
+      .filter((r) => r.language.length > 0 && r.audioUrl.length > 0);
+
+    if (recordings.length === 0 && fallbackAudioUrl && fallbackAudioUrl.trim().length > 0) {
+      return [{ language: "Default", audioUrl: fallbackAudioUrl.trim() }];
+    }
+
+    return recordings;
+  }
+
   toAdminDTO(agent: SarvamAgentWithApiKeyAndTenant): SarvamAgentAdminResponseDTO {
+    const audioRecordings = this.parseAudioRecordings(
+      agent.audioRecordings,
+      agent.audioUrl,
+    );
+    const audioUrl = audioRecordings[0]?.audioUrl ?? agent.audioUrl ?? null;
+
     return {
       id: agent.id,
       name: agent.name,
@@ -263,7 +301,8 @@ export class SarvamAgentMapper {
       attemptsPerSecond: agent.attemptsPerSecond,
       gender: agent.gender ?? null,
       type: agent.type,
-      audioUrl: agent.audioUrl ?? null,
+      audioUrl,
+      audioRecordings,
       agentVariables: this.parseAgentVariables(agent.agentVariables),
       welcomeMessage: this.parseWelcomeMessage(agent.welcomeMessage),
       outputVariables: this.parseOutputVariables(agent.outputVariables),
@@ -301,6 +340,12 @@ export class SarvamAgentMapper {
   }
 
   toTenantSummaryDTO(agent: SarvamAgent): TenantSarvamAgentSummaryDTO {
+    const audioRecordings = this.parseAudioRecordings(
+      agent.audioRecordings,
+      agent.audioUrl,
+    );
+    const audioUrl = audioRecordings[0]?.audioUrl ?? agent.audioUrl ?? null;
+
     return {
       id: agent.id,
       name: agent.name,
@@ -308,7 +353,8 @@ export class SarvamAgentMapper {
       appVersion: agent.appVersion,
       gender: agent.gender ?? null,
       type: agent.type,
-      audioUrl: agent.audioUrl ?? null,
+      audioUrl,
+      audioRecordings,
       status: "ACTIVE",
       allowTenantVisible: agent.allowTenantVisible,
       createdAt: agent.createdAt.toISOString(),
@@ -361,6 +407,12 @@ export class SarvamAgentMapper {
       ? customMessage
       : agentWelcome.defaultMessage;
 
+    const audioRecordings = this.parseAudioRecordings(
+      agent.audioRecordings,
+      agent.audioUrl,
+    );
+    const audioUrl = audioRecordings[0]?.audioUrl ?? agent.audioUrl ?? null;
+
     return {
       id: agent.id,
       name: agent.name,
@@ -369,7 +421,8 @@ export class SarvamAgentMapper {
       attemptsPerSecond: agent.attemptsPerSecond,
       gender: agent.gender ?? null,
       type: agent.type,
-      audioUrl: agent.audioUrl ?? null,
+      audioUrl,
+      audioRecordings,
       status: "ACTIVE",
       welcomeMessage: {
         defaultMessage: agentWelcome.defaultMessage,

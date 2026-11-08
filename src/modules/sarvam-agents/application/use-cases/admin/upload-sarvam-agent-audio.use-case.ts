@@ -59,6 +59,23 @@ export class UploadSarvamAgentAudioUseCase {
       input.originalname,
     );
 
+    const MIN_DURATION_SECONDS = 10;
+    const MAX_DURATION_SECONDS = 120;
+
+    if (
+      result.duration !== undefined &&
+      result.duration !== null &&
+      (result.duration < MIN_DURATION_SECONDS || result.duration > MAX_DURATION_SECONDS)
+    ) {
+      await this.cloudinaryService.deleteAudio(result.publicId);
+      throw new ValidationError([
+        {
+          field: "audio",
+          message: `Audio duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds (detected ${result.duration.toFixed(1)}s).`,
+        },
+      ]);
+    }
+
     this.logger?.info("Uploaded Sarvam agent voice audio to Cloudinary", {
       action: "sarvam_agent.audio_uploaded",
       publicId: result.publicId,

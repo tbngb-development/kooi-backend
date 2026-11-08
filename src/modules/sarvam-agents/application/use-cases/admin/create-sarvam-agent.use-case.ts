@@ -137,6 +137,7 @@ export class CreateSarvamAgentUseCase {
       gender: dto.gender ?? null,
       type: dto.type ?? "OUTBOUND",
       audioUrl: dto.audioUrl ?? null,
+      audioRecordings: dto.audioRecordings ?? [],
       agentVariables,
       welcomeMessage,
       outputVariables: validatedOutputVariables,

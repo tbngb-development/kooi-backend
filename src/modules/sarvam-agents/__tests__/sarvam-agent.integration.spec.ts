@@ -51,6 +51,7 @@ class InMemorySarvamAgentRepository implements ISarvamAgentRepository {
       gender: data.gender ?? null,
       type: data.type ?? "OUTBOUND",
       audioUrl: data.audioUrl ?? null,
+      audioRecordings: (data.audioRecordings ?? []) as any,
       agentVariables: data.agentVariables as any,
       welcomeMessage: data.welcomeMessage as any,
       outputVariables: data.outputVariables as any,

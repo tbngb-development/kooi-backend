@@ -16,6 +16,7 @@ describe("UploadSarvamAgentAudioUseCase", () => {
         duration: 45.2,
         bytes: 102400,
       }),
+      deleteAudio: vi.fn().mockResolvedValue(undefined),
     };
     useCase = new UploadSarvamAgentAudioUseCase(mockCloudinaryService as CloudinaryService);
   });
@@ -85,6 +86,46 @@ describe("UploadSarvamAgentAudioUseCase", () => {
         size: 16 * 1024 * 1024,
       }),
     ).rejects.toThrow(ValidationError);
+  });
+
+  it("should reject audio with duration less than 10 seconds and delete asset from Cloudinary", async () => {
+    mockCloudinaryService.uploadAudio = vi.fn().mockResolvedValue({
+      url: "https://res.cloudinary.com/demo/video/upload/short.mp3",
+      publicId: "sarvam-agent-voices/short",
+      duration: 8.5,
+      bytes: 50000,
+    });
+
+    await expect(
+      useCase.execute({
+        buffer: Buffer.from("short audio"),
+        originalname: "short.mp3",
+        mimetype: "audio/mpeg",
+        size: 50000,
+      }),
+    ).rejects.toThrow(ValidationError);
+
+    expect(mockCloudinaryService.deleteAudio).toHaveBeenCalledWith("sarvam-agent-voices/short");
+  });
+
+  it("should reject audio with duration greater than 120 seconds and delete asset from Cloudinary", async () => {
+    mockCloudinaryService.uploadAudio = vi.fn().mockResolvedValue({
+      url: "https://res.cloudinary.com/demo/video/upload/long.mp3",
+      publicId: "sarvam-agent-voices/long",
+      duration: 135.0,
+      bytes: 500000,
+    });
+
+    await expect(
+      useCase.execute({
+        buffer: Buffer.from("long audio"),
+        originalname: "long.mp3",
+        mimetype: "audio/mpeg",
+        size: 500000,
+      }),
+    ).rejects.toThrow(ValidationError);
+
+    expect(mockCloudinaryService.deleteAudio).toHaveBeenCalledWith("sarvam-agent-voices/long");
   });
 });
 

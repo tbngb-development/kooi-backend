@@ -63,6 +63,7 @@ describe("Sarvam Agent Use Cases", () => {
     gender: null,
     type: "OUTBOUND",
     audioUrl: null,
+    audioRecordings: [],
     agentVariables: [
       {
         key: "company_name",
@@ -897,6 +898,7 @@ describe("Sarvam Agent Use Cases", () => {
     gender: null,
     type: "OUTBOUND",
     audioUrl: null,
+    audioRecordings: [],
       agentVariables: sampleAgentWithApiKey.agentVariables,
       welcomeMessage: sampleAgentWithApiKey.welcomeMessage,
       outputVariables: sampleAgentWithApiKey.outputVariables,
@@ -1145,6 +1147,48 @@ describe("Sarvam Agent Use Cases", () => {
         "Hello! Welcome to Acme Corp customer care.",
       );
       expect(result.welcomeMessage.isOverridden).toBe(false);
+    });
+  });
+
+  describe("Multilingual Audio Recordings and Fallback Mapping", () => {
+    it("persists and maps multiple audio recordings for an agent", async () => {
+      const agentWithMultipleRecordings = {
+        ...sampleAgentWithApiKey,
+        audioRecordings: [
+          { language: "English", audioUrl: "https://example.com/en.mp3" },
+          { language: "Hindi", audioUrl: "https://example.com/hi.mp3" },
+        ],
+      };
+
+      const adminDto = mapper.toAdminDTO(agentWithMultipleRecordings);
+      expect(adminDto.audioRecordings).toHaveLength(2);
+      expect(adminDto.audioRecordings[0].language).toBe("English");
+      expect(adminDto.audioRecordings[1].language).toBe("Hindi");
+      expect(adminDto.audioUrl).toBe("https://example.com/en.mp3");
+
+      const tenantSummary = mapper.toTenantSummaryDTO(agentWithMultipleRecordings);
+      expect(tenantSummary.audioRecordings).toHaveLength(2);
+      expect(tenantSummary.audioUrl).toBe("https://example.com/en.mp3");
+    });
+
+    it("falls back to Default language when agent has legacy audioUrl and empty audioRecordings", () => {
+      const legacyAgent = {
+        ...sampleAgentWithApiKey,
+        audioUrl: "https://example.com/legacy.mp3",
+        audioRecordings: [],
+      };
+
+      const adminDto = mapper.toAdminDTO(legacyAgent);
+      expect(adminDto.audioRecordings).toEqual([
+        { language: "Default", audioUrl: "https://example.com/legacy.mp3" },
+      ]);
+      expect(adminDto.audioUrl).toBe("https://example.com/legacy.mp3");
+
+      const tenantSummary = mapper.toTenantSummaryDTO(legacyAgent);
+      expect(tenantSummary.audioRecordings).toEqual([
+        { language: "Default", audioUrl: "https://example.com/legacy.mp3" },
+      ]);
+      expect(tenantSummary.audioUrl).toBe("https://example.com/legacy.mp3");
     });
   });
 });

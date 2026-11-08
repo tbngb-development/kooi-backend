@@ -126,6 +126,11 @@ export const sarvamAgentGoalSchema = z.object({
   displayName: z.string().trim().min(1, "Display name is required"),
 });
 
+export const sarvamAudioRecordingSchema = z.object({
+  language: z.string().trim().min(1, "Language is required").max(50),
+  audioUrl: z.string().trim().url("Must be a valid audio URL"),
+});
+
 export const allowedScheduleSchema = z.object({
   allowed_start_time: z
     .string()
@@ -178,6 +183,7 @@ export const createSarvamAgentSchema = z
         (val) => !val || /^https?:\/\/.+/i.test(val),
         "Audio URL must be a valid HTTP/HTTPS URL",
       ),
+    audioRecordings: z.array(sarvamAudioRecordingSchema).optional().default([]),
     agentVariables: z.array(sarvamAgentVariableSchema).optional().default([]),
     welcomeMessage: welcomeMessageConfigSchema.optional().default({ defaultMessage: "", interpolationVariables: [] }),
     outputVariables: z.array(sarvamOutputVariableSchema).optional().default([]),
@@ -228,6 +234,21 @@ export const createSarvamAgentSchema = z
         }
       }
     }
+
+    if (data.audioRecordings && data.audioRecordings.length > 0) {
+      const seenLanguages = new Set<string>();
+      for (let i = 0; i < data.audioRecordings.length; i++) {
+        const lang = data.audioRecordings[i].language.toLowerCase();
+        if (seenLanguages.has(lang)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["audioRecordings", i, "language"],
+            message: `Duplicate recording for language "${data.audioRecordings[i].language}".`,
+          });
+        }
+        seenLanguages.add(lang);
+      }
+    }
   });
 
 export const updateSarvamAgentSchema = z
@@ -248,6 +269,7 @@ export const updateSarvamAgentSchema = z
         (val) => !val || /^https?:\/\/.+/i.test(val),
         "Audio URL must be a valid HTTP/HTTPS URL",
       ),
+    audioRecordings: z.array(sarvamAudioRecordingSchema).optional().default([]),
     agentVariables: z.array(sarvamAgentVariableSchema).optional(),
     welcomeMessage: welcomeMessageConfigSchema.optional(),
     outputVariables: z.array(sarvamOutputVariableSchema).optional(),
@@ -300,6 +322,21 @@ export const updateSarvamAgentSchema = z
             });
           }
         }
+      }
+    }
+
+    if (data.audioRecordings && data.audioRecordings.length > 0) {
+      const seenLanguages = new Set<string>();
+      for (let i = 0; i < data.audioRecordings.length; i++) {
+        const lang = data.audioRecordings[i].language.toLowerCase();
+        if (seenLanguages.has(lang)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["audioRecordings", i, "language"],
+            message: `Duplicate recording for language "${data.audioRecordings[i].language}".`,
+          });
+        }
+        seenLanguages.add(lang);
       }
     }
   });

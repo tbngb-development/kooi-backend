@@ -848,6 +848,7 @@ model SarvamAgent {
   gender             AgentGender?
   type               PlatformAgentType @default(OUTBOUND)
   audioUrl           String?
+  audioRecordings    Json              @default("[]")
   agentVariables     Json              @default("[]")
   welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
   outputVariables    Json              @default("[]")
