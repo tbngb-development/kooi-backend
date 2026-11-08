@@ -5,6 +5,7 @@ import type { Logger } from "../../../../shared/logging/logger.interface";
 import type {
   SarvamConnectionConfig,
   SarvamRetryConfig,
+  SarvamWebhookConfig,
 } from "../../../sarvam-agents/domain/types/sarvam-agent.types";
 
 export interface SarvamAllowedSchedule {
@@ -21,6 +22,7 @@ export interface SarvamCampaignAppConfig {
   attempts_per_second: number;
   connection_configs: SarvamConnectionConfig[];
   retry_config: SarvamRetryConfig;
+  webhook_config: SarvamWebhookConfig;
   phone_rotation?: {
     agent: boolean;
   };
@@ -33,10 +35,6 @@ export interface CreateSarvamCampaignPayload {
   end_timestamp: string;
   allowed_schedule: SarvamAllowedSchedule;
   app_config: SarvamCampaignAppConfig;
-  webhook_config?: {
-    url: string;
-    metadata?: Record<string, unknown> | null;
-  } | null;
 }
 
 export interface SarvamCampaignResponse {
@@ -228,7 +226,11 @@ export class SarvamCampaignClient implements ISarvamCampaignClient {
     const errorData = data?.error?.data as Record<string, unknown> | undefined;
     if (typeof errorData?.details === "string") {
       detail = errorData.details;
-    } else if (errorData && typeof errorData === "object" && Object.keys(errorData).length > 0) {
+    } else if (
+      errorData &&
+      typeof errorData === "object" &&
+      Object.keys(errorData).length > 0
+    ) {
       detail = JSON.stringify(errorData);
     } else if (data?.error?.message) {
       detail = data.error.message;

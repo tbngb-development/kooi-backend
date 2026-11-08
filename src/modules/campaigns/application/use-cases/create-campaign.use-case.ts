@@ -226,14 +226,20 @@ export class CreateCampaignUseCase {
       sarvamAgent.agentVariables,
     );
     const tenantOverrides =
-      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<string, string>) ?? {};
+      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<
+        string,
+        string
+      >) ?? {};
 
-    const { cleaned: validatedVariables, missing: missingRequired, invalidValues } =
-      validateSarvamCampaignVariables(
-        agentVariablesList,
-        input.variables,
-        tenantOverrides,
-      );
+    const {
+      cleaned: validatedVariables,
+      missing: missingRequired,
+      invalidValues,
+    } = validateSarvamCampaignVariables(
+      agentVariablesList,
+      input.variables,
+      tenantOverrides,
+    );
 
     if (missingRequired.length > 0) {
       throw new MissingRequiredVariablesError(missingRequired);
@@ -325,8 +331,8 @@ export class CreateCampaignUseCase {
                 : [],
         })),
         retry_config: (sarvamAgent.retryConfig as any) ?? { max_retries: 0 },
+        webhook_config: webhookConfig,
       },
-      webhook_config: webhookConfig,
     };
 
     try {

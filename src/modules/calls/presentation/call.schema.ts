@@ -25,7 +25,7 @@ export const dynamicFiltersSchema = z
 export const listCallsQuerySchema = z.object({
   provider: z.enum(["BOLNA", "SARVAM"]).optional(),
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
-  assistantId: z.string().uuid("Invalid assistant ID").optional(),
+  agentId: z.string().uuid("Invalid agent ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
   status: z.string().optional(),
   type: z.enum(["OUTBOUND", "INBOUND"]).optional(),

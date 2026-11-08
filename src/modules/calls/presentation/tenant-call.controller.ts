@@ -42,7 +42,7 @@ export class TenantCallController {
         tenantId,
         provider: query.provider as any,
         campaignId: query.campaignId,
-        assistantId: query.assistantId,
+        agentId: query.agentId,
         leadId: query.leadId,
         status: query.status,
         type: query.type,

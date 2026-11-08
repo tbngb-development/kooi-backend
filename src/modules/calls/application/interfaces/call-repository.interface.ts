@@ -9,7 +9,7 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 export interface ListCallsFilters {
   provider?: VoiceProvider;
   campaignId?: string;
-  assistantId?: string;
+  agentId?: string;
   leadId?: string;
   status?: string;
   type?: "OUTBOUND" | "INBOUND";
@@ -41,11 +41,7 @@ export interface PaginatedCallsResult {
         id: string;
         name: string;
       } | null;
-      assistant?: {
-        id: string;
-        name: string;
-      } | null;
-      sarvamAgent?: {
+      agent: {
         id: string;
         name: string;
       } | null;
@@ -87,11 +83,7 @@ export interface DetailedCallResult extends CallEntityData {
     name: string;
     description: string | null;
   } | null;
-  assistant?: {
-    id: string;
-    name: string;
-  } | null;
-  sarvamAgent?: {
+  agent: {
     id: string;
     name: string;
   } | null;

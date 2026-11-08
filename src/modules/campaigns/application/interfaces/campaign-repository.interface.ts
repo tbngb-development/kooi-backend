@@ -86,6 +86,7 @@ export interface CampaignListItem {
   deletedAt: Date | null;
   assistant: { id: string; name: string } | null;
   sarvamAgent?: { id: string; name: string } | null;
+  agent?: { id: string; name: string } | null;
   batches: Array<{
     id: string;
     status: string;

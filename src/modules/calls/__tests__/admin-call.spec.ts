@@ -82,7 +82,7 @@ describe("Module 4: Admin Calls & Telemetry", () => {
       name: "Q4 High Value Leads",
       description: "Direct outreach",
     },
-    assistant: {
+    agent: {
       id: "assistant-1",
       name: "Real Estate Advisor",
     },

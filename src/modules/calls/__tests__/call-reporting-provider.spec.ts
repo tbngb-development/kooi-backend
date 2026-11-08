@@ -43,8 +43,7 @@ describe("Call Reporting & Provider Filtering", () => {
             appliedRate: 150,
             lead: { id: "lead-1", name: "Rohan Gupta", phone: "+919876543210" },
             campaign: { id: "camp-1", name: "Q1 Campaign" },
-            sarvamAgent: { id: "sarvam-agent-1", name: "Hindi Agent" },
-            assistant: null,
+            agent: { id: "sarvam-agent-1", name: "Hindi Agent" },
             extractionOverview: [],
             extractionInsights: [],
           },
@@ -87,6 +86,22 @@ describe("Call Reporting & Provider Filtering", () => {
     expect(mockCallRepo.list).toHaveBeenCalledWith(tenantId, expect.objectContaining({
       provider: "BOLNA",
     }));
+  });
+
+  it("passes agentId filter to CallRepository.list", async () => {
+    await listCallsUseCase.execute({
+      tenantId,
+      agentId: "agent-uuid-999",
+      campaignId: "camp-1",
+    });
+
+    expect(mockCallRepo.list).toHaveBeenCalledWith(
+      tenantId,
+      expect.objectContaining({
+        campaignId: "camp-1",
+        agentId: "agent-uuid-999",
+      }),
+    );
   });
 
   it("passes goalId and goalPassed filters to CallRepository.list", async () => {

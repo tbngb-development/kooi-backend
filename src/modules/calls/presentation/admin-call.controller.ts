@@ -58,6 +58,7 @@ export class AdminCallController {
         tenantId,
         provider: query.provider as any,
         campaignId: query.campaignId,
+        agentId: query.agentId,
         leadId: query.leadId,
         status: query.status,
         search: query.search,

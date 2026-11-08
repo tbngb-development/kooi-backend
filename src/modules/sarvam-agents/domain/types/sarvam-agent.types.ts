@@ -50,6 +50,11 @@ export interface SarvamConnectionConfig {
   phone_numbers?: string[];
 }
 
+export interface SarvamWebhookConfig {
+  url: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface SarvamRetryCondition {
   enabled: boolean;
   threshold_seconds?: number | null;
@@ -109,4 +114,3 @@ export interface ResolvedTenantSarvamAgent {
   createdAt: Date;
   updatedAt: Date;
 }
-

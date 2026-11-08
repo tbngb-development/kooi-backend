@@ -15,6 +15,30 @@ import type {
 import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
+export interface RawCallWithAgentRelations {
+  provider?: VoiceProvider | null;
+  assistant?: { id: string; name: string } | null;
+  sarvamAgent?: { id: string; name: string } | null;
+  campaign?: {
+    assistant?: { id: string; name: string } | null;
+    sarvamAgent?: { id: string; name: string } | null;
+  } | null;
+}
+
+export function resolveCallAgent(call: RawCallWithAgentRelations): { id: string; name: string } | null {
+  const provider = call.provider ?? "BOLNA";
+  const rawAgent =
+    provider === "SARVAM"
+      ? (call.sarvamAgent ?? call.campaign?.sarvamAgent ?? null)
+      : (call.assistant ?? call.campaign?.assistant ?? null);
+
+  if (!rawAgent) return null;
+  return {
+    id: rawAgent.id,
+    name: rawAgent.name,
+  };
+}
+
 export class PrismaCallRepository implements CallRepository {
   async list(
     tenantId: string,
@@ -44,7 +68,24 @@ export class PrismaCallRepository implements CallRepository {
 
     if (filters.provider) where.provider = filters.provider;
     if (campaignId) where.campaignId = campaignId;
-    if (filters.assistantId) where.assistantId = filters.assistantId;
+    if (filters.agentId) {
+      if (filters.provider === "BOLNA") {
+        where.assistantId = filters.agentId;
+      } else if (filters.provider === "SARVAM") {
+        where.sarvamAgentId = filters.agentId;
+      } else {
+        const agentCondition: Prisma.CallWhereInput = {
+          OR: [
+            { assistantId: filters.agentId },
+            { sarvamAgentId: filters.agentId },
+          ],
+        };
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          agentCondition,
+        ];
+      }
+    }
     if (filters.type) where.type = filters.type;
     if (filters.source) where.source = filters.source;
     if (filters.agentNumber) where.agentNumber = filters.agentNumber;
@@ -156,7 +197,14 @@ export class PrismaCallRepository implements CallRepository {
         where,
         include: {
           lead: { select: { id: true, name: true, phone: true } },
-          campaign: { select: { id: true, name: true } },
+          campaign: {
+            select: {
+              id: true,
+              name: true,
+              assistant: { select: { id: true, name: true } },
+              sarvamAgent: { select: { id: true, name: true } },
+            },
+          },
           assistant: { select: { id: true, name: true } },
           sarvamAgent: { select: { id: true, name: true } },
           _count: {
@@ -236,10 +284,8 @@ export class PrismaCallRepository implements CallRepository {
         goalPassed: c.goalPassed,
         goalResultCount: (c as any)._count?.goalResults ?? 0,
         lead: c.lead,
-        campaign: c.campaign,
-        assistant: c.assistant,
-        sarvamAgent: c.sarvamAgent,
-        sarvamAgentId: c.sarvamAgentId,
+        campaign: c.campaign ? { id: c.campaign.id, name: c.campaign.name } : null,
+        agent: resolveCallAgent(c),
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
@@ -406,6 +452,8 @@ export class PrismaCallRepository implements CallRepository {
             id: true,
             name: true,
             description: true,
+            assistant: { select: { id: true, name: true } },
+            sarvamAgent: { select: { id: true, name: true } },
           },
         },
         assistant: {
@@ -486,10 +534,14 @@ export class PrismaCallRepository implements CallRepository {
       isDeleted: call.isDeleted,
       deletedAt: call.deletedAt,
       lead: call.lead,
-      campaign: call.campaign,
-      assistant: call.assistant,
-      sarvamAgent: call.sarvamAgent,
-      sarvamAgentId: call.sarvamAgentId,
+      campaign: call.campaign
+        ? {
+            id: call.campaign.id,
+            name: call.campaign.name,
+            description: call.campaign.description,
+          }
+        : null,
+      agent: resolveCallAgent(call),
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,

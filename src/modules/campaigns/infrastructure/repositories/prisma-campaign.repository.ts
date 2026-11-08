@@ -235,6 +235,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         { assistant: { name: { contains: term, mode: "insensitive" } } },
+        { sarvamAgent: { name: { contains: term, mode: "insensitive" } } },
       ];
     }
 
@@ -331,6 +332,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         deletedAt: c.deletedAt,
         assistant: c.assistant,
         sarvamAgent: c.sarvamAgent,
+        agent:
+          (c.provider ?? "BOLNA") === "SARVAM"
+            ? (c.sarvamAgent ? { id: c.sarvamAgent.id, name: c.sarvamAgent.name } : null)
+            : (c.assistant ? { id: c.assistant.id, name: c.assistant.name } : null),
         batches: mappedBatches,
       };
     });
