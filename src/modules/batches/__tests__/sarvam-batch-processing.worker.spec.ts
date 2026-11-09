@@ -113,6 +113,7 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
         },
         overrides: [],
       } as any),
+      updateStatus: vi.fn().mockResolvedValue({} as any),
     } as unknown as CampaignRepository;
 
     mockPlanRepo = {

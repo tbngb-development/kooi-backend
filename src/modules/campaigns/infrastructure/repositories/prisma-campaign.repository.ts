@@ -29,9 +29,16 @@ import type {
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../../application/dto/campaign.dto";
+import {
+  getCampaignExecutionMetricsMap,
+  getBatchExecutionMetricsMap,
+} from "../queries/lead-execution-metrics.query";
 
 export class PrismaCampaignRepository implements CampaignRepository {
-  private async getCampaignMetricsMap(campaignIds: string[]): Promise<
+  private async getCampaignMetricsMap(
+    campaignIds: string[],
+    tenantId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -42,74 +49,13 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }
     >
   > {
-    const map = new Map<
-      string,
-      {
-        totalLeads: number;
-        calledLeads: number;
-        completedLeads: number;
-        failedLeads: number;
-      }
-    >();
-
-    if (campaignIds.length === 0) return map;
-
-    for (const id of campaignIds) {
-      map.set(id, {
-        totalLeads: 0,
-        calledLeads: 0,
-        completedLeads: 0,
-        failedLeads: 0,
-      });
-    }
-
-    const [leadGroups, callStatusGroups, calledLeadGroups] = await Promise.all([
-      prisma.lead.groupBy({
-        by: ["campaignId"],
-        where: { campaignId: { in: campaignIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["campaignId", "status"],
-        where: { campaignId: { in: campaignIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["campaignId", "leadId"],
-        where: {
-          campaignId: { in: campaignIds },
-          isDeleted: false,
-        },
-      }),
-    ]);
-
-    for (const lg of leadGroups) {
-      if (lg.campaignId && map.has(lg.campaignId)) {
-        map.get(lg.campaignId)!.totalLeads = lg._count;
-      }
-    }
-
-    for (const cg of callStatusGroups) {
-      if (cg.campaignId && map.has(cg.campaignId)) {
-        const item = map.get(cg.campaignId)!;
-        if (cg.status === "COMPLETED") {
-          item.completedLeads += cg._count;
-        } else if (cg.status === "FAILED") {
-          item.failedLeads += cg._count;
-        }
-      }
-    }
-
-    for (const clg of calledLeadGroups) {
-      if (clg.campaignId && map.has(clg.campaignId)) {
-        map.get(clg.campaignId)!.calledLeads += 1;
-      }
-    }
-
-    return map;
+    return getCampaignExecutionMetricsMap(prisma, campaignIds, tenantId);
   }
 
-  private async getBatchMetricsMap(batchIds: string[]): Promise<
+  private async getBatchMetricsMap(
+    batchIds: string[],
+    tenantId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -120,80 +66,19 @@ export class PrismaCampaignRepository implements CampaignRepository {
       }
     >
   > {
-    const map = new Map<
-      string,
-      {
-        totalLeads: number;
-        calledLeads: number;
-        completedLeads: number;
-        failedLeads: number;
-      }
-    >();
-
-    if (batchIds.length === 0) return map;
-
-    for (const id of batchIds) {
-      map.set(id, {
-        totalLeads: 0,
-        calledLeads: 0,
-        completedLeads: 0,
-        failedLeads: 0,
-      });
-    }
-
-    const [leadGroups, callStatusGroups, calledLeadGroups] = await Promise.all([
-      prisma.lead.groupBy({
-        by: ["batchId"],
-        where: { batchId: { in: batchIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["batchId", "status"],
-        where: { batchId: { in: batchIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["batchId", "leadId"],
-        where: {
-          batchId: { in: batchIds },
-          isDeleted: false,
-        },
-      }),
-    ]);
-
-    for (const lg of leadGroups) {
-      if (lg.batchId && map.has(lg.batchId)) {
-        map.get(lg.batchId)!.totalLeads = lg._count;
-      }
-    }
-
-    for (const cg of callStatusGroups) {
-      if (cg.batchId && map.has(cg.batchId)) {
-        const item = map.get(cg.batchId)!;
-        if (cg.status === "COMPLETED") {
-          item.completedLeads += cg._count;
-        } else if (cg.status === "FAILED") {
-          item.failedLeads += cg._count;
-        }
-      }
-    }
-
-    for (const clg of calledLeadGroups) {
-      if (clg.batchId && map.has(clg.batchId)) {
-        map.get(clg.batchId)!.calledLeads += 1;
-      }
-    }
-
-    return map;
+    return getBatchExecutionMetricsMap(prisma, batchIds, tenantId);
   }
 
-  private async getSingleCampaignMetrics(campaignId: string): Promise<{
+  private async getSingleCampaignMetrics(
+    campaignId: string,
+    tenantId?: string,
+  ): Promise<{
     totalLeads: number;
     calledLeads: number;
     completedLeads: number;
     failedLeads: number;
   }> {
-    const metricsMap = await this.getCampaignMetricsMap([campaignId]);
+    const metricsMap = await this.getCampaignMetricsMap([campaignId], tenantId);
     return (
       metricsMap.get(campaignId) ?? {
         totalLeads: 0,
@@ -290,8 +175,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
     const batchIds = campaigns.flatMap((c) => c.batches.map((b) => b.id));
 
     const [campaignMetricsMap, batchMetricsMap] = await Promise.all([
-      this.getCampaignMetricsMap(campaignIds),
-      this.getBatchMetricsMap(batchIds),
+      this.getCampaignMetricsMap(campaignIds, tenantId),
+      this.getBatchMetricsMap(batchIds, tenantId),
     ]);
 
     const items: CampaignListItem[] = campaigns.map((c) => {
@@ -355,17 +240,18 @@ export class PrismaCampaignRepository implements CampaignRepository {
   // Helper isolation for tenant aggregated overview metrics
   private async getTenantCampaignOverview(
     tenantId: string,
-    isDeleted?: boolean,
+    isDeleted: boolean = false,
   ): Promise<CampaignListOverview> {
     const baseWhere = {
       tenantId,
+      isDeleted,
     };
 
     const [totalCampaigns, totalLeads, totalCalls, runningCampaigns] =
       await Promise.all([
         prisma.campaign.count({ where: baseWhere }),
-        prisma.lead.count({ where: { tenantId } }), // Tenant-scoped counts remain consistent
-        prisma.call.count({ where: { tenantId } }),
+        prisma.lead.count({ where: { tenantId, isDeleted } }),
+        prisma.call.count({ where: { tenantId, isDeleted } }),
         prisma.campaign.count({ where: { ...baseWhere, status: "RUNNING" } }),
       ]);
 
@@ -385,7 +271,8 @@ export class PrismaCampaignRepository implements CampaignRepository {
       throw new CampaignNotFoundError();
     }
 
-    const callWhere = { campaignId };
+    const callWhere = { campaignId, tenantId, isDeleted: false };
+    const leadWhere = { campaignId, tenantId, isDeleted: false };
 
     const [
       actualLeadCount,
@@ -401,7 +288,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       durationAgg,
       completedDurationAgg,
     ] = await Promise.all([
-      prisma.lead.count({ where: { campaignId, isDeleted: false } }),
+      prisma.lead.count({ where: leadWhere }),
       prisma.call.count({ where: callWhere }),
       prisma.call.count({ where: { ...callWhere, status: "COMPLETED" } }),
       prisma.call.count({ where: { ...callWhere, status: "FAILED" } }),
@@ -473,7 +360,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     if (!campaign) return null;
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(campaignId, tenantId);
     return this.toEntityData(campaign, counts);
   }
 
@@ -484,7 +371,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     if (!campaign) return null;
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(
+      campaignId,
+      campaign.tenantId,
+    );
     return this.toEntityData(campaign, counts);
   }
 
@@ -526,7 +416,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
 
     if (!campaign) return null;
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(campaignId, tenantId);
 
     return {
       ...this.toEntityData(campaign, counts),
@@ -640,7 +530,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       include: { assistant: true, sarvamAgent: true },
     });
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(campaignId, tenantId);
     return this.toEntityData(campaign, counts);
   }
 
@@ -660,7 +550,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
     });
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(
+      campaignId,
+      campaign.tenantId,
+    );
     return this.toEntityData(campaign, counts);
   }
 
@@ -710,7 +603,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
       },
     });
 
-    const counts = await this.getSingleCampaignMetrics(campaignId);
+    const counts = await this.getSingleCampaignMetrics(
+      campaignId,
+      campaign.tenantId,
+    );
     return this.toEntityData(campaign, counts);
   }
 
@@ -747,16 +643,16 @@ export class PrismaCampaignRepository implements CampaignRepository {
       await Promise.all([
         prisma.lead.groupBy({
           by: ["status"],
-          where: { campaignId },
+          where: { campaignId, tenantId, isDeleted: false },
           _count: true,
         }),
         prisma.call.groupBy({
           by: ["status"],
-          where: { campaignId },
+          where: { campaignId, tenantId, isDeleted: false },
           _count: true,
         }),
-        this.getSingleCampaignMetrics(campaignId),
-        this.getBatchMetricsMap(batchIds),
+        this.getSingleCampaignMetrics(campaignId, tenantId),
+        this.getBatchMetricsMap(batchIds, tenantId),
       ]);
 
     const mappedBatches = campaign.batches.map((b) => {
