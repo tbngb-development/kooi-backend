@@ -117,6 +117,17 @@ export class MaxActiveCampaignsReachedError extends AppError {
   }
 }
 
+export class SarvamAgentMaxActiveCampaignsError extends AppError {
+  constructor(agentName?: string) {
+    const target = agentName ? `for Sarvam agent "${agentName}"` : "for this Sarvam agent";
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Maximum limit of 5 active running campaigns ${target} has been reached. Please pause an existing running campaign before starting or resuming this one.`,
+      "SARVAM_AGENT_MAX_ACTIVE_CAMPAIGNS_REACHED",
+    );
+  }
+}
+
 export class InvalidCampaignStatusTransitionError extends AppError {
   constructor(from: CampaignStatus, to: CampaignStatus) {
     super(

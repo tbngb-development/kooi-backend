@@ -99,6 +99,28 @@ export class SyncSarvamCampaignLifecycleUseCase {
           effectiveKooiStatus = "COMPLETED";
         }
 
+        if (effectiveKooiStatus === "RUNNING" && campaign.status !== "RUNNING") {
+          try {
+            const activeCount = await this.campaignRepo.countActiveCampaignsForAgent(
+              campaign.sarvamAgentId,
+              campaign.id,
+            );
+            if (activeCount >= 5) {
+              this.log?.warn(
+                "External Sarvam campaign status is active while local running count is at capacity",
+                {
+                  action: "sarvam.campaign_sync.capacity_warning",
+                  campaignId: campaign.id,
+                  sarvamAgentId: campaign.sarvamAgentId,
+                  activeCount,
+                },
+              );
+            }
+          } catch {
+            // Non-blocking check for capacity observability
+          }
+        }
+
         const isTerminal =
           effectiveKooiStatus === "COMPLETED" ||
           effectiveKooiStatus === "CANCELLED";

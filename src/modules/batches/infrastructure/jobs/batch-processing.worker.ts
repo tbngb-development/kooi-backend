@@ -735,6 +735,26 @@ export class BatchProcessingWorker {
       campaignId,
     );
 
+    let hasAvailableSlot = true;
+    if (freshCampaign?.sarvamAgentId && this.campaignRepo.countActiveCampaignsForAgent) {
+      const activeCount = await this.campaignRepo.countActiveCampaignsForAgent(
+        freshCampaign.sarvamAgentId,
+        campaignId,
+      );
+      if (activeCount >= 5) {
+        hasAvailableSlot = false;
+        this.log?.warn(
+          "Sarvam agent active campaign capacity reached (5/5). Campaign execution deferred.",
+          {
+            action: "sarvam.capacity.deferred",
+            campaignId,
+            sarvamAgentId: freshCampaign.sarvamAgentId,
+            activeCount,
+          },
+        );
+      }
+    }
+
     if (cohortStatus === "processing") {
       finalStatus = "PROCESSING";
     } else if (scheduledAt) {
@@ -747,7 +767,7 @@ export class BatchProcessingWorker {
       if (freshCampaign?.status === "RUNNING") {
         finalStatus = "RUNNING";
       } else if (freshCampaign?.status === "DRAFT" && isStartTimeReached) {
-        finalStatus = "RUNNING";
+        finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
       } else if (freshCampaign?.status === "DRAFT" && !isStartTimeReached) {
         finalStatus = "SCHEDULED";
       } else {
@@ -764,7 +784,9 @@ export class BatchProcessingWorker {
         ? new Date()
         : finalStatus === "SCHEDULED" && freshCampaign?.startTimestamp
           ? new Date(freshCampaign.startTimestamp)
-          : null;
+          : finalStatus === "SCHEDULED"
+            ? new Date()
+            : null;
 
     await this.batchRepo.update(batchId, {
       name: finalCheck.name || resolvedBatchName,
@@ -773,7 +795,7 @@ export class BatchProcessingWorker {
       scheduledAt: resolvedScheduledAt,
     });
 
-    // Only transition DRAFT campaigns to RUNNING if runImmediately is true and start time reached;
+    // Only transition DRAFT campaigns to RUNNING if runImmediately is true, start time reached, and slot is available;
     // preserve existing PAUSED, SCHEDULED, and RUNNING campaign states
     if (freshCampaign && freshCampaign.status === "DRAFT") {
       const isStartTimeReached =
@@ -781,7 +803,9 @@ export class BatchProcessingWorker {
         new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
 
       const nextCampaignStatus =
-        runImmediately && isStartTimeReached ? "RUNNING" : "SCHEDULED";
+        runImmediately && isStartTimeReached && hasAvailableSlot
+          ? "RUNNING"
+          : "SCHEDULED";
 
       await this.campaignRepo.updateStatus(campaignId, nextCampaignStatus, {
         ...(nextCampaignStatus === "RUNNING" ? { startedAt: new Date() } : {}),

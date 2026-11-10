@@ -80,6 +80,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileBuffer: Buffer.from("Contact Number\n+919876543210"),
       fileName: "leads.csv",
       termsAccepted: true,
+      termsVersion: "1.0",
     };
 
     await expect(useCase.execute(input)).rejects.toThrow(
@@ -102,6 +103,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileBuffer: Buffer.from("Contact Number\n+919876543210"),
       fileName: "leads.csv",
       termsAccepted: true,
+      termsVersion: "1.0",
     };
 
     await expect(useCase.execute(input)).rejects.toThrow(
@@ -125,6 +127,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileBuffer: Buffer.from("Contact Number\n+919876543210"),
       fileName: "leads.csv",
       termsAccepted: true,
+      termsVersion: "1.0",
     };
 
     await expect(useCase.execute(input)).rejects.toThrow(CampaignExpiredError);
@@ -146,6 +149,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileBuffer: Buffer.from("Contact Number\n+919876543210"),
       fileName: "leads.csv",
       termsAccepted: true,
+      termsVersion: "1.0",
     };
 
     const result = await useCase.execute(input);
@@ -174,6 +178,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileBuffer: Buffer.from("Contact Number\n+919876543210"),
       fileName: "leads.csv",
       termsAccepted: true,
+      termsVersion: "1.0",
     };
 
     const result = await useCase.execute(input);

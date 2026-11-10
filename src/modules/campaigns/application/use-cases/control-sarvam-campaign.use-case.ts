@@ -5,7 +5,10 @@ import type { BatchRepository } from "../../../batches/application/interfaces/ba
 import type { ISarvamCampaignClient } from "../../infrastructure/clients/sarvam-campaign.client";
 import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
-import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
+import {
+  CampaignNotFoundError,
+  SarvamAgentMaxActiveCampaignsError,
+} from "../../domain/errors/campaign.errors";
 import { AppError } from "../../../../shared/errors/app.error";
 import { HttpStatus } from "../../../../shared/constants/http-status";
 import { mapSarvamCampaignStatusToKooi } from "../../domain/rules/sarvam-status-mapper";
@@ -73,6 +76,19 @@ export class ControlSarvamCampaignUseCase {
     const apiKey = this.sarvamEncryptionService.decrypt(
       sarvamAgent.apiKey.apiKeyEncrypted,
     );
+
+    // 3.5 Validate active campaign capacity (max 5 running campaigns per Sarvam agent)
+    if (action === "resume" && campaign.status !== "RUNNING") {
+      const activeCount = this.campaignRepo.countActiveCampaignsForAgent
+        ? await this.campaignRepo.countActiveCampaignsForAgent(
+            campaign.sarvamAgentId,
+            campaign.id,
+          )
+        : 0;
+      if (activeCount >= 5) {
+        throw new SarvamAgentMaxActiveCampaignsError(sarvamAgent.name);
+      }
+    }
 
     // 4. Send action to Sarvam upstream API
     this.log?.info("Dispatching campaign control action to Sarvam", {

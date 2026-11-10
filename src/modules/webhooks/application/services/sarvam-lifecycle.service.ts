@@ -195,25 +195,23 @@ export class SarvamLifecycleService {
     // Filter out unstarted CREATED batches if any exist
     const executedBatches = allBatchStatuses.filter((s) => s !== "CREATED");
     if (executedBatches.length > 0) {
-      // Do not overwrite CANCELLED or already COMPLETED campaigns
-      if (campaignStatus !== "CANCELLED" && campaignStatus !== "COMPLETED") {
-        const allBatchesFailed = executedBatches.every((s) => s === "FAILED");
-        const finalCampaignStatus: CampaignStatus = allBatchesFailed
-          ? "FAILED"
-          : "COMPLETED";
+      // Note: CANCELLED, COMPLETED, and expired campaigns are already returned early above
+      const allBatchesFailed = executedBatches.every((s) => s === "FAILED");
+      const finalCampaignStatus: CampaignStatus = allBatchesFailed
+        ? "FAILED"
+        : "COMPLETED";
 
-        await this.repo.updateCampaignStatus(
-          campaignId,
-          finalCampaignStatus,
-          new Date(),
-        );
+      await this.repo.updateCampaignStatus(
+        campaignId,
+        finalCampaignStatus,
+        new Date(),
+      );
 
-        this.logger?.info("Sarvam campaign marked as finished", {
-          action: "sarvam_lifecycle.campaign_finished",
-          campaignId,
-          finalCampaignStatus,
-        });
-      }
+      this.logger?.info("Sarvam campaign marked as finished", {
+        action: "sarvam_lifecycle.campaign_finished",
+        campaignId,
+        finalCampaignStatus,
+      });
 
       try {
         await this.repo.recalculateCampaignStats(campaignId);

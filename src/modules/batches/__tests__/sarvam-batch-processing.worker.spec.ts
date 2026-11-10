@@ -115,6 +115,7 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
         overrides: [],
       } as any),
       updateStatus: vi.fn().mockResolvedValue({} as any),
+      countActiveCampaignsForAgent: vi.fn().mockResolvedValue(0),
     } as unknown as CampaignRepository;
 
     mockPlanRepo = {
@@ -716,6 +717,65 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
         status: "CREATED",
         scheduledAt: null,
       }),
+    );
+  });
+
+  it("defers DRAFT campaign activation to SCHEDULED when Sarvam agent capacity is full (5/5)", async () => {
+    const csvContent =
+      "Contact Number,Customer Name,account_number\n+919876543210,Aarav Sharma,ACC-101";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    (mockCampaignRepo.findByIdWithRelations as any).mockResolvedValue({
+      id: campaignId,
+      tenantId,
+      name: "Sarvam Q1 Campaign",
+      provider: "SARVAM",
+      status: "DRAFT",
+      sarvamAgentId,
+      sarvamCampaignId,
+      startTimestamp: null,
+      endTimestamp: null,
+      variables: {},
+    } as any);
+
+    // Agent has 5 active running campaigns
+    (mockCampaignRepo.countActiveCampaignsForAgent as any).mockResolvedValue(5);
+
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        runImmediately: true,
+        scheduledAt: null,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    // Batch must be SCHEDULED, not RUNNING
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({
+        status: "SCHEDULED",
+        scheduledAt: expect.any(Date),
+      }),
+    );
+
+    // Campaign must transition to SCHEDULED, NOT RUNNING
+    expect(mockCampaignRepo.updateStatus).toHaveBeenCalledWith(
+      campaignId,
+      "SCHEDULED",
+      {},
     );
   });
 

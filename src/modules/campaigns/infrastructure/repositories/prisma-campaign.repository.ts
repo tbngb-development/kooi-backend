@@ -588,6 +588,20 @@ export class PrismaCampaignRepository implements CampaignRepository {
     }));
   }
 
+  async countActiveCampaignsForAgent(
+    sarvamAgentId: string,
+    excludeCampaignId?: string,
+  ): Promise<number> {
+    return await prisma.campaign.count({
+      where: {
+        sarvamAgentId,
+        status: "RUNNING",
+        isDeleted: false,
+        ...(excludeCampaignId ? { id: { not: excludeCampaignId } } : {}),
+      },
+    });
+  }
+
   async updateSarvamStatus(
     campaignId: string,
     sarvamStatus: string,
