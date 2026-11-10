@@ -7,6 +7,8 @@ import type { CreateBatchInput } from "../dto/batch.dto";
 import {
   CampaignNotFoundError,
   CampaignFailedError,
+  CampaignNotEligibleForUploadError,
+  CampaignExpiredError,
   MaxActiveCampaignsReachedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
 import {
@@ -51,6 +53,17 @@ export class EnqueueBatchUploadUseCase {
     if (campaign.provider === "SARVAM") {
       if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
         throw new CampaignNotFoundError();
+      }
+      if (campaign.status === "COMPLETED" || campaign.status === "CANCELLED") {
+        throw new CampaignNotEligibleForUploadError(campaign.status);
+      }
+      if (
+        campaign.endTimestamp &&
+        new Date(campaign.endTimestamp).getTime() <= Date.now()
+      ) {
+        throw new CampaignExpiredError(
+          "This campaign has reached its end time and cannot accept new lead uploads. Please create a new campaign.",
+        );
       }
     } else {
       if (!campaign.assistant) throw new CampaignNotFoundError();

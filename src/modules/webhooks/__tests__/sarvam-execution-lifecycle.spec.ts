@@ -218,7 +218,41 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
       }),
 
       getBatchWithRetryConfig: vi.fn().mockImplementation(async (bId: string) => {
-        return batchStore.get(bId) ?? null;
+        const batch = batchStore.get(bId);
+        if (!batch) return null;
+        const camp = campaignStore.get(batch.campaignId);
+        return {
+          ...batch,
+          campaign: camp
+            ? {
+                status: camp.status,
+                endTimestamp: (camp as any).endTimestamp ?? null,
+              }
+            : null,
+        };
+      }),
+
+      markPendingLeadsAsStopped: vi
+        .fn()
+        .mockImplementation(async (bId: string) => {
+          let count = 0;
+          for (const [id, lead] of leadStore.entries()) {
+            if (lead.batchId === bId && lead.status === "PENDING") {
+              leadStore.set(id, { ...lead, status: "STOPPED" });
+              count++;
+            }
+          }
+          return count;
+        }),
+
+      countStoppedLeadsInBatch: vi.fn().mockImplementation(async (bId: string) => {
+        let count = 0;
+        for (const lead of leadStore.values()) {
+          if (lead.batchId === bId && lead.status === "STOPPED") {
+            count++;
+          }
+        }
+        return count;
       }),
 
       getCallsInBatch: vi.fn().mockImplementation(async (bId: string) => {
@@ -605,6 +639,163 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
 
       // Recalculate stats must have been called
       expect(mockRepo.recalculateCampaignStats).toHaveBeenCalledWith(campaignId);
+    });
+
+    it("does not reactivate PAUSED campaign to RUNNING when webhook arrives on in-flight call", async () => {
+      // Parent campaign was paused by user
+      campaignStore.set(campaignId, {
+        id: campaignId,
+        status: "PAUSED",
+      });
+
+      // An in-flight call completes
+      leadStore.set(leadId, { id: leadId, status: "CALLING", batchId: batch1Id });
+
+      const payload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-paused-camp-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        completion_status: "completed",
+        connectivity_status: "connected",
+        retry_attempt: 0,
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(payload);
+
+      // Campaign must REMAIN PAUSED, not flipped back to RUNNING
+      expect(campaignStore.get(campaignId)?.status).toBe("PAUSED");
+    });
+
+    it("marks batch as STOPPED (not COMPLETED) when call finishes on expired campaign with uncalled leads remaining", async () => {
+      // Campaign has expired
+      campaignStore.set(campaignId, {
+        id: campaignId,
+        status: "COMPLETED",
+        endTimestamp: new Date(Date.now() - 3600000), // 1 hour ago
+      } as any);
+
+      // Batch 1 has an uncalled lead remaining in PENDING
+      const pendingLeadId = "lead-uncalled-pending";
+      leadStore.set(pendingLeadId, {
+        id: pendingLeadId,
+        status: "PENDING",
+        batchId: batch1Id,
+      });
+
+      // Current call finishes
+      leadStore.set(leadId, { id: leadId, status: "CALLING", batchId: batch1Id });
+
+      const payload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-expired-camp-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        completion_status: "completed",
+        connectivity_status: "connected",
+        retry_attempt: 0,
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(payload);
+
+      // Batch must be STOPPED because it has uncalled leads on an expired campaign
+      expect(batchStore.get(batch1Id)?.status).toBe("STOPPED");
+      // Pending lead must have been marked STOPPED
+      expect(leadStore.get(pendingLeadId)?.status).toBe("STOPPED");
+      // Campaign remains COMPLETED
+      expect(campaignStore.get(campaignId)?.status).toBe("COMPLETED");
+    });
+
+    it("does not overwrite CANCELLED campaign status when late webhook arrives", async () => {
+      // Campaign was cancelled
+      campaignStore.set(campaignId, {
+        id: campaignId,
+        status: "CANCELLED",
+      });
+
+      // Last call finishes
+      leadStore.set(leadId, { id: leadId, status: "CALLING", batchId: batch1Id });
+
+      const payload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-cancelled-camp-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        completion_status: "completed",
+        connectivity_status: "connected",
+        retry_attempt: 0,
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(payload);
+
+      // Campaign must NOT be overwritten with COMPLETED
+      expect(campaignStore.get(campaignId)?.status).toBe("CANCELLED");
+    });
+
+    it("in-flight call completes on a previously STOPPED batch without flipping the batch to COMPLETED", async () => {
+      // Campaign has expired and is COMPLETED
+      campaignStore.set(campaignId, {
+        id: campaignId,
+        status: "COMPLETED",
+        endTimestamp: new Date(Date.now() - 3600000),
+      } as any);
+
+      // Batch is already STOPPED with completedAt set
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "STOPPED",
+        retryConfig: null,
+        campaignId,
+        completedAt: new Date(Date.now() - 1800000),
+      });
+
+      // Lead 2 was previously stopped uncalled
+      const stoppedLeadId = "lead-stopped-uncalled";
+      leadStore.set(stoppedLeadId, {
+        id: stoppedLeadId,
+        status: "STOPPED",
+        batchId: batch1Id,
+      });
+
+      // Lead 1 is the last in-flight call completing
+      leadStore.set(leadId, { id: leadId, status: "CALLING", batchId: batch1Id });
+
+      const payload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-inflight-last-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        completion_status: "completed",
+        connectivity_status: "connected",
+        retry_attempt: 0,
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(payload);
+
+      // Batch status must REMAIN STOPPED, NOT flipped to COMPLETED!
+      expect(batchStore.get(batch1Id)?.status).toBe("STOPPED");
+      // Campaign must REMAIN COMPLETED
+      expect(campaignStore.get(campaignId)?.status).toBe("COMPLETED");
     });
   });
 });

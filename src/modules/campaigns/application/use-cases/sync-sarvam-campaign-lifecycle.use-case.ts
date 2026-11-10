@@ -38,57 +38,143 @@ export class SyncSarvamCampaignLifecycleUseCase {
 
     for (const campaign of activeCampaigns) {
       try {
+        const isExpired = Boolean(
+          campaign.endTimestamp &&
+            new Date().getTime() >= new Date(campaign.endTimestamp).getTime(),
+        );
+
+        let remoteStatus = campaign.sarvamStatus ?? "active";
+        let mappedStatus = campaign.status;
+
         const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
           campaign.tenantId,
           campaign.sarvamAgentId,
         );
 
-        if (!sarvamAgent || !sarvamAgent.apiKey) {
-          this.log?.warn("Skipping Sarvam campaign sync: missing agent or API key credentials", {
-            action: "sarvam.campaign_sync.missing_credentials",
-            campaignId: campaign.id,
-            sarvamCampaignId: campaign.sarvamCampaignId,
-            sarvamAgentId: campaign.sarvamAgentId,
-          });
+        if (sarvamAgent && sarvamAgent.apiKey) {
+          try {
+            const apiKey = this.sarvamEncryptionService.decrypt(
+              sarvamAgent.apiKey.apiKeyEncrypted,
+            );
+
+            const remoteCampaign = await this.sarvamCampaignClient.getCampaign(
+              sarvamAgent.apiKey.organizationId,
+              sarvamAgent.apiKey.workspaceId,
+              campaign.sarvamCampaignId,
+              apiKey,
+            );
+
+            remoteStatus = remoteCampaign.status;
+            mappedStatus = mapSarvamCampaignStatusToKooi(remoteStatus);
+          } catch (fetchErr) {
+            if (!isExpired) {
+              throw fetchErr;
+            }
+            this.log?.warn(
+              "Failed to fetch remote Sarvam status for expired campaign; proceeding with local expiration",
+              {
+                campaignId: campaign.id,
+                error:
+                  fetchErr instanceof Error
+                    ? fetchErr.message
+                    : String(fetchErr),
+              },
+            );
+          }
+        } else if (!isExpired) {
+          this.log?.warn(
+            "Skipping Sarvam campaign sync: missing agent or API key credentials",
+            {
+              action: "sarvam.campaign_sync.missing_credentials",
+              campaignId: campaign.id,
+              sarvamCampaignId: campaign.sarvamCampaignId,
+              sarvamAgentId: campaign.sarvamAgentId,
+            },
+          );
           continue;
         }
 
-        const apiKey = this.sarvamEncryptionService.decrypt(
-          sarvamAgent.apiKey.apiKeyEncrypted,
-        );
+        let effectiveKooiStatus = mappedStatus;
+        if (isExpired && effectiveKooiStatus !== "CANCELLED") {
+          effectiveKooiStatus = "COMPLETED";
+        }
 
-        const remoteCampaign = await this.sarvamCampaignClient.getCampaign(
-          sarvamAgent.apiKey.organizationId,
-          sarvamAgent.apiKey.workspaceId,
-          campaign.sarvamCampaignId,
-          apiKey,
-        );
-
-        const remoteStatus = remoteCampaign.status;
-        const mappedStatus = mapSarvamCampaignStatusToKooi(remoteStatus);
+        const isTerminal =
+          effectiveKooiStatus === "COMPLETED" ||
+          effectiveKooiStatus === "CANCELLED";
 
         const statusChanged =
-          remoteStatus !== campaign.sarvamStatus || mappedStatus !== campaign.status;
+          remoteStatus !== campaign.sarvamStatus ||
+          effectiveKooiStatus !== campaign.status;
 
-        if (statusChanged) {
-          const isTerminal = mappedStatus === "COMPLETED" || mappedStatus === "CANCELLED";
+        if (statusChanged || (isExpired && campaign.status !== "COMPLETED")) {
           const extra = isTerminal ? { completedAt: new Date() } : undefined;
 
           await this.campaignRepo.updateSarvamStatus(
             campaign.id,
             remoteStatus,
-            mappedStatus,
+            effectiveKooiStatus,
             extra,
           );
 
           if (isTerminal) {
             try {
+              const batches =
+                (await this.batchRepo.list?.(
+                  campaign.tenantId,
+                  campaign.id,
+                  false,
+                )) ?? [];
+              const activeStatuses = [
+                "RUNNING",
+                "SCHEDULED",
+                "PROCESSING",
+                "CREATED",
+              ];
+              const unfinishedBatches = batches.filter((b) =>
+                activeStatuses.includes(b.status),
+              );
+
+              for (const batch of unfinishedBatches) {
+                try {
+                  await this.batchRepo.markPendingLeadsAsStopped?.(
+                    batch.id,
+                    "MANUAL",
+                  );
+                } catch (leadErr) {
+                  this.log?.warn(
+                    "Failed to mark pending leads as stopped during campaign termination",
+                    {
+                      batchId: batch.id,
+                      campaignId: campaign.id,
+                      error:
+                        leadErr instanceof Error
+                          ? leadErr.message
+                          : String(leadErr),
+                    },
+                  );
+                }
+              }
+
+              if (unfinishedBatches.length > 0) {
+                await this.batchRepo.cascadeStatusFromCampaign?.(
+                  campaign.id,
+                  "STOPPED",
+                );
+              }
+
               await this.batchRepo.recalculateCampaignStats(campaign.id);
             } catch (statsErr) {
-              this.log?.warn("Failed to recalculate campaign stats on status completion", {
-                campaignId: campaign.id,
-                error: statsErr instanceof Error ? statsErr.message : String(statsErr),
-              });
+              this.log?.warn(
+                "Failed to reconcile batches or recalculate campaign stats on status completion",
+                {
+                  campaignId: campaign.id,
+                  error:
+                    statsErr instanceof Error
+                      ? statsErr.message
+                      : String(statsErr),
+                },
+              );
             }
           }
 
@@ -100,7 +186,8 @@ export class SyncSarvamCampaignLifecycleUseCase {
             previousSarvamStatus: campaign.sarvamStatus,
             newSarvamStatus: remoteStatus,
             previousKooiStatus: campaign.status,
-            newKooiStatus: mappedStatus,
+            newKooiStatus: effectiveKooiStatus,
+            isExpired,
           });
         }
       } catch (err) {

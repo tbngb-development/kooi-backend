@@ -564,7 +564,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         provider: "SARVAM",
         sarvamCampaignId: { not: null },
         sarvamAgentId: { not: null },
-        status: { in: ["SCHEDULED", "RUNNING", "PAUSED"] },
+        status: { in: ["DRAFT", "SCHEDULED", "RUNNING", "PAUSED"] },
       },
       select: {
         id: true,
@@ -573,6 +573,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
         sarvamAgentId: true,
         status: true,
         sarvamStatus: true,
+        endTimestamp: true,
       },
     });
 
@@ -583,6 +584,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
       sarvamAgentId: c.sarvamAgentId as string,
       status: c.status,
       sarvamStatus: c.sarvamStatus,
+      endTimestamp: c.endTimestamp ?? null,
     }));
   }
 

@@ -103,6 +103,7 @@ export interface ActiveSarvamCampaignRecord {
   sarvamAgentId: string;
   status: CampaignStatus;
   sarvamStatus: string | null;
+  endTimestamp?: Date | null;
 }
 
 export interface AssistantWithAgentData {

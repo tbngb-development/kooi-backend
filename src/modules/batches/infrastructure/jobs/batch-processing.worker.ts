@@ -608,18 +608,61 @@ export class BatchProcessingWorker {
     );
     const resolvedBatchName = existingBatch.name || `Batch-${sequenceNumber}`;
 
+    // Re-fetch campaign state immediately before Sarvam upload
+    const campaignBeforeUpload = await this.campaignRepo.findByIdWithRelations(
+      tenantId,
+      campaignId,
+    );
+    if (!campaignBeforeUpload || campaignBeforeUpload.isDeleted) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Campaign was deleted before cohort upload.",
+      );
+      return;
+    }
+
+    const isCampaignExpired = Boolean(
+      campaignBeforeUpload.endTimestamp &&
+        new Date(campaignBeforeUpload.endTimestamp).getTime() <= Date.now(),
+    );
+    const isCampaignTerminal =
+      campaignBeforeUpload.status === "COMPLETED" ||
+      campaignBeforeUpload.status === "CANCELLED";
+
+    if (isCampaignExpired || isCampaignTerminal) {
+      this.log?.warn(
+        "Aborting Sarvam cohort upload: campaign expired or reached terminal state",
+        {
+          action: "batch.worker.sarvam_upload_aborted",
+          batchId,
+          campaignId,
+          status: campaignBeforeUpload.status,
+          isCampaignExpired,
+        },
+      );
+
+      await this.batchRepo.markPendingLeadsAsStopped(batchId, "MANUAL");
+      await this.batchRepo.update(batchId, {
+        name: existingBatch.name || resolvedBatchName,
+        status: "STOPPED",
+      });
+      await this.batchRepo.recalculateCampaignStats(campaignId);
+      return;
+    }
+
     this.log?.info("Uploading cohort to Sarvam AI", {
       action: "batch.worker.sarvam_upload",
       batchId,
       campaignId,
-      sarvamCampaignId: campaign.sarvamCampaignId,
+      sarvamCampaignId: campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId,
       totalLeads: transformResult.totalLeads,
     });
 
     const uploadResponse = await this.sarvamCohortClient.uploadCohort({
       organizationId: sarvamAgent.apiKey.organizationId,
       workspaceId: sarvamAgent.apiKey.workspaceId,
-      campaignId: campaign.sarvamCampaignId,
+      campaignId: (campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId) as string,
       apiKey: decryptedApiKey,
       name: resolvedBatchName.slice(0, 50),
       cohortFile: transformResult.transformedCsvBuffer,
@@ -646,7 +689,7 @@ export class BatchProcessingWorker {
         const statusCheck = await this.sarvamCohortClient.getCohort({
           organizationId: sarvamAgent.apiKey.organizationId,
           workspaceId: sarvamAgent.apiKey.workspaceId,
-          campaignId: campaign.sarvamCampaignId,
+          campaignId: (campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId) as string,
           cohortId: sarvamCohortId,
           apiKey: decryptedApiKey,
         });
@@ -662,23 +705,6 @@ export class BatchProcessingWorker {
 
     await this.batchRepo.updateProgress(batchId, "FINALIZING", 90);
 
-    // eslint-disable-next-line no-useless-assignment
-    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" =
-      "SCHEDULED";
-
-    if (cohortStatus === "failed") {
-      await this.failBatch(
-        batchId,
-        campaignId,
-        "Sarvam cohort processing failed at voice provider.",
-      );
-      return;
-    } else if (cohortStatus === "processing") {
-      finalStatus = "PROCESSING";
-    } else {
-      finalStatus = runImmediately ? "RUNNING" : "SCHEDULED";
-    }
-
     const finalCheck = await this.batchRepo.findById(
       tenantId,
       campaignId,
@@ -691,11 +717,54 @@ export class BatchProcessingWorker {
       return;
     }
 
+    if (cohortStatus === "failed") {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Sarvam cohort processing failed at voice provider.",
+      );
+      return;
+    }
+
+    // Determine batch status and execution time accurately
+    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" =
+      "CREATED";
+
+    const freshCampaign = await this.campaignRepo.findByIdWithRelations(
+      tenantId,
+      campaignId,
+    );
+
+    if (cohortStatus === "processing") {
+      finalStatus = "PROCESSING";
+    } else if (scheduledAt) {
+      finalStatus = "SCHEDULED";
+    } else if (runImmediately) {
+      const isStartTimeReached =
+        !freshCampaign?.startTimestamp ||
+        new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
+
+      if (freshCampaign?.status === "RUNNING") {
+        finalStatus = "RUNNING";
+      } else if (freshCampaign?.status === "DRAFT" && isStartTimeReached) {
+        finalStatus = "RUNNING";
+      } else if (freshCampaign?.status === "DRAFT" && !isStartTimeReached) {
+        finalStatus = "SCHEDULED";
+      } else {
+        // Campaign is PAUSED or SCHEDULED
+        finalStatus = "CREATED";
+      }
+    } else {
+      finalStatus = "CREATED";
+    }
+
     const resolvedScheduledAt = scheduledAt
       ? new Date(scheduledAt)
-      : runImmediately
+      : finalStatus === "RUNNING"
         ? new Date()
-        : null;
+        : finalStatus === "SCHEDULED" && freshCampaign?.startTimestamp
+          ? new Date(freshCampaign.startTimestamp)
+          : null;
 
     await this.batchRepo.update(batchId, {
       name: finalCheck.name || resolvedBatchName,
@@ -704,7 +773,20 @@ export class BatchProcessingWorker {
       scheduledAt: resolvedScheduledAt,
     });
 
-    await this.campaignRepo.updateStatus(campaignId, "RUNNING");
+    // Only transition DRAFT campaigns to RUNNING if runImmediately is true and start time reached;
+    // preserve existing PAUSED, SCHEDULED, and RUNNING campaign states
+    if (freshCampaign && freshCampaign.status === "DRAFT") {
+      const isStartTimeReached =
+        !freshCampaign.startTimestamp ||
+        new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
+
+      const nextCampaignStatus =
+        runImmediately && isStartTimeReached ? "RUNNING" : "SCHEDULED";
+
+      await this.campaignRepo.updateStatus(campaignId, nextCampaignStatus, {
+        ...(nextCampaignStatus === "RUNNING" ? { startedAt: new Date() } : {}),
+      });
+    }
 
     await this.batchRepo.recalculateCampaignStats(campaignId);
 

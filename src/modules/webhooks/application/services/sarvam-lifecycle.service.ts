@@ -38,14 +38,28 @@ export class SarvamLifecycleService {
       return;
     }
 
+    const campaignStatus = batch.campaign?.status;
+    const isCampaignExpired = Boolean(
+      batch.campaign?.endTimestamp &&
+        new Date().getTime() >= new Date(batch.campaign.endTimestamp).getTime(),
+    );
+    const isCampaignTerminalOrPaused =
+      campaignStatus === "PAUSED" ||
+      campaignStatus === "COMPLETED" ||
+      campaignStatus === "CANCELLED" ||
+      isCampaignExpired;
+
     // 2. Ensure in-progress state if batch is CREATED, SCHEDULED, or PROCESSING
+    // Do NOT reactivate paused, completed, cancelled, or expired campaigns!
     if (
       batch.status === "CREATED" ||
       batch.status === "SCHEDULED" ||
       batch.status === "PROCESSING"
     ) {
-      await this.repo.updateBatchStatus(batchId, "RUNNING");
-      await this.repo.updateCampaignStatus(campaignId, "RUNNING");
+      if (!isCampaignTerminalOrPaused) {
+        await this.repo.updateBatchStatus(batchId, "RUNNING");
+        await this.repo.updateCampaignStatus(campaignId, "RUNNING");
+      }
     }
 
     // 3. Inspect active work in the batch
@@ -55,14 +69,96 @@ export class SarvamLifecycleService {
       this.repo.getCallsInBatch(batchId),
     ]);
 
-    // Check if any call has pending retries remaining
-    const pendingRetries = this.hasPendingRetries(
-      batch.retryConfig,
-      callsInBatch,
-    );
+    // Check if any call has pending retries remaining (only if campaign is not expired)
+    const pendingRetries =
+      !isCampaignExpired &&
+      this.hasPendingRetries(batch.retryConfig, callsInBatch);
 
-    // If there is still active work or pending retries, batch remains RUNNING
-    if (activeLeads > 0 || activeCalls > 0 || pendingRetries) {
+    // If calls are still active in telephony, allow them to finish
+    if (activeCalls > 0) {
+      return;
+    }
+
+    // If campaign is expired or completed/cancelled, or if batch was already STOPPED, and all active calls are done:
+    const isCampaignTerminalOrExpired =
+      isCampaignExpired ||
+      campaignStatus === "COMPLETED" ||
+      campaignStatus === "CANCELLED";
+
+    if (isCampaignTerminalOrExpired || batch.status === "STOPPED") {
+      // Check if any leads in this batch are in STOPPED state
+      const stoppedLeadsCount =
+        typeof this.repo.countStoppedLeadsInBatch === "function"
+          ? await this.repo.countStoppedLeadsInBatch(batchId)
+          : 0;
+
+      const hasUnfinishedWork =
+        activeLeads > 0 ||
+        pendingRetries ||
+        stoppedLeadsCount > 0 ||
+        batch.status === "STOPPED";
+
+      if (hasUnfinishedWork) {
+        if (
+          activeLeads > 0 &&
+          typeof this.repo.markPendingLeadsAsStopped === "function"
+        ) {
+          try {
+            await this.repo.markPendingLeadsAsStopped(batchId, "MANUAL");
+          } catch (stopErr) {
+            this.logger?.warn("Failed to mark pending leads as stopped", {
+              action: "sarvam_lifecycle.mark_leads_stopped_error",
+              batchId,
+              error:
+                stopErr instanceof Error ? stopErr.message : String(stopErr),
+            });
+          }
+        }
+        // Batch has uncalled or stopped leads: keep/set status to STOPPED (never COMPLETED)
+        if (batch.status !== "STOPPED") {
+          await this.repo.updateBatchStatus(batchId, "STOPPED", new Date());
+          this.logger?.info(
+            "Sarvam batch marked as STOPPED due to campaign expiration/termination with unfinished leads",
+            {
+              action: "sarvam_lifecycle.batch_stopped",
+              batchId,
+              activeLeads,
+              stoppedLeadsCount,
+            },
+          );
+        }
+      } else {
+        // 100% of leads were genuinely dialed without any stopped leads
+        const totalCalls = callsInBatch.length;
+        const allFailed =
+          totalCalls > 0 && callsInBatch.every((c) => c.status === "FAILED");
+        const finalBatchStatus: BatchStatus = allFailed ? "FAILED" : "COMPLETED";
+
+        await this.repo.updateBatchStatus(batchId, finalBatchStatus, new Date());
+        this.logger?.info("Sarvam batch marked as finished", {
+          action: "sarvam_lifecycle.batch_finished",
+          batchId,
+          finalBatchStatus,
+          totalCalls,
+        });
+      }
+
+      // Reconcile stats without overwriting terminal or paused campaign status
+      try {
+        await this.repo.recalculateCampaignStats(campaignId);
+      } catch (statsErr) {
+        this.logger?.warn("Failed to recalculate campaign stats", {
+          action: "sarvam_lifecycle.stats_recalc_error",
+          campaignId,
+          error:
+            statsErr instanceof Error ? statsErr.message : String(statsErr),
+        });
+      }
+      return;
+    }
+
+    // If campaign is still active and there is active work or pending retries, batch remains RUNNING
+    if (activeLeads > 0 || pendingRetries) {
       return;
     }
 
@@ -99,16 +195,25 @@ export class SarvamLifecycleService {
     // Filter out unstarted CREATED batches if any exist
     const executedBatches = allBatchStatuses.filter((s) => s !== "CREATED");
     if (executedBatches.length > 0) {
-      const allBatchesFailed = executedBatches.every((s) => s === "FAILED");
-      const finalCampaignStatus: CampaignStatus = allBatchesFailed
-        ? "FAILED"
-        : "COMPLETED";
+      // Do not overwrite CANCELLED or already COMPLETED campaigns
+      if (campaignStatus !== "CANCELLED" && campaignStatus !== "COMPLETED") {
+        const allBatchesFailed = executedBatches.every((s) => s === "FAILED");
+        const finalCampaignStatus: CampaignStatus = allBatchesFailed
+          ? "FAILED"
+          : "COMPLETED";
 
-      await this.repo.updateCampaignStatus(
-        campaignId,
-        finalCampaignStatus,
-        new Date(),
-      );
+        await this.repo.updateCampaignStatus(
+          campaignId,
+          finalCampaignStatus,
+          new Date(),
+        );
+
+        this.logger?.info("Sarvam campaign marked as finished", {
+          action: "sarvam_lifecycle.campaign_finished",
+          campaignId,
+          finalCampaignStatus,
+        });
+      }
 
       try {
         await this.repo.recalculateCampaignStats(campaignId);
@@ -116,15 +221,10 @@ export class SarvamLifecycleService {
         this.logger?.warn("Failed to recalculate campaign stats", {
           action: "sarvam_lifecycle.stats_recalc_error",
           campaignId,
-          error: statsErr instanceof Error ? statsErr.message : String(statsErr),
+          error:
+            statsErr instanceof Error ? statsErr.message : String(statsErr),
         });
       }
-
-      this.logger?.info("Sarvam campaign marked as finished", {
-        action: "sarvam_lifecycle.campaign_finished",
-        campaignId,
-        finalCampaignStatus,
-      });
     }
   }
 

@@ -1,5 +1,5 @@
 import prisma from "../../../../shared/config/database/prisma";
-import type { Prisma, PrismaClient, CallStatus, LeadStatus, BatchStatus, CampaignStatus } from "@prisma/client";
+import type { Prisma, PrismaClient, CallStatus, LeadStatus, BatchStatus, CampaignStatus, LeadStopReason } from "@prisma/client";
 import type {
   ISarvamWebhookRepository,
   AggregateCallCandidate,
@@ -309,7 +309,16 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
 
   async getBatchWithRetryConfig(
     batchId: string,
-  ): Promise<{ id: string; status: BatchStatus; retryConfig: unknown; campaignId: string } | null> {
+  ): Promise<{
+    id: string;
+    status: BatchStatus;
+    retryConfig: unknown;
+    campaignId: string;
+    campaign?: {
+      status: CampaignStatus;
+      endTimestamp: Date | null;
+    } | null;
+  } | null> {
     const batch = await this.client.leadBatch.findUnique({
       where: { id: batchId },
       select: {
@@ -317,9 +326,35 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
         status: true,
         retryConfig: true,
         campaignId: true,
+        campaign: {
+          select: {
+            status: true,
+            endTimestamp: true,
+          },
+        },
       },
     });
     return batch;
+  }
+
+  async markPendingLeadsAsStopped(
+    batchId: string,
+    reason: LeadStopReason = "MANUAL",
+  ): Promise<number> {
+    const result = await this.client.lead.updateMany({
+      where: { batchId, status: "PENDING" },
+      data: { status: "STOPPED", stoppedReason: reason },
+    });
+    return result.count;
+  }
+
+  async countStoppedLeadsInBatch(batchId: string): Promise<number> {
+    return this.client.lead.count({
+      where: {
+        batchId,
+        status: "STOPPED",
+      },
+    });
   }
 
   async getCallsInBatch(

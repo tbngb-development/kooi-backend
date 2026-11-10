@@ -85,6 +85,28 @@ export class CampaignFailedError extends AppError {
   }
 }
 
+export class CampaignNotEligibleForUploadError extends AppError {
+  constructor(status: CampaignStatus) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Cannot upload batches to a ${status.toLowerCase()} campaign.`,
+      "CAMPAIGN_NOT_ELIGIBLE_FOR_UPLOAD",
+    );
+  }
+}
+
+export class CampaignExpiredError extends AppError {
+  constructor(
+    message: string = "This campaign has reached its end time and cannot accept new lead uploads. Please create a new campaign.",
+  ) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      message,
+      "CAMPAIGN_EXPIRED",
+    );
+  }
+}
+
 export class MaxActiveCampaignsReachedError extends AppError {
   constructor(maxAllowed: number) {
     super(

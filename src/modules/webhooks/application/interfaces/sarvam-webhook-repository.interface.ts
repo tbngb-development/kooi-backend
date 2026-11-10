@@ -1,4 +1,4 @@
-import type { BatchStatus, CampaignStatus, CallStatus, LeadStatus, VoiceProvider } from "@prisma/client";
+import type { BatchStatus, CampaignStatus, CallStatus, LeadStatus, LeadStopReason, VoiceProvider } from "@prisma/client";
 import type { RecordingRetrievalStatus } from "../../../calls/domain/errors/sarvam-recording.errors";
 
 export interface AggregateCallCandidate {
@@ -155,7 +155,23 @@ export interface ISarvamWebhookRepository {
 
   getBatchWithRetryConfig(
     batchId: string,
-  ): Promise<{ id: string; status: BatchStatus; retryConfig: unknown; campaignId: string } | null>;
+  ): Promise<{
+    id: string;
+    status: BatchStatus;
+    retryConfig: unknown;
+    campaignId: string;
+    campaign?: {
+      status: CampaignStatus;
+      endTimestamp: Date | null;
+    } | null;
+  } | null>;
+
+  markPendingLeadsAsStopped?(
+    batchId: string,
+    reason: LeadStopReason,
+  ): Promise<number>;
+
+  countStoppedLeadsInBatch?(batchId: string): Promise<number>;
 
   getCallsInBatch(
     batchId: string,
