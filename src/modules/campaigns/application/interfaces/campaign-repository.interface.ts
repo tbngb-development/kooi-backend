@@ -213,6 +213,11 @@ export interface CampaignRepository {
 
   findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]>;
 
+  findActiveSarvamCampaignsForAgent(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<CampaignEntityData[]>;
+
   countActiveCampaignsForAgent(
     sarvamAgentId: string,
     excludeCampaignId?: string,

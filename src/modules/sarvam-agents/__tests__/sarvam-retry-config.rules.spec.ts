@@ -3,6 +3,7 @@ import {
   validateSarvamRetryConfig,
   buildDisabledSarvamRetryConfig,
   resolveSarvamCampaignRetry,
+  sanitizeSarvamRetryConfigForProvider,
   VALID_SARVAM_RETRY_CONDITIONS,
 } from "../domain/rules/sarvam-retry-config.rules";
 import { ValidationError } from "../../../shared/errors/validation.error";
@@ -198,16 +199,64 @@ describe("Sarvam Retry Config Domain Rules", () => {
   });
 
   describe("buildDisabledSarvamRetryConfig", () => {
-    it("returns completely disabled retry configuration", () => {
+    it("returns completely disabled retry configuration without null retry_interval_minutes", () => {
       const disabled = buildDisabledSarvamRetryConfig();
       expect(disabled.max_retries).toBe(0);
-      expect(disabled.retry_interval_minutes).toBeNull();
+      expect(disabled.retry_interval_minutes).toBeUndefined();
       expect(disabled.retry_on?.busy?.enabled).toBe(false);
       expect(disabled.retry_on?.failed?.enabled).toBe(false);
       expect(disabled.retry_on?.no_answer?.enabled).toBe(false);
       expect(disabled.retry_on?.short_duration?.enabled).toBe(false);
       expect(disabled.retry_on?.provider_error?.enabled).toBe(false);
       expect(disabled.retry_on?.internal_error?.enabled).toBe(false);
+    });
+  });
+
+  describe("sanitizeSarvamRetryConfigForProvider", () => {
+    it("omits retry_interval_minutes when null, undefined, empty array, or non-positive", () => {
+      const sanitizedNull = sanitizeSarvamRetryConfigForProvider({
+        max_retries: 2,
+        retry_interval_minutes: null,
+      });
+      expect(sanitizedNull.max_retries).toBe(2);
+      expect(sanitizedNull).not.toHaveProperty("retry_interval_minutes");
+
+      const sanitizedEmptyArray = sanitizeSarvamRetryConfigForProvider({
+        max_retries: 2,
+        retry_interval_minutes: [],
+      });
+      expect(sanitizedEmptyArray).not.toHaveProperty("retry_interval_minutes");
+
+      const sanitizedDisabled = sanitizeSarvamRetryConfigForProvider(
+        buildDisabledSarvamRetryConfig(),
+      );
+      expect(sanitizedDisabled).not.toHaveProperty("retry_interval_minutes");
+    });
+
+    it("preserves valid scalar and array retry_interval_minutes", () => {
+      const sanitizedScalar = sanitizeSarvamRetryConfigForProvider({
+        max_retries: 3,
+        retry_interval_minutes: 15,
+      });
+      expect(sanitizedScalar.retry_interval_minutes).toBe(15);
+
+      const sanitizedArray = sanitizeSarvamRetryConfigForProvider({
+        max_retries: 3,
+        retry_interval_minutes: [5, 10, 20],
+      });
+      expect(sanitizedArray.retry_interval_minutes).toEqual([5, 10, 20]);
+    });
+
+    it("omits null conditions from retry_on", () => {
+      const sanitized = sanitizeSarvamRetryConfigForProvider({
+        max_retries: 2,
+        retry_on: {
+          busy: { enabled: true },
+          failed: null,
+        } as any,
+      });
+      expect(sanitized.retry_on?.busy).toEqual({ enabled: true });
+      expect(sanitized.retry_on).not.toHaveProperty("failed");
     });
   });
 
@@ -224,7 +273,7 @@ describe("Sarvam Retry Config Domain Rules", () => {
       },
     };
 
-    it("forces retries to OFF when plan does NOT allow retry automation", () => {
+    it("forces retries to OFF when plan does NOT allow retry automation and omits null intervals from providerConfig", () => {
       const resolved = resolveSarvamCampaignRetry(
         activeAgentConfig,
         { enabled: true, max_retries: 5 },
@@ -233,7 +282,9 @@ describe("Sarvam Retry Config Domain Rules", () => {
 
       expect(resolved.persistedConfig.enabled).toBe(false);
       expect(resolved.persistedConfig.max_retries).toBe(0);
+      expect(resolved.persistedConfig.retry_interval_minutes).toBeNull();
       expect(resolved.providerConfig.max_retries).toBe(0);
+      expect(resolved.providerConfig).not.toHaveProperty("retry_interval_minutes");
       expect(resolved.providerConfig.retry_on?.provider_error?.enabled).toBe(false);
       expect(resolved.providerConfig.retry_on?.internal_error?.enabled).toBe(false);
     });

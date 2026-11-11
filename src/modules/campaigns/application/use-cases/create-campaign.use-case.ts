@@ -22,7 +22,9 @@ import {
   InvalidCampaignVariableValueError,
   RetryConfigNotAllowedError,
   MaxActiveCampaignsReachedError,
+  SarvamActiveCampaignLimitReachedError,
 } from "../../domain/errors/campaign.errors";
+import { HttpStatus } from "../../../../shared/constants/http-status";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
 import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sarvam-agent.mapper";
 import { validateSarvamCampaignVariables } from "../../../sarvam-agents/domain/rules/sarvam-variable.rules";
@@ -355,6 +357,19 @@ export class CreateCampaignUseCase {
         statusCode: err?.statusCode,
         details: err?.details,
       });
+
+      // If Sarvam API returned 429 Too Many Requests (or active campaign limit error)
+      const isLimitReached =
+        err?.statusCode === 429 ||
+        err?.statusCode === HttpStatus.TOO_MANY_REQUESTS ||
+        (typeof err?.message === "string" &&
+          (err.message.includes("429") ||
+            err.message.toLowerCase().includes("limit") ||
+            err.message.toLowerCase().includes("too many requests")));
+
+      if (isLimitReached) {
+        throw new SarvamActiveCampaignLimitReachedError(input.sarvamAgentId);
+      }
 
       // Provider creation failed: do NOT create local campaign
       throw new ExternalCampaignCreationFailedError();

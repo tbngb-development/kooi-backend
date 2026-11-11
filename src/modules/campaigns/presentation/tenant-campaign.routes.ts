@@ -12,6 +12,7 @@ import {
   extractVariablesSchema,
   listCampaignsQuerySchema,
   controlSarvamCampaignSchema,
+  activeSarvamCampaignsQuerySchema,
 } from "./campaign.schema";
 import { buildTenantBatchRoutes } from "../../batches/presentation/tenant-batch.routes";
 import {
@@ -89,6 +90,13 @@ export function buildTenantCampaignRoutes(
     "/:id/archive",
     authorize.tenantRoles("OWNER", "ADMIN"),
     controller.archive,
+  );
+
+  // Active Sarvam Campaigns for Agent
+  router.get(
+    "/active-sarvam",
+    validateQuery(activeSarvamCampaignsQuerySchema),
+    controller.activeSarvam,
   );
 
   // Single resource

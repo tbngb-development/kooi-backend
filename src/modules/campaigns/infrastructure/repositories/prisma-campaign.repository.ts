@@ -588,6 +588,43 @@ export class PrismaCampaignRepository implements CampaignRepository {
     }));
   }
 
+  async findActiveSarvamCampaignsForAgent(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<CampaignEntityData[]> {
+    const campaigns = await prisma.campaign.findMany({
+      where: {
+        tenantId,
+        sarvamAgentId,
+        provider: "SARVAM",
+        isDeleted: false,
+        sarvamCampaignId: { not: null },
+        status: { notIn: ["CANCELLED", "PAUSED"] },
+        AND: [
+          {
+            OR: [
+              { sarvamStatus: null },
+              { sarvamStatus: { notIn: ["ended", "cancelled", "paused"] } },
+            ],
+          },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        assistant: { select: { id: true, name: true } },
+        sarvamAgent: { select: { id: true, name: true } },
+        batches: { select: { id: true, status: true } },
+      },
+    });
+
+    const campaignIds = campaigns.map((c) => c.id);
+    const metricsMap = await this.getCampaignMetricsMap(campaignIds, tenantId);
+
+    return campaigns.map((c) =>
+      this.toEntityData(c, metricsMap.get(c.id)),
+    );
+  }
+
   async countActiveCampaignsForAgent(
     sarvamAgentId: string,
     excludeCampaignId?: string,

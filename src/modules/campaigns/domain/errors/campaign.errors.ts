@@ -128,6 +128,18 @@ export class SarvamAgentMaxActiveCampaignsError extends AppError {
   }
 }
 
+export class SarvamActiveCampaignLimitReachedError extends AppError {
+  constructor(sarvamAgentId?: string) {
+    super(
+      HttpStatus.TOO_MANY_REQUESTS,
+      "Maximum active Sarvam campaigns limit reached for this agent. Please pause or cancel an existing campaign to create a new one.",
+      "SARVAM_ACTIVE_CAMPAIGN_LIMIT_REACHED",
+      true,
+      sarvamAgentId ? { sarvamAgentId } : undefined,
+    );
+  }
+}
+
 export class InvalidCampaignStatusTransitionError extends AppError {
   constructor(from: CampaignStatus, to: CampaignStatus) {
     super(

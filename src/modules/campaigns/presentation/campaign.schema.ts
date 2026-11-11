@@ -195,3 +195,8 @@ export const campaignGoalMetricsQuerySchema = z.object({
   batchId: z.string().uuid("Invalid batch ID").optional(),
 });
 export type CampaignGoalMetricsQuery = z.infer<typeof campaignGoalMetricsQuerySchema>;
+
+export const activeSarvamCampaignsQuerySchema = z.object({
+  sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID"),
+});
+export type ActiveSarvamCampaignsQuery = z.infer<typeof activeSarvamCampaignsQuerySchema>;

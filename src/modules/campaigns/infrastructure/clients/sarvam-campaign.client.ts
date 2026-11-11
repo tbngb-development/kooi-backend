@@ -7,6 +7,7 @@ import type {
   SarvamRetryConfig,
   SarvamWebhookConfig,
 } from "../../../sarvam-agents/domain/types/sarvam-agent.types";
+import { sanitizeSarvamRetryConfigForProvider } from "../../../sarvam-agents/domain/rules/sarvam-retry-config.rules";
 
 export interface SarvamAllowedSchedule {
   allowed_start_time: string;
@@ -95,6 +96,26 @@ export class SarvamCampaignClient implements ISarvamCampaignClient {
     });
   }
 
+  private sanitizePayload<
+    T extends CreateSarvamCampaignPayload | Partial<CreateSarvamCampaignPayload>,
+  >(payload: T): T {
+    if (!payload.app_config) {
+      return payload;
+    }
+
+    const appConfig = { ...payload.app_config };
+    if (appConfig.retry_config) {
+      appConfig.retry_config = sanitizeSarvamRetryConfigForProvider(
+        appConfig.retry_config,
+      );
+    }
+
+    return {
+      ...payload,
+      app_config: appConfig,
+    };
+  }
+
   async createCampaign(
     orgId: string,
     workspaceId: string,
@@ -102,19 +123,20 @@ export class SarvamCampaignClient implements ISarvamCampaignClient {
     payload: CreateSarvamCampaignPayload,
   ): Promise<SarvamCampaignResponse> {
     const url = `/api/scheduling/v1/orgs/${orgId}/workspaces/${workspaceId}/campaigns`;
+    const cleanPayload = this.sanitizePayload(payload);
 
     this.logger?.info("Creating external Sarvam campaign", {
       action: "sarvam_client.create_campaign",
       orgId,
       workspaceId,
-      campaignName: payload.name,
-      appId: payload.app_config.app_id,
+      campaignName: cleanPayload.name,
+      appId: cleanPayload.app_config.app_id,
     });
 
     try {
       const response = await this.http.post<SarvamCampaignResponse>(
         url,
-        payload,
+        cleanPayload,
         {
           headers: {
             "X-API-Key": apiKey,
@@ -163,11 +185,12 @@ export class SarvamCampaignClient implements ISarvamCampaignClient {
     payload: Partial<CreateSarvamCampaignPayload>,
   ): Promise<SarvamCampaignResponse> {
     const url = `/api/scheduling/v1/orgs/${orgId}/workspaces/${workspaceId}/campaigns/${campaignId}`;
+    const cleanPayload = this.sanitizePayload(payload);
 
     try {
       const response = await this.http.patch<SarvamCampaignResponse>(
         url,
-        payload,
+        cleanPayload,
         {
           headers: {
             "X-API-Key": apiKey,

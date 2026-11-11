@@ -21,6 +21,7 @@ import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign
 import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
 import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.use-case";
 import { ControlSarvamCampaignUseCase } from "./application/use-cases/control-sarvam-campaign.use-case";
+import { GetActiveSarvamCampaignsUseCase } from "./application/use-cases/get-active-sarvam-campaigns.use-case";
 import { SyncSarvamCampaignLifecycleUseCase } from "./application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
@@ -130,6 +131,11 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     log,
   );
 
+  const getActiveSarvamCampaigns = new GetActiveSarvamCampaignsUseCase(
+    campaignRepo,
+    log,
+  );
+
   return {
     repository: campaignRepo,
     useCases: {
@@ -150,6 +156,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       parseManualLeads,
       controlSarvamCampaign,
       getCampaignGoalMetrics,
+      getActiveSarvamCampaigns,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,

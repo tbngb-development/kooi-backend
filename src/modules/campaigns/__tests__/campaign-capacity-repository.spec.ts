@@ -6,6 +6,13 @@ vi.mock("../../../shared/config/database/prisma", () => ({
   default: {
     campaign: {
       count: vi.fn(),
+      findMany: vi.fn(),
+    },
+    lead: {
+      groupBy: vi.fn(),
+    },
+    leadBatch: {
+      groupBy: vi.fn(),
     },
   },
 }));
@@ -64,6 +71,55 @@ describe("PrismaCampaignRepository - countActiveCampaignsForAgent", () => {
         status: "RUNNING",
         isDeleted: false,
       },
+    });
+  });
+
+  describe("findActiveSarvamCampaignsForAgent", () => {
+    it("queries campaigns with provider SARVAM, isDeleted false, and notIn CANCELLED/PAUSED", async () => {
+      vi.mocked(prisma.campaign.findMany).mockResolvedValue([
+        {
+          id: "camp-active-1",
+          name: "Active 1",
+          status: "RUNNING",
+          sarvamStatus: "active",
+          tenantId: "tenant-1",
+          sarvamAgentId: "sarvam-agent-1",
+          batches: [],
+          isDeleted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any,
+      ]);
+      vi.mocked(prisma.lead.groupBy).mockResolvedValue([]);
+      vi.mocked(prisma.leadBatch.groupBy).mockResolvedValue([]);
+
+      const result = await repository.findActiveSarvamCampaignsForAgent(
+        "tenant-1",
+        "sarvam-agent-1",
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("camp-active-1");
+      expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: "tenant-1",
+            sarvamAgentId: "sarvam-agent-1",
+            provider: "SARVAM",
+            isDeleted: false,
+            sarvamCampaignId: { not: null },
+            status: { notIn: ["CANCELLED", "PAUSED"] },
+            AND: [
+              {
+                OR: [
+                  { sarvamStatus: null },
+                  { sarvamStatus: { notIn: ["ended", "cancelled", "paused"] } },
+                ],
+              },
+            ],
+          }),
+        }),
+      );
     });
   });
 });

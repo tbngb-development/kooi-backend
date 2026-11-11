@@ -17,6 +17,7 @@ import {
   ExternalCampaignCreationFailedError,
   MissingRequiredVariablesError,
   RetryConfigNotAllowedError,
+  SarvamActiveCampaignLimitReachedError,
 } from "../domain/errors/campaign.errors";
 
 describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
@@ -780,6 +781,34 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           }),
         }),
       );
+    });
+
+    it("should throw SarvamActiveCampaignLimitReachedError when Sarvam API returns 429", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(sampleSarvamAgent);
+      const err = new Error("Rate limit exceeded / Active campaigns limit reached") as any;
+      err.statusCode = 429;
+      mockSarvamClient.createCampaign = vi.fn().mockRejectedValue(err);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Limit Reached Campaign",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(SarvamActiveCampaignLimitReachedError);
+    });
+
+    it("should throw SarvamActiveCampaignLimitReachedError when error message contains 429 limit", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(sampleSarvamAgent);
+      mockSarvamClient.createCampaign = vi
+        .fn()
+        .mockRejectedValue(new Error("Sarvam API error: 429 too many requests active campaign limit reached"));
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Limit Message Campaign",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(SarvamActiveCampaignLimitReachedError);
     });
   });
 });

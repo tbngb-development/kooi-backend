@@ -23,7 +23,6 @@ export type ValidSarvamRetryConditionKey =
 export function buildDisabledSarvamRetryConfig(): SarvamRetryConfig {
   return {
     max_retries: 0,
-    retry_interval_minutes: null,
     retry_on: {
       busy: { enabled: false },
       failed: { enabled: false },
@@ -281,6 +280,55 @@ export function validateSarvamRetryConfig(config: unknown): SarvamRetryConfig {
 }
 
 /**
+ * Sanitizes retry configuration for the external Sarvam API.
+ * Sarvam's API schema (Pydantic Union[int, list[int]]) strictly rejects null values
+ * for retry_interval_minutes with HTTP 422 Invalid Parameter.
+ * Unset or disabled retry intervals must be omitted entirely from the external payload.
+ */
+export function sanitizeSarvamRetryConfigForProvider(
+  config: SarvamRetryConfig,
+): SarvamRetryConfig {
+  const result: SarvamRetryConfig = {
+    max_retries:
+      typeof config.max_retries === "number" && Number.isInteger(config.max_retries)
+        ? Math.max(0, Math.min(20, config.max_retries))
+        : 0,
+  };
+
+  if (
+    typeof config.retry_interval_minutes === "number" &&
+    Number.isInteger(config.retry_interval_minutes) &&
+    config.retry_interval_minutes >= 1
+  ) {
+    result.retry_interval_minutes = config.retry_interval_minutes;
+  } else if (
+    Array.isArray(config.retry_interval_minutes) &&
+    config.retry_interval_minutes.length > 0
+  ) {
+    const validItems = config.retry_interval_minutes.filter(
+      (item) => typeof item === "number" && Number.isInteger(item) && item >= 1,
+    );
+    if (validItems.length > 0) {
+      result.retry_interval_minutes = validItems;
+    }
+  }
+
+  if (config.retry_on && typeof config.retry_on === "object") {
+    const cleanedRetryOn: SarvamRetryOnConfig = {};
+    for (const [key, cond] of Object.entries(config.retry_on)) {
+      if (cond && typeof cond === "object" && typeof cond.enabled === "boolean") {
+        cleanedRetryOn[key as keyof SarvamRetryOnConfig] = cond as any;
+      }
+    }
+    if (Object.keys(cleanedRetryOn).length > 0) {
+      result.retry_on = cleanedRetryOn;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Resolves final persisted campaign retry configuration and external Sarvam API payload.
  * Strictly respects plan entitlements (activePlan.retryAutomation).
  */
@@ -299,9 +347,11 @@ export function resolveSarvamCampaignRetry(
     return {
       persistedConfig: {
         enabled: false,
-        ...disabled,
+        max_retries: 0,
+        retry_interval_minutes: null,
+        retry_on: disabled.retry_on ?? null,
       },
-      providerConfig: disabled,
+      providerConfig: sanitizeSarvamRetryConfigForProvider(disabled),
     };
   }
 
@@ -312,9 +362,11 @@ export function resolveSarvamCampaignRetry(
     return {
       persistedConfig: {
         enabled: false,
-        ...disabled,
+        max_retries: 0,
+        retry_interval_minutes: null,
+        retry_on: disabled.retry_on ?? null,
       },
-      providerConfig: disabled,
+      providerConfig: sanitizeSarvamRetryConfigForProvider(disabled),
     };
   }
 
@@ -329,7 +381,7 @@ export function resolveSarvamCampaignRetry(
     };
     return {
       persistedConfig: persisted,
-      providerConfig: validated,
+      providerConfig: sanitizeSarvamRetryConfigForProvider(validated),
     };
   }
 
@@ -342,9 +394,11 @@ export function resolveSarvamCampaignRetry(
     return {
       persistedConfig: {
         enabled: false,
-        ...disabled,
+        max_retries: 0,
+        retry_interval_minutes: null,
+        retry_on: disabled.retry_on ?? null,
       },
-      providerConfig: disabled,
+      providerConfig: sanitizeSarvamRetryConfigForProvider(disabled),
     };
   }
 
@@ -355,7 +409,7 @@ export function resolveSarvamCampaignRetry(
       retry_interval_minutes: validatedAgent.retry_interval_minutes ?? null,
       retry_on: validatedAgent.retry_on ?? null,
     },
-    providerConfig: validatedAgent,
+    providerConfig: sanitizeSarvamRetryConfigForProvider(validatedAgent),
   };
 }
 

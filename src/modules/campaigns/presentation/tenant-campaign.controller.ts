@@ -20,6 +20,7 @@ import type { GetCampaignGoalMetricsUseCase } from "../application/use-cases/get
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
 import type { ControlSarvamCampaignUseCase } from "../application/use-cases/control-sarvam-campaign.use-case";
+import type { GetActiveSarvamCampaignsUseCase } from "../application/use-cases/get-active-sarvam-campaigns.use-case";
 import { controlSarvamCampaignSchema, campaignGoalMetricsQuerySchema } from "./campaign.schema";
 import { AppError } from "../../../shared/errors/app.error";
 import type { ListCampaignsQuery } from "./campaign.schema";
@@ -39,6 +40,7 @@ export class TenantCampaignController {
     private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
     private readonly controlSarvamCampaignUseCase?: ControlSarvamCampaignUseCase,
     private readonly getCampaignGoalMetricsUseCase?: GetCampaignGoalMetricsUseCase,
+    private readonly getActiveSarvamCampaignsUseCase?: GetActiveSarvamCampaignsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -341,6 +343,39 @@ export class TenantCampaignController {
         updated,
         HttpStatus.OK,
         `Campaign ${action} action executed successfully`,
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  activeSarvam = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const sarvamAgentId = req.query.sarvamAgentId as string;
+
+      if (!this.getActiveSarvamCampaignsUseCase) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          "Active Sarvam campaigns service is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const campaigns = await this.getActiveSarvamCampaignsUseCase.execute({
+        tenantId,
+        sarvamAgentId,
+      });
+
+      sendSuccess(
+        res,
+        campaigns,
+        HttpStatus.OK,
+        "Active Sarvam campaigns retrieved successfully",
       );
     } catch (err) {
       next(err);
