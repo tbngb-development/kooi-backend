@@ -2,7 +2,10 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CreateCampaignUseCase } from "../application/use-cases/create-campaign.use-case";
-import { createCampaignSchema } from "../presentation/campaign.schema";
+import {
+  createCampaignSchema,
+  campaignRetryConfigSchema,
+} from "../presentation/campaign.schema";
 import type { CampaignRepository } from "../application/interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../plans/application/interfaces/plan-repository.interface";
 import type { ITenantVoiceProviderService } from "../../tenants/application/services/tenant-voice-provider.service";
@@ -809,6 +812,55 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
           sarvamAgentId: validAgentId,
         }),
       ).rejects.toThrow(SarvamActiveCampaignLimitReachedError);
+    });
+  });
+
+  describe("campaignRetryConfigSchema Discriminating Union Validation", () => {
+    it("preserves retry_interval_minutes and retry_on for Sarvam retry configs without stripping", () => {
+      const sarvamPayload = {
+        enabled: true,
+        max_retries: 1,
+        retry_interval_minutes: [60],
+        retry_on: {
+          no_answer: { enabled: true },
+          busy: { enabled: true },
+          failed: { enabled: true },
+        },
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(sarvamPayload) as any;
+      expect(parsed.enabled).toBe(true);
+      expect(parsed.max_retries).toBe(1);
+      expect(parsed.retry_interval_minutes).toEqual([60]);
+      expect(parsed.retry_on.no_answer.enabled).toBe(true);
+      expect(parsed.retry_on.busy.enabled).toBe(true);
+      expect(parsed.retry_on.failed.enabled).toBe(true);
+    });
+
+    it("preserves retry_intervals_minutes and retry_on_statuses for Bolna retry configs", () => {
+      const bolnaPayload = {
+        enabled: true,
+        max_retries: 2,
+        retry_intervals_minutes: [60, 240],
+        retry_on_statuses: ["busy", "failed"],
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(bolnaPayload) as any;
+      expect(parsed.enabled).toBe(true);
+      expect(parsed.max_retries).toBe(2);
+      expect(parsed.retry_intervals_minutes).toEqual([60, 240]);
+      expect(parsed.retry_on_statuses).toEqual(["busy", "failed"]);
+    });
+
+    it("correctly parses disabled retry configuration", () => {
+      const disabledPayload = {
+        enabled: false,
+        max_retries: 0,
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(disabledPayload) as any;
+      expect(parsed.enabled).toBe(false);
+      expect(parsed.max_retries).toBe(0);
     });
   });
 });

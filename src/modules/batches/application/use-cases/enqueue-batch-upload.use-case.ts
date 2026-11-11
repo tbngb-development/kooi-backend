@@ -8,7 +8,6 @@ import {
   CampaignNotFoundError,
   CampaignFailedError,
   CampaignNotEligibleForUploadError,
-  CampaignExpiredError,
   MaxActiveCampaignsReachedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
 import {
@@ -54,19 +53,24 @@ export class EnqueueBatchUploadUseCase {
       if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
         throw new CampaignNotFoundError();
       }
-      if (campaign.status === "COMPLETED" || campaign.status === "CANCELLED") {
-        throw new CampaignNotEligibleForUploadError(campaign.status);
-      }
-      if (
+      const isExpired = Boolean(
         campaign.endTimestamp &&
-        new Date(campaign.endTimestamp).getTime() <= Date.now()
-      ) {
-        throw new CampaignExpiredError(
-          "This campaign has reached its end time and cannot accept new lead uploads. Please create a new campaign.",
-        );
+          new Date(campaign.endTimestamp).getTime() <= Date.now(),
+      );
+      const isEnded =
+        isExpired || campaign.sarvamStatus?.toLowerCase() === "ended";
+
+      if (isEnded) {
+        throw new CampaignNotEligibleForUploadError("ended");
+      }
+      if (campaign.status === "CANCELLED") {
+        throw new CampaignNotEligibleForUploadError(campaign.status);
       }
     } else {
       if (!campaign.assistant) throw new CampaignNotFoundError();
+      if (campaign.status === "CANCELLED") {
+        throw new CampaignNotEligibleForUploadError(campaign.status);
+      }
     }
 
     // 2. Validate active plan
@@ -185,13 +189,19 @@ export class EnqueueBatchUploadUseCase {
       termsVersion: input.termsVersion,
     });
 
-    // If parent campaign was FAILED, automatically reactivate it
-    if (campaign.status === "FAILED") {
+    // Reactivate failed campaigns, or completed Sarvam campaigns whose schedule is active
+    if (
+      campaign.status === "FAILED" ||
+      (campaign.provider === "SARVAM" && campaign.status === "COMPLETED")
+    ) {
       const nextStatus = input.runImmediately ? "RUNNING" : "SCHEDULED";
-      await this.campaignRepo.updateStatus(campaign.id, nextStatus);
-      this.log?.info("Reactivated failed campaign on new batch upload", {
+      await this.campaignRepo.updateStatus(campaign.id, nextStatus, {
+        completedAt: null,
+      });
+      this.log?.info("Reactivated campaign on new batch upload", {
         action: "campaign.reactivate",
         campaignId: campaign.id,
+        previousStatus: campaign.status,
         newStatus: nextStatus,
       });
     }

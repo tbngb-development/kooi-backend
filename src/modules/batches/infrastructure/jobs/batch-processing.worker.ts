@@ -626,11 +626,13 @@ export class BatchProcessingWorker {
       campaignBeforeUpload.endTimestamp &&
         new Date(campaignBeforeUpload.endTimestamp).getTime() <= Date.now(),
     );
+    const isCampaignEnded =
+      isCampaignExpired ||
+      campaignBeforeUpload.sarvamStatus?.toLowerCase() === "ended";
     const isCampaignTerminal =
-      campaignBeforeUpload.status === "COMPLETED" ||
-      campaignBeforeUpload.status === "CANCELLED";
+      isCampaignEnded || campaignBeforeUpload.status === "CANCELLED";
 
-    if (isCampaignExpired || isCampaignTerminal) {
+    if (isCampaignTerminal) {
       this.log?.warn(
         "Aborting Sarvam cohort upload: campaign expired or reached terminal state",
         {
@@ -639,6 +641,7 @@ export class BatchProcessingWorker {
           campaignId,
           status: campaignBeforeUpload.status,
           isCampaignExpired,
+          isCampaignEnded,
         },
       );
 

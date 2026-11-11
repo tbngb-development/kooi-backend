@@ -224,15 +224,19 @@ export class SarvamLeadCorrelationService {
     }
 
     // 4. Lead resolution
-    const leads = await this.repo.findLeadsByBatchAndPhone(batch.id, normalizedPhone);
+    let leads = await this.repo.findLeadsByBatchAndPhone(batch.id, normalizedPhone);
+
+    if (leads.length === 0 && typeof this.repo.findLeadsByCampaignAndPhone === "function") {
+      leads = await this.repo.findLeadsByCampaignAndPhone(campaign.id, normalizedPhone);
+    }
 
     if (leads.length === 0) {
       return {
         success: false,
         failure: {
           code: "LEAD_NOT_FOUND",
-          message: `No lead found with phone "${normalizedPhone}" in batch "${batch.id}"`,
-          details: { batchId: batch.id, normalizedPhone },
+          message: `No lead found with phone "${normalizedPhone}" in batch "${batch.id}" or campaign "${campaign.id}"`,
+          details: { batchId: batch.id, campaignId: campaign.id, normalizedPhone },
         },
       };
     }

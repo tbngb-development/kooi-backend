@@ -26,10 +26,66 @@ export const sarvamCampaignRetryOverrideSchema = z.object({
     .optional(),
 });
 
-export const campaignRetryConfigSchema = z.union([
-  bolnaCampaignRetryConfigSchema,
-  sarvamCampaignRetryOverrideSchema,
-]);
+export const campaignRetryConfigSchema = z.lazy(() =>
+  z
+    .custom<Record<string, unknown>>(
+      (val) => typeof val === "object" && val !== null,
+    )
+    .transform((data, ctx) => {
+      // 1. If payload contains Sarvam-specific fields
+      if ("retry_interval_minutes" in data || "retry_on" in data) {
+        const result = sarvamCampaignRetryOverrideSchema.safeParse(data);
+        if (!result.success) {
+          result.error.issues.forEach((issue) =>
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: issue.path,
+              message: issue.message,
+            }),
+          );
+          return z.NEVER;
+        }
+        return result.data;
+      }
+
+      // 2. If payload contains Bolna-specific fields
+      if (
+        "retry_intervals_minutes" in data ||
+        "retry_on_statuses" in data ||
+        "retry_on_voicemail" in data
+      ) {
+        const result = bolnaCampaignRetryConfigSchema.safeParse(data);
+        if (!result.success) {
+          result.error.issues.forEach((issue) =>
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: issue.path,
+              message: issue.message,
+            }),
+          );
+          return z.NEVER;
+        }
+        return result.data;
+      }
+
+      // 3. Fallback for shared/minimal payloads (e.g. { enabled: false, max_retries: 0 })
+      const sarvamResult = sarvamCampaignRetryOverrideSchema.safeParse(data);
+      if (sarvamResult.success) {
+        return sarvamResult.data;
+      }
+
+      const bolnaResult = bolnaCampaignRetryConfigSchema.safeParse(data);
+      if (bolnaResult.success) {
+        return bolnaResult.data;
+      }
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid campaign retry configuration",
+      });
+      return z.NEVER;
+    }),
+);
 
 export const allowedScheduleSchema = z.object({
   allowed_start_time: z

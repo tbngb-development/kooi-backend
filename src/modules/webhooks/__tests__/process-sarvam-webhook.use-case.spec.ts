@@ -333,6 +333,20 @@ describe("ProcessSarvamWebhookUseCase", () => {
       expect(inMemoryLeadStatus).toBe("NO_ANSWER");
     });
 
+    it("maps hyphenated no-answer non-retryable attempt to CallStatus.NO_ANSWER and LeadStatus.NO_ANSWER", async () => {
+      const payload: SarvamWebhookAttemptPayload = {
+        ...basePayload,
+        connectivity_status: "no-answer",
+        completion_status: "failed",
+        next_action_status: null,
+      };
+
+      await useCase.execute(payload);
+
+      expect(inMemoryCall?.status).toBe("NO_ANSWER");
+      expect(inMemoryLeadStatus).toBe("NO_ANSWER");
+    });
+
     it("maps failed non-retryable attempt to CallStatus.FAILED and LeadStatus.FAILED", async () => {
       const payload: SarvamWebhookAttemptPayload = {
         ...basePayload,

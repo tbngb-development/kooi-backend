@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batch-upload.use-case";
 import {
   CampaignNotEligibleForUploadError,
-  CampaignExpiredError,
   CampaignNotFoundError,
 } from "../../campaigns/domain/errors/campaign.errors";
 import type { BatchRepository } from "../application/interfaces/batch-repository.interface";
@@ -41,6 +40,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       findByIdWithRelations: vi.fn(),
       countActiveCampaignsAtTime: vi.fn().mockResolvedValue(0),
       countActiveCampaigns: vi.fn().mockResolvedValue(0),
+      updateStatus: vi.fn().mockResolvedValue({ id: campaignId }),
     };
 
     mockPlanRepo = {
@@ -51,6 +51,7 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
         maxActiveCampaigns: 5,
         maxLeadsPerBatch: 1000,
       }),
+      countRunningCampaigns: vi.fn().mockResolvedValue(0),
     };
 
     mockStorage = {
@@ -65,13 +66,15 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
     );
   });
 
-  it("throws CampaignNotEligibleForUploadError when Sarvam campaign is COMPLETED", async () => {
+  it("allows upload when Sarvam campaign is COMPLETED but endTimestamp is in the future, and reactivates campaign", async () => {
     mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
       id: campaignId,
       tenantId,
       provider: "SARVAM",
       status: "COMPLETED",
+      sarvamStatus: "paused",
       sarvamAgentId: "agent-1",
+      endTimestamp: new Date(Date.now() + 86400000), // 1 day in future
     });
 
     const input = {
@@ -81,10 +84,20 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       fileName: "leads.csv",
       termsAccepted: true,
       termsVersion: "1.0",
+      runImmediately: true,
     };
 
-    await expect(useCase.execute(input)).rejects.toThrow(
-      CampaignNotEligibleForUploadError,
+    const result = await useCase.execute(input);
+
+    expect(result).toEqual({
+      batchId: "batch-1",
+      status: "PROCESSING",
+      message: "Your file is being processed. You'll see the leads appear shortly.",
+    });
+    expect(mockCampaignRepo.updateStatus).toHaveBeenCalledWith(
+      campaignId,
+      "RUNNING",
+      { completedAt: null },
     );
   });
 
@@ -109,9 +122,12 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
     await expect(useCase.execute(input)).rejects.toThrow(
       CampaignNotEligibleForUploadError,
     );
+    await expect(useCase.execute(input)).rejects.toThrow(
+      "Cannot upload batches to a cancelled campaign.",
+    );
   });
 
-  it("throws CampaignExpiredError when Sarvam campaign endTimestamp is in the past", async () => {
+  it("throws CampaignNotEligibleForUploadError with 'Cannot upload batches to an ended campaign.' when Sarvam campaign endTimestamp is in the past", async () => {
     mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
       id: campaignId,
       tenantId,
@@ -130,7 +146,40 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       termsVersion: "1.0",
     };
 
-    await expect(useCase.execute(input)).rejects.toThrow(CampaignExpiredError);
+    await expect(useCase.execute(input)).rejects.toThrow(
+      CampaignNotEligibleForUploadError,
+    );
+    await expect(useCase.execute(input)).rejects.toThrow(
+      "Cannot upload batches to an ended campaign.",
+    );
+  });
+
+  it("throws CampaignNotEligibleForUploadError with 'Cannot upload batches to an ended campaign.' when Sarvam sarvamStatus is ended", async () => {
+    mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
+      id: campaignId,
+      tenantId,
+      provider: "SARVAM",
+      status: "COMPLETED",
+      sarvamStatus: "ended",
+      sarvamAgentId: "agent-1",
+      endTimestamp: new Date(Date.now() + 86400000),
+    });
+
+    const input = {
+      tenantId,
+      campaignId,
+      fileBuffer: Buffer.from("Contact Number\n+919876543210"),
+      fileName: "leads.csv",
+      termsAccepted: true,
+      termsVersion: "1.0",
+    };
+
+    await expect(useCase.execute(input)).rejects.toThrow(
+      CampaignNotEligibleForUploadError,
+    );
+    await expect(useCase.execute(input)).rejects.toThrow(
+      "Cannot upload batches to an ended campaign.",
+    );
   });
 
   it("allows upload when Sarvam campaign is active and not expired", async () => {

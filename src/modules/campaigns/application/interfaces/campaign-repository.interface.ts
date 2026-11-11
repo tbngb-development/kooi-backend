@@ -208,7 +208,7 @@ export interface CampaignRepository {
   updateStatus(
     campaignId: string,
     status: CampaignStatus,
-    extra?: { startedAt?: Date; completedAt?: Date },
+    extra?: { startedAt?: Date | null; completedAt?: Date | null },
   ): Promise<CampaignEntityData>;
 
   findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]>;

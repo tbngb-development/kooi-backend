@@ -73,5 +73,28 @@ export class PrismaSarvamLeadCorrelationRepository
       },
     });
   }
+
+  async findLeadsByCampaignAndPhone(
+    campaignId: string,
+    normalizedPhone: string,
+  ): Promise<LeadCorrelationCandidate[]> {
+    return prisma.lead.findMany({
+      where: {
+        campaignId,
+        phone: normalizedPhone,
+      },
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        status: true,
+        tenantId: true,
+        campaignId: true,
+        batchId: true,
+        metadata: true,
+        isDeleted: true,
+      },
+    });
+  }
 }
 

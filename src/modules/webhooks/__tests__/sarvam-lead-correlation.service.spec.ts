@@ -68,6 +68,7 @@ describe("SarvamLeadCorrelationService", () => {
       findCampaignsBySarvamId: vi.fn().mockResolvedValue([defaultCampaignCandidate]),
       findBatchesBySarvamCohortId: vi.fn().mockResolvedValue([defaultBatchCandidate]),
       findLeadsByBatchAndPhone: vi.fn().mockResolvedValue([defaultLeadCandidate]),
+      findLeadsByCampaignAndPhone: vi.fn().mockResolvedValue([]),
     };
 
     mockLogger = {
@@ -424,8 +425,30 @@ describe("SarvamLeadCorrelationService", () => {
   });
 
   describe("6. Lead Resolution Failures", () => {
-    it("fails with LEAD_NOT_FOUND when phone does not match any lead in the batch", async () => {
+    it("falls back to finding lead by campaignId when batchId lookup returns no leads", async () => {
       vi.mocked(mockRepo.findLeadsByBatchAndPhone).mockResolvedValueOnce([]);
+      vi.mocked(mockRepo.findLeadsByCampaignAndPhone).mockResolvedValueOnce([
+        defaultLeadCandidate,
+      ]);
+
+      const result = await service.correlate({
+        sarvamCampaignId,
+        sarvamCohortId,
+        userPhoneNumber: validRawPhone,
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.lead.id).toBe(defaultLeadCandidate.id);
+      expect(mockRepo.findLeadsByCampaignAndPhone).toHaveBeenCalledWith(
+        campaignId,
+        normalizedPhone,
+      );
+    });
+
+    it("fails with LEAD_NOT_FOUND when phone does not match any lead in the batch or campaign", async () => {
+      vi.mocked(mockRepo.findLeadsByBatchAndPhone).mockResolvedValueOnce([]);
+      vi.mocked(mockRepo.findLeadsByCampaignAndPhone).mockResolvedValueOnce([]);
 
       const result = await service.correlate({
         sarvamCampaignId,

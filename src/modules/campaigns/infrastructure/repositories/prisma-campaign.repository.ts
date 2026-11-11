@@ -537,7 +537,7 @@ export class PrismaCampaignRepository implements CampaignRepository {
   async updateStatus(
     campaignId: string,
     status: CampaignStatus,
-    extra?: { startedAt?: Date; completedAt?: Date },
+    extra?: { startedAt?: Date | null; completedAt?: Date | null },
   ): Promise<CampaignEntityData> {
     const campaign = await prisma.campaign.update({
       where: { id: campaignId },

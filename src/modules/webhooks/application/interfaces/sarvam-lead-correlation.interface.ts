@@ -115,5 +115,9 @@ export interface ISarvamLeadCorrelationRepository {
     batchId: string,
     normalizedPhone: string,
   ): Promise<LeadCorrelationCandidate[]>;
+  findLeadsByCampaignAndPhone(
+    campaignId: string,
+    normalizedPhone: string,
+  ): Promise<LeadCorrelationCandidate[]>;
 }
 

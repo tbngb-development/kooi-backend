@@ -912,6 +912,68 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
       expect(batchStore.get(batch1Id)?.status).toBe("COMPLETED");
       expect(campaignStore.get(campaignId)?.status).toBe("CANCELLED");
     });
+
+    it("handles busy terminal call, sets CallStatus.BUSY, LeadStatus.BUSY, and transitions Batch to COMPLETED when no retries pending", async () => {
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "RUNNING",
+        retryConfig: null,
+        campaignId,
+      });
+
+      const busyPayload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-busy-terminal-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 0,
+        connectivity_status: "busy",
+        completion_status: "failed",
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(busyPayload);
+
+      const call = callsDatabase.get("call-1");
+      expect(call?.status).toBe("BUSY");
+      expect(leadStore.get(leadId)?.status).toBe("BUSY");
+      expect(batchStore.get(batch1Id)?.status).toBe("COMPLETED");
+    });
+
+    it("handles hyphenated no-answer terminal call and transitions Batch to COMPLETED", async () => {
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "RUNNING",
+        retryConfig: null,
+        campaignId,
+      });
+
+      const noAnswerPayload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-noanswer-terminal-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 0,
+        connectivity_status: "no-answer",
+        completion_status: "failed",
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(noAnswerPayload);
+
+      const call = callsDatabase.get("call-1");
+      expect(call?.status).toBe("NO_ANSWER");
+      expect(leadStore.get(leadId)?.status).toBe("NO_ANSWER");
+      expect(batchStore.get(batch1Id)?.status).toBe("COMPLETED");
+    });
   });
 });
 

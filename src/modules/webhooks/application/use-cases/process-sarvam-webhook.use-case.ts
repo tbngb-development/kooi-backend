@@ -653,7 +653,7 @@ export class ProcessSarvamWebhookUseCase {
       return comp === "completed" ? "COMPLETED" : "PARTIAL";
     }
     if (conn === "busy") return "BUSY";
-    if (conn === "no_answer") return "NO_ANSWER";
+    if (conn === "no_answer" || conn === "no-answer") return "NO_ANSWER";
     if (conn === "failed" || comp === "failed") return "FAILED";
     return "FAILED";
   }
@@ -666,7 +666,7 @@ export class ProcessSarvamWebhookUseCase {
       return "COMPLETED";
     }
     if (conn === "busy") return "BUSY";
-    if (conn === "no_answer") return "NO_ANSWER";
+    if (conn === "no_answer" || conn === "no-answer") return "NO_ANSWER";
     if (conn === "failed" || comp === "failed") return "FAILED";
     return "FAILED";
   }
@@ -686,7 +686,7 @@ export class ProcessSarvamWebhookUseCase {
       return "CALLED";
     }
     if (conn === "busy") return "BUSY";
-    if (conn === "no_answer") return "NO_ANSWER";
+    if (conn === "no_answer" || conn === "no-answer") return "NO_ANSWER";
     if (conn === "failed" || comp === "failed") return "FAILED";
     return "CALLED";
   }

@@ -86,10 +86,12 @@ export class CampaignFailedError extends AppError {
 }
 
 export class CampaignNotEligibleForUploadError extends AppError {
-  constructor(status: CampaignStatus) {
+  constructor(status: CampaignStatus | "ENDED" | "ended") {
+    const statusStr = typeof status === "string" ? status.toLowerCase() : status;
+    const article = statusStr === "ended" ? "an" : "a";
     super(
       HttpStatus.UNPROCESSABLE_ENTITY,
-      `Cannot upload batches to a ${status.toLowerCase()} campaign.`,
+      `Cannot upload batches to ${article} ${statusStr} campaign.`,
       "CAMPAIGN_NOT_ELIGIBLE_FOR_UPLOAD",
     );
   }
