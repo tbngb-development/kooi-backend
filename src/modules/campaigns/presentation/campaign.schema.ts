@@ -1,8 +1,9 @@
 // modules/campaigns/presentation/campaign.schema.ts
 
 import { z } from "zod";
+import { sarvamRetryOnConfigSchema } from "../../sarvam-agents/presentation/admin/admin-sarvam-agent.schema";
 
-export const campaignRetryConfigSchema = z.object({
+export const bolnaCampaignRetryConfigSchema = z.object({
   enabled: z.boolean(),
   max_retries: z.number().int().min(0).max(5).optional(),
   retry_on_statuses: z
@@ -11,6 +12,24 @@ export const campaignRetryConfigSchema = z.object({
   retry_on_voicemail: z.boolean().optional(),
   retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
 });
+
+export const sarvamCampaignRetryOverrideSchema = z.object({
+  enabled: z.boolean(),
+  max_retries: z.number().int().min(0).max(20).optional(),
+  retry_on: sarvamRetryOnConfigSchema.nullable().optional(),
+  retry_interval_minutes: z
+    .union([
+      z.number().int().min(1),
+      z.array(z.number().int().min(1)),
+    ])
+    .nullable()
+    .optional(),
+});
+
+export const campaignRetryConfigSchema = z.union([
+  bolnaCampaignRetryConfigSchema,
+  sarvamCampaignRetryOverrideSchema,
+]);
 
 export const allowedScheduleSchema = z.object({
   allowed_start_time: z

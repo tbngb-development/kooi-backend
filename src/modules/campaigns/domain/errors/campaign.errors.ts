@@ -208,3 +208,13 @@ export class CampaignNotDraftError extends AppError {
     );
   }
 }
+
+export class CampaignRetryConfigImmutableAfterStartError extends AppError {
+  constructor(status: CampaignStatus) {
+    super(
+      HttpStatus.CONFLICT,
+      `Campaign retry configuration cannot be modified once the campaign has started. Current status is '${status}'.`,
+      "CAMPAIGN_RETRY_CONFIG_IMMUTABLE",
+    );
+  }
+}

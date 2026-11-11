@@ -43,14 +43,23 @@ export class SarvamLifecycleService {
       batch.campaign?.endTimestamp &&
         new Date().getTime() >= new Date(batch.campaign.endTimestamp).getTime(),
     );
-    const isCampaignTerminalOrPaused =
-      campaignStatus === "PAUSED" ||
+    const isCampaignTerminal =
       campaignStatus === "COMPLETED" ||
       campaignStatus === "CANCELLED" ||
+      campaignStatus === "FAILED";
+
+    const isCampaignTerminalOrPaused =
+      isCampaignTerminal ||
+      campaignStatus === "PAUSED" ||
       isCampaignExpired;
 
+    const isBatchTerminal =
+      batch.status === "COMPLETED" ||
+      batch.status === "STOPPED" ||
+      batch.status === "FAILED";
+
     // 2. Ensure in-progress state if batch is CREATED, SCHEDULED, or PROCESSING
-    // Do NOT reactivate paused, completed, cancelled, or expired campaigns!
+    // Do NOT reactivate paused, completed, cancelled, or expired campaigns, or terminal batches!
     if (
       batch.status === "CREATED" ||
       batch.status === "SCHEDULED" ||
@@ -72,20 +81,32 @@ export class SarvamLifecycleService {
     // Check if any call has pending retries remaining (only if campaign is not expired)
     const pendingRetries =
       !isCampaignExpired &&
-      this.hasPendingRetries(batch.retryConfig, callsInBatch);
+      this.hasPendingRetries(callsInBatch);
 
     // If calls are still active in telephony, allow them to finish
     if (activeCalls > 0) {
       return;
     }
 
-    // If campaign is expired or completed/cancelled, or if batch was already STOPPED, and all active calls are done:
+    // If campaign is expired or completed/cancelled/failed, or if batch was already STOPPED or COMPLETED, and all active calls are done:
     const isCampaignTerminalOrExpired =
-      isCampaignExpired ||
-      campaignStatus === "COMPLETED" ||
-      campaignStatus === "CANCELLED";
+      isCampaignExpired || isCampaignTerminal;
 
-    if (isCampaignTerminalOrExpired || batch.status === "STOPPED") {
+    if (isCampaignTerminalOrExpired || isBatchTerminal) {
+      if (isBatchTerminal) {
+        // Late webhooks on an already-terminal batch: do not mutate batch status
+        try {
+          await this.repo.recalculateCampaignStats(campaignId);
+        } catch (statsErr) {
+          this.logger?.warn("Failed to recalculate campaign stats", {
+            action: "sarvam_lifecycle.stats_recalc_error",
+            campaignId,
+            error:
+              statsErr instanceof Error ? statsErr.message : String(statsErr),
+          });
+        }
+        return;
+      }
       // Check if any leads in this batch are in STOPPED state
       const stoppedLeadsCount =
         typeof this.repo.countStoppedLeadsInBatch === "function"
@@ -226,26 +247,9 @@ export class SarvamLifecycleService {
     }
   }
 
-  private hasPendingRetries(
-    retryConfigRaw: unknown,
+  public hasPendingRetries(
     calls: Array<{ id: string; status: CallStatus; callHistory: unknown }>,
   ): boolean {
-    if (!retryConfigRaw || typeof retryConfigRaw !== "object") {
-      return false;
-    }
-
-    const config = retryConfigRaw as {
-      enabled?: boolean;
-      max_retries?: number;
-      retry_on_statuses?: string[];
-    };
-
-    if (!config.enabled || !config.max_retries || config.max_retries <= 0) {
-      return false;
-    }
-
-    const maxRetries = config.max_retries;
-
     for (const call of calls) {
       if (call.status === "COMPLETED") {
         continue;
@@ -259,26 +263,29 @@ export class SarvamLifecycleService {
         continue;
       }
 
+      // Check strictly the latest attempt for this call/lead
       const latestAttempt = history[history.length - 1];
-      const attemptIndex =
-        typeof latestAttempt.retry_attempt === "number"
-          ? latestAttempt.retry_attempt
-          : history.length - 1;
+      const nextActionRaw = latestAttempt.next_action_status;
 
-      if (attemptIndex >= maxRetries) {
+      // Terminal: if next_action_status is null or undefined, no further retry is scheduled
+      if (nextActionRaw === null || nextActionRaw === undefined) {
         continue;
       }
 
-      const nextAction = latestAttempt.next_action_status?.toLowerCase().trim();
-      const isRetryAction =
-        Boolean(nextAction) &&
-        (nextAction === "retry" ||
-          nextAction === "reschedule" ||
-          nextAction!.includes("retry"));
+      if (typeof nextActionRaw === "string") {
+        const nextAction = nextActionRaw.toLowerCase().trim();
+        if (!nextAction || nextAction === "null" || nextAction === "none") {
+          continue;
+        }
 
-      if (isRetryAction) {
+        // Documented pending retry statuses:
+        // retry, reschedule, business_retry, short_duration_retry, provider_error_retry, internal_error_retry
+        // Unknown non-empty values are also safely treated as pending so work is never prematurely completed
         return true;
       }
+
+      // Any other non-null value (e.g. object/number) is safely treated as pending
+      return true;
     }
 
     return false;

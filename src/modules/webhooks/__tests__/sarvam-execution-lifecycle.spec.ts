@@ -797,6 +797,121 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
       // Campaign must REMAIN COMPLETED
       expect(campaignStore.get(campaignId)?.status).toBe("COMPLETED");
     });
+
+    it("keeps Batch in RUNNING when batch.retryConfig is null but next_action_status is 'business_retry'", async () => {
+      // Simulate real-world Sarvam batch where retryConfig is null on batch
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "RUNNING",
+        retryConfig: null,
+        campaignId,
+      });
+
+      const retryPayload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-sarvam-retry-002",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 0,
+        connectivity_status: "busy",
+        completion_status: "failed",
+        next_action_status: "business_retry",
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(retryPayload);
+
+      // Must remain RUNNING because next_action_status indicates pending retry
+      expect(batchStore.get(batch1Id)?.status).toBe("RUNNING");
+      expect(batchStore.get(batch1Id)?.completedAt).toBeUndefined();
+    });
+
+    it("transitions to COMPLETED when latest attempt for lead resolves to next_action_status: null", async () => {
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "RUNNING",
+        retryConfig: null,
+        campaignId,
+      });
+
+      // Attempt 0: failed with internal_error_retry
+      await useCase.execute({
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-attempt-0",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 0,
+        connectivity_status: "failed",
+        completion_status: "failed",
+        next_action_status: "internal_error_retry",
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      });
+
+      expect(batchStore.get(batch1Id)?.status).toBe("RUNNING");
+
+      // Attempt 1: succeeds with null next_action_status
+      await useCase.execute({
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-attempt-1",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 1,
+        connectivity_status: "connected",
+        completion_status: "completed",
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      });
+
+      // Now all retries done; batch transitions to COMPLETED
+      expect(batchStore.get(batch1Id)?.status).toBe("COMPLETED");
+      expect(batchStore.get(batch1Id)?.completedAt).toBeInstanceOf(Date);
+    });
+
+    it("does not reopen an already COMPLETED batch or CANCELLED campaign on late webhook", async () => {
+      batchStore.set(batch1Id, {
+        id: batch1Id,
+        status: "COMPLETED",
+        retryConfig: null,
+        campaignId,
+        completedAt: new Date(Date.now() - 3600000),
+      });
+
+      campaignStore.set(campaignId, {
+        id: campaignId,
+        status: "CANCELLED",
+        completedAt: new Date(Date.now() - 3600000),
+      });
+
+      const latePayload: SarvamWebhookAttemptPayload = {
+        app_id: "agent-sarvam-app-1",
+        app_version: 1,
+        attempt_id: "att-late-arrival-001",
+        campaign_id: sarvamCampaignId,
+        cohort_id: sarvamCohort1Id,
+        retry_attempt: 0,
+        connectivity_status: "connected",
+        completion_status: "completed",
+        next_action_status: null,
+        user_identifier: userPhoneNumber,
+        user_phone_number: userPhoneNumber,
+        metadata: { secret: testSecret },
+      };
+
+      await useCase.execute(latePayload);
+
+      // Must NOT reopen to RUNNING!
+      expect(batchStore.get(batch1Id)?.status).toBe("COMPLETED");
+      expect(campaignStore.get(campaignId)?.status).toBe("CANCELLED");
+    });
   });
 });
 

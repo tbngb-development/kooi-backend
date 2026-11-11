@@ -55,14 +55,47 @@ export interface SarvamWebhookConfig {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface SarvamBaseRetryCondition {
+  enabled: boolean;
+}
+
+export interface SarvamShortDurationRetryCondition {
+  enabled: boolean;
+  threshold_seconds: number;
+}
+
+export interface SarvamErrorRetryCondition {
+  enabled: boolean;
+  max_retries: number;
+  retry_interval_minutes: number;
+}
+
+export interface SarvamRetryOnConfig {
+  busy?: SarvamBaseRetryCondition | null;
+  failed?: SarvamBaseRetryCondition | null;
+  no_answer?: SarvamBaseRetryCondition | null;
+  short_duration?: SarvamShortDurationRetryCondition | null;
+  provider_error?: SarvamErrorRetryCondition | null;
+  internal_error?: SarvamErrorRetryCondition | null;
+}
+
 export interface SarvamRetryCondition {
   enabled: boolean;
   threshold_seconds?: number | null;
+  max_retries?: number | null;
+  retry_interval_minutes?: number | null;
 }
 
 export interface SarvamRetryConfig {
   max_retries: number;
-  retry_on?: Record<string, SarvamRetryCondition> | null;
+  retry_on?: SarvamRetryOnConfig | Record<string, SarvamRetryCondition> | null;
+  retry_interval_minutes?: number | number[] | null;
+}
+
+export interface SarvamCampaignRetryOverride {
+  enabled: boolean;
+  max_retries?: number;
+  retry_on?: SarvamRetryOnConfig | Record<string, SarvamRetryCondition> | null;
   retry_interval_minutes?: number | number[] | null;
 }
 

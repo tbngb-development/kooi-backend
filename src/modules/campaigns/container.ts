@@ -94,6 +94,9 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const updateCampaign = new UpdateCampaignUseCase(
     campaignRepo,
     log,
+    deps?.sarvamCampaignClient,
+    deps?.sarvamEncryptionService,
+    planRepo,
   );
 
   const controlSarvamCampaign =

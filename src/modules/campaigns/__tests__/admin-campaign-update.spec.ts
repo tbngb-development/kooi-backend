@@ -7,6 +7,8 @@ import {
   CampaignNotFoundError,
   CampaignAlreadyDeletedError,
   MissingRequiredVariablesError,
+  CampaignRetryConfigImmutableAfterStartError,
+  RetryConfigNotAllowedError,
 } from "../domain/errors/campaign.errors";
 import { PlatformAgentNotFoundError } from "../../platform-agents/domain/errors/platform-agent.errors";
 import type { CampaignRepository } from "../application/interfaces/campaign-repository.interface";
@@ -236,6 +238,161 @@ describe("Admin Campaign Update UseCase & Controller", () => {
           platformAgentId: "pa-missing",
         }),
       ).rejects.toThrow(PlatformAgentNotFoundError);
+    });
+  });
+
+  describe("Sarvam Campaign Retry Configuration Update & Synchronization", () => {
+    let mockSarvamClient: any;
+    let mockEncryptionService: any;
+    let mockPlanRepo: any;
+    let sarvamUpdateUseCase: UpdateCampaignUseCase;
+
+    const sarvamCampaign = {
+      ...sampleCampaign,
+      provider: "SARVAM" as const,
+      sarvamAgentId: "agent-123",
+      sarvamCampaignId: "sarvam-camp-999",
+      status: "DRAFT" as const,
+    };
+
+    const mockSarvamAgent = {
+      id: "agent-123",
+      apiKey: {
+        organizationId: "org-1",
+        workspaceId: "ws-1",
+        apiKeyEncrypted: "enc:test",
+      },
+      retryConfig: { max_retries: 2 },
+    };
+
+    beforeEach(() => {
+      mockSarvamClient = {
+        updateCampaign: vi.fn().mockResolvedValue({ campaign_id: "sarvam-camp-999" }),
+      };
+      mockEncryptionService = {
+        decrypt: vi.fn().mockReturnValue("decrypted-api-key"),
+      };
+      mockPlanRepo = {
+        getActivePlanForTenant: vi.fn().mockResolvedValue({
+          id: "plan-pro",
+          retryAutomation: true,
+        }),
+      };
+
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi
+        .fn()
+        .mockResolvedValue(mockSarvamAgent);
+
+      sarvamUpdateUseCase = new UpdateCampaignUseCase(
+        mockCampaignRepo as CampaignRepository,
+        undefined,
+        mockSarvamClient,
+        mockEncryptionService,
+        mockPlanRepo,
+      );
+    });
+
+    it("should reject updating retryConfig on Sarvam campaign if status is RUNNING", async () => {
+      mockCampaignRepo.findById = vi.fn().mockResolvedValue({
+        ...sarvamCampaign,
+        status: "RUNNING",
+      });
+
+      await expect(
+        sarvamUpdateUseCase.execute({
+          tenantId: "tenant-abc",
+          campaignId: "campaign-123",
+          defaultRetryConfig: { enabled: true, max_retries: 3 },
+        }),
+      ).rejects.toThrow(CampaignRetryConfigImmutableAfterStartError);
+    });
+
+    it("should reject updating retryConfig on Sarvam campaign if plan forbids retries", async () => {
+      mockCampaignRepo.findById = vi.fn().mockResolvedValue({
+        ...sarvamCampaign,
+        status: "DRAFT",
+      });
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-basic",
+        retryAutomation: false,
+      });
+
+      await expect(
+        sarvamUpdateUseCase.execute({
+          tenantId: "tenant-abc",
+          campaignId: "campaign-123",
+          defaultRetryConfig: { enabled: true, max_retries: 3 },
+        }),
+      ).rejects.toThrow(RetryConfigNotAllowedError);
+    });
+
+    it("should sync retryConfig with Sarvam API and update DB when status is DRAFT", async () => {
+      mockCampaignRepo.findById = vi.fn().mockResolvedValue({
+        ...sarvamCampaign,
+        status: "DRAFT",
+      });
+      mockCampaignRepo.update = vi.fn().mockImplementation((_t, _c, data) =>
+        Promise.resolve({
+          ...sarvamCampaign,
+          ...data,
+        }),
+      );
+
+      await sarvamUpdateUseCase.execute({
+        tenantId: "tenant-abc",
+        campaignId: "campaign-123",
+        defaultRetryConfig: {
+          enabled: true,
+          max_retries: 4,
+          retry_interval_minutes: 15,
+        },
+      });
+
+      expect(mockSarvamClient.updateCampaign).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "sarvam-camp-999",
+        "decrypted-api-key",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 4,
+              retry_interval_minutes: 15,
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.update).toHaveBeenCalledWith(
+        "tenant-abc",
+        "campaign-123",
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: true,
+            max_retries: 4,
+          }),
+        }),
+      );
+    });
+
+    it("should fail local update if remote Sarvam PATCH fails", async () => {
+      mockCampaignRepo.findById = vi.fn().mockResolvedValue({
+        ...sarvamCampaign,
+        status: "DRAFT",
+      });
+      mockSarvamClient.updateCampaign = vi
+        .fn()
+        .mockRejectedValue(new Error("Sarvam 500 error"));
+
+      await expect(
+        sarvamUpdateUseCase.execute({
+          tenantId: "tenant-abc",
+          campaignId: "campaign-123",
+          defaultRetryConfig: { enabled: true, max_retries: 3 },
+        }),
+      ).rejects.toThrow("Sarvam 500 error");
+
+      expect(mockCampaignRepo.update).not.toHaveBeenCalled();
     });
   });
 

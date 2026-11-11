@@ -74,15 +74,48 @@ export const sarvamConnectionConfigSchema = z
   })
   .strict();
 
-export const sarvamRetryConditionSchema = z
+export const sarvamBaseRetryConditionSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
+
+export const sarvamShortDurationRetryConditionSchema = z
   .object({
     enabled: z.boolean(),
     threshold_seconds: z
       .number()
       .int("threshold_seconds must be an integer")
-      .min(0, "threshold_seconds must be non-negative")
-      .nullable()
-      .optional(),
+      .min(1, "threshold_seconds must be at least 1 second")
+      .default(30),
+  })
+  .strict();
+
+export const sarvamErrorRetryConditionSchema = z
+  .object({
+    enabled: z.boolean(),
+    max_retries: z
+      .number()
+      .int("max_retries must be an integer")
+      .min(1, "max_retries must be between 1 and 20")
+      .max(20, "max_retries cannot exceed 20")
+      .default(3),
+    retry_interval_minutes: z
+      .number()
+      .int("retry_interval_minutes must be an integer")
+      .min(5, "retry_interval_minutes must be at least 5 minutes")
+      .default(5),
+  })
+  .strict();
+
+export const sarvamRetryOnConfigSchema = z
+  .object({
+    busy: sarvamBaseRetryConditionSchema.optional(),
+    failed: sarvamBaseRetryConditionSchema.optional(),
+    no_answer: sarvamBaseRetryConditionSchema.optional(),
+    short_duration: sarvamShortDurationRetryConditionSchema.optional(),
+    provider_error: sarvamErrorRetryConditionSchema.optional(),
+    internal_error: sarvamErrorRetryConditionSchema.optional(),
   })
   .strict();
 
@@ -94,24 +127,18 @@ export const sarvamRetryConfigSchema = z
       .min(0, "max_retries must be at least 0")
       .max(20, "max_retries cannot exceed 20")
       .default(0),
-    retry_on: z
-      .record(
-        z.string().min(1, "Condition key cannot be empty"),
-        sarvamRetryConditionSchema,
-      )
-      .nullable()
-      .optional(),
+    retry_on: sarvamRetryOnConfigSchema.nullable().optional(),
     retry_interval_minutes: z
       .union([
         z
           .number()
           .int("retry_interval_minutes must be an integer")
-          .min(0, "retry_interval_minutes must be non-negative"),
+          .min(1, "retry_interval_minutes must be at least 1"),
         z.array(
           z
             .number()
             .int("retry_interval_minutes array items must be integers")
-            .min(0, "retry_interval_minutes items must be non-negative"),
+            .min(1, "retry_interval_minutes items must be at least 1"),
         ),
       ])
       .nullable()

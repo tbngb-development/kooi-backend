@@ -6,14 +6,20 @@ import type {
   AssistantWithAgentData,
 } from "../interfaces/campaign-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { ISarvamCampaignClient } from "../../infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import {
   CampaignNotFoundError,
   CampaignAlreadyDeletedError,
   CampaignAssistantNotFoundError,
   MissingRequiredVariablesError,
+  CampaignRetryConfigImmutableAfterStartError,
+  RetryConfigNotAllowedError,
 } from "../../domain/errors/campaign.errors";
 import { PlatformAgentNotFoundError } from "../../../platform-agents/domain/errors/platform-agent.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
+import { resolveSarvamCampaignRetry } from "../../../sarvam-agents/domain/rules/sarvam-retry-config.rules";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 
 export interface UpdateCampaignParams {
@@ -31,6 +37,9 @@ export class UpdateCampaignUseCase {
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly logger?: Logger,
+    private readonly sarvamCampaignClient?: ISarvamCampaignClient,
+    private readonly sarvamEncryptionService?: ISarvamApiKeyEncryptionService,
+    private readonly planRepo?: PlanRepository,
   ) {}
 
   async execute(input: UpdateCampaignParams): Promise<CampaignEntityData> {
@@ -116,14 +125,81 @@ export class UpdateCampaignUseCase {
       }
     }
 
-    // 4. Construct update payload
+    // 4. Handle defaultRetryConfig updates & provider synchronization
+    let resolvedDefaultRetryConfig = input.defaultRetryConfig;
+
+    if (input.defaultRetryConfig !== undefined) {
+      if (campaign.provider === "SARVAM") {
+        if (campaign.status !== "DRAFT" && campaign.status !== "SCHEDULED") {
+          throw new CampaignRetryConfigImmutableAfterStartError(campaign.status);
+        }
+
+        const activePlan = this.planRepo
+          ? await this.planRepo.getActivePlanForTenant(tenantId)
+          : null;
+        const retryAllowed = activePlan ? activePlan.retryAutomation : true;
+
+        if (input.defaultRetryConfig && (input.defaultRetryConfig as any).enabled && !retryAllowed) {
+          throw new RetryConfigNotAllowedError();
+        }
+
+        const resolved = resolveSarvamCampaignRetry(
+          (campaign.defaultRetryConfig as any) ?? { max_retries: 0 },
+          (input.defaultRetryConfig as any) ?? undefined,
+          retryAllowed,
+        );
+
+        if (
+          campaign.sarvamCampaignId &&
+          this.sarvamCampaignClient &&
+          this.sarvamEncryptionService &&
+          campaign.sarvamAgentId
+        ) {
+          const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+            tenantId,
+            campaign.sarvamAgentId,
+          );
+
+          if (sarvamAgent) {
+            const decryptedApiKey = this.sarvamEncryptionService.decrypt(
+              sarvamAgent.apiKey.apiKeyEncrypted,
+            );
+
+            await this.sarvamCampaignClient.updateCampaign(
+              sarvamAgent.apiKey.organizationId,
+              sarvamAgent.apiKey.workspaceId,
+              campaign.sarvamCampaignId,
+              decryptedApiKey,
+              {
+                app_config: {
+                  retry_config: resolved.providerConfig,
+                } as any,
+              },
+            );
+          }
+        }
+
+        resolvedDefaultRetryConfig = resolved.persistedConfig as unknown as Record<string, unknown>;
+      } else if (campaign.provider === "BOLNA" && input.defaultRetryConfig) {
+        const activePlan = this.planRepo
+          ? await this.planRepo.getActivePlanForTenant(tenantId)
+          : null;
+        const retryAllowed = activePlan ? activePlan.retryAutomation : true;
+
+        if ((input.defaultRetryConfig as any).enabled && !retryAllowed) {
+          throw new RetryConfigNotAllowedError();
+        }
+      }
+    }
+
+    // 5. Construct update payload
     const updateData: UpdateCampaignData = {
       ...(input.name !== undefined && { name: input.name.trim() }),
       ...(input.description !== undefined && { description: input.description }),
       ...(isAgentChanged && { assistantId: targetAssistantId }),
       ...(cleanedVariables !== undefined && { variables: cleanedVariables }),
       ...(input.defaultRetryConfig !== undefined && {
-        defaultRetryConfig: input.defaultRetryConfig,
+        defaultRetryConfig: resolvedDefaultRetryConfig,
       }),
     };
 

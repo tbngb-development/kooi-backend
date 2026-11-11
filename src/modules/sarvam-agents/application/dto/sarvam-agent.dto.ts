@@ -126,6 +126,7 @@ export interface TenantSarvamAgentSummaryDTO {
   audioRecordings: SarvamAudioRecording[];
   status: "ACTIVE";
   allowTenantVisible: boolean;
+  retryConfig: SarvamRetryConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +142,7 @@ export interface TenantSarvamAgentDetailDTO {
   audioUrl: string | null;
   audioRecordings: SarvamAudioRecording[];
   status: "ACTIVE";
+  retryConfig: SarvamRetryConfig;
   welcomeMessage: {
     defaultMessage: string;
     customMessage: string | null;

@@ -607,7 +607,7 @@ describe("Sarvam Agent Use Cases", () => {
         mapper,
       );
 
-      // Custom dynamic keys accepted
+      // Documented retry conditions accepted
       const result = await useCase.execute({
         name: "Dynamic Retry Agent",
         apiKeyId: "key-uuid-1",
@@ -618,20 +618,44 @@ describe("Sarvam Agent Use Cases", () => {
         retryConfig: {
           max_retries: 3,
           retry_on: {
-            custom_telephony_error: { enabled: true, threshold_seconds: 45 },
-            unreachable: { enabled: false },
+            short_duration: { enabled: true, threshold_seconds: 45 },
+            no_answer: { enabled: false },
+            provider_error: { enabled: true, max_retries: 2, retry_interval_minutes: 5 },
           },
         },
       });
 
       expect(result.retryConfig.retry_on).toBeDefined();
-      expect(result.retryConfig.retry_on?.custom_telephony_error).toEqual({
+      expect(result.retryConfig.retry_on?.short_duration).toEqual({
         enabled: true,
         threshold_seconds: 45,
       });
-      expect(result.retryConfig.retry_on?.unreachable).toEqual({
+      expect(result.retryConfig.retry_on?.no_answer).toEqual({
         enabled: false,
       });
+      expect(result.retryConfig.retry_on?.provider_error).toEqual({
+        enabled: true,
+        max_retries: 2,
+        retry_interval_minutes: 5,
+      });
+
+      // Unsupported condition key rejected
+      await expect(
+        useCase.execute({
+          name: "Invalid Key Agent",
+          apiKeyId: "key-uuid-1",
+          appId: "invalid_key_app",
+          appVersion: 1,
+          createdBy: "admin-1",
+          connectionConfigs: [{ connection_id: "c1", agent_phone_number: "+1" }],
+          retryConfig: {
+            max_retries: 3,
+            retry_on: {
+              voicemail: { enabled: true } as any,
+            },
+          },
+        }),
+      ).rejects.toThrow(ValidationError);
 
       // Malformed condition: missing enabled
       await expect(

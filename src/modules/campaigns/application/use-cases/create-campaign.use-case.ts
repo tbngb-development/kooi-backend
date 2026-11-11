@@ -26,6 +26,7 @@ import {
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
 import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sarvam-agent.mapper";
 import { validateSarvamCampaignVariables } from "../../../sarvam-agents/domain/rules/sarvam-variable.rules";
+import { resolveSarvamCampaignRetry } from "../../../sarvam-agents/domain/rules/sarvam-retry-config.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 import { env } from "../../../../shared/config/env";
@@ -74,16 +75,16 @@ export class CreateCampaignUseCase {
     }
 
     // 3. Resolve retry config
-    let finalRetryConfig = input.defaultRetryConfig;
-    if (input.defaultRetryConfig) {
-      const retryAllowed = activePlan?.retryAutomation ?? false;
+    const retryAllowed = activePlan?.retryAutomation ?? false;
+    let finalBolnaRetryConfig = input.defaultRetryConfig;
 
-      if (!retryAllowed && input.defaultRetryConfig.enabled) {
+    if (input.defaultRetryConfig) {
+      if (!retryAllowed && (input.defaultRetryConfig as any).enabled) {
         throw new RetryConfigNotAllowedError();
       }
 
       if (!retryAllowed) {
-        finalRetryConfig = undefined;
+        finalBolnaRetryConfig = undefined;
       }
     }
 
@@ -93,14 +94,14 @@ export class CreateCampaignUseCase {
         tenantId,
         input,
         selectedProvider,
-        finalRetryConfig,
+        finalBolnaRetryConfig,
       );
     } else if (selectedProvider === "SARVAM") {
       return this.createSarvamCampaign(
         tenantId,
         input,
         selectedProvider,
-        finalRetryConfig,
+        retryAllowed,
       );
     } else {
       throw new Error(`Unsupported voice provider: ${selectedProvider}`);
@@ -160,7 +161,7 @@ export class CreateCampaignUseCase {
     tenantId: string,
     input: CreateCampaignInput,
     selectedProvider: VoiceProvider,
-    finalRetryConfig?: Record<string, unknown>,
+    planAllowsRetry: boolean,
   ) {
     if (!input.sarvamAgentId) {
       throw new CampaignSarvamAgentRequiredError();
@@ -252,6 +253,16 @@ export class CreateCampaignUseCase {
 
     const cleanedVariables = validatedVariables;
 
+    // Resolve Sarvam retry configuration (agent inheritance, tenant override, and plan enforcement)
+    const agentRetryConfig = sarvamMapper.parseRetryConfig(
+      sarvamAgent.retryConfig,
+    );
+    const { persistedConfig, providerConfig } = resolveSarvamCampaignRetry(
+      agentRetryConfig,
+      input.defaultRetryConfig as any,
+      planAllowsRetry,
+    );
+
     // Decrypt API key
     if (!this.sarvamEncryptionService) {
       throw new Error("Sarvam encryption service is not configured");
@@ -313,7 +324,7 @@ export class CreateCampaignUseCase {
                 ? [cfg.agent_phone_number]
                 : [],
         })),
-        retry_config: (sarvamAgent.retryConfig as any) ?? { max_retries: 0 },
+        retry_config: providerConfig,
         webhook_config: webhookConfig,
       },
     };
@@ -369,7 +380,7 @@ export class CreateCampaignUseCase {
           expectedValue: g.expectedValue,
           displayName: g.displayName,
         })),
-        defaultRetryConfig: finalRetryConfig,
+        defaultRetryConfig: persistedConfig as unknown as Record<string, unknown>,
       });
 
       this.logger?.info("Sarvam campaign created and linked successfully", {

@@ -340,7 +340,8 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           retryConfig: {
             max_retries: 3,
             retry_on: {
-              busy: { enabled: true, threshold_seconds: 30 },
+              busy: { enabled: true },
+              short_duration: { enabled: true, threshold_seconds: 30 },
             },
             retry_interval_minutes: 5,
           },
@@ -500,7 +501,7 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
           retryConfig: {
             max_retries: 4,
             retry_on: {
-              voicemail: { enabled: true, threshold_seconds: 15 },
+              short_duration: { enabled: true, threshold_seconds: 15 },
             },
             retry_interval_minutes: 10,
           },
@@ -510,7 +511,7 @@ describe("Sarvam Agents Integration & HTTP APIs", () => {
       expect(resSuccess.body.data.connectionConfigs).toHaveLength(2);
       expect(resSuccess.body.data.connectionConfigs[0].connection_id).toBe("c_updated_1");
       expect(resSuccess.body.data.retryConfig.max_retries).toBe(4);
-      expect(resSuccess.body.data.retryConfig.retry_on.voicemail).toEqual({
+      expect(resSuccess.body.data.retryConfig.retry_on.short_duration).toEqual({
         enabled: true,
         threshold_seconds: 15,
       });

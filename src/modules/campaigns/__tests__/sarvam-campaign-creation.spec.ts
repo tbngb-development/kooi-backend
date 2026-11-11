@@ -16,6 +16,7 @@ import {
   CampaignScheduleRequiredError,
   ExternalCampaignCreationFailedError,
   MissingRequiredVariablesError,
+  RetryConfigNotAllowedError,
 } from "../domain/errors/campaign.errors";
 
 describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
@@ -614,6 +615,169 @@ describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
         expect.objectContaining({
           start_timestamp: start.toISOString(),
           end_timestamp: expectedEnd.toISOString(),
+        }),
+      );
+    });
+
+    it("should inherit agent retryConfig and pass to Sarvam when plan allows retry", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-pro",
+        retryAutomation: true,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 3,
+          retry_interval_minutes: 10,
+          retry_on: {
+            busy: { enabled: true },
+            short_duration: { enabled: true, threshold_seconds: 30 },
+          },
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Inherited Retry Campaign",
+        sarvamAgentId: validAgentId,
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 3,
+              retry_interval_minutes: 10,
+              retry_on: expect.objectContaining({
+                busy: { enabled: true },
+                short_duration: { enabled: true, threshold_seconds: 30 },
+              }),
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: true,
+            max_retries: 3,
+          }),
+        }),
+      );
+    });
+
+    it("should throw RetryConfigNotAllowedError when tenant attempts to enable retry but plan forbids it", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-starter",
+        retryAutomation: false,
+      });
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Plan Restricted Retry Campaign",
+          sarvamAgentId: validAgentId,
+          defaultRetryConfig: {
+            enabled: true,
+            max_retries: 2,
+          },
+        }),
+      ).rejects.toThrow(RetryConfigNotAllowedError);
+    });
+
+    it("should force disabled retryConfig when plan does not allow retry even if agent had retries", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-basic",
+        retryAutomation: false,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 5,
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Plan Disables Agent Retry Campaign",
+        sarvamAgentId: validAgentId,
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 0,
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: false,
+            max_retries: 0,
+          }),
+        }),
+      );
+    });
+
+    it("should respect tenant override turning retries OFF (enabled: false)", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-enterprise",
+        retryAutomation: true,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 4,
+          retry_on: {
+            busy: { enabled: true },
+          },
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Tenant Turned Off Retry",
+        sarvamAgentId: validAgentId,
+        defaultRetryConfig: {
+          enabled: false,
+        },
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 0,
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: false,
+            max_retries: 0,
+          }),
         }),
       );
     });
