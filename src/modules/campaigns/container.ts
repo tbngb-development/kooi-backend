@@ -85,7 +85,6 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
 
   const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
 
-  const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
   const restoreCampaign = new RestoreCampaignUseCase(campaignRepo);
   const updateCampaignStatus = new UpdateCampaignStatusUseCase(
     campaignRepo,
@@ -110,6 +109,12 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
           log,
         )
       : undefined;
+
+  const archiveCampaign = new ArchiveCampaignUseCase(
+    campaignRepo,
+    controlSarvamCampaign,
+    log,
+  );
 
   const syncSarvamCampaignLifecycle =
     deps?.sarvamCampaignClient && deps?.sarvamEncryptionService
