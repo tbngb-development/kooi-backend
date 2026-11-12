@@ -260,12 +260,14 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
     return prisma.sarvamAgent.findMany({
       where: {
         status: "ACTIVE",
+        apiKey: {
+          isActive: true,
+        },
         OR: [
           { allowTenantVisible: true },
           {
             apiKey: {
               tenantId,
-              isActive: true,
             },
           },
         ],
@@ -282,12 +284,14 @@ export class PrismaSarvamAgentRepository implements ISarvamAgentRepository {
       where: {
         id,
         status: "ACTIVE",
+        apiKey: {
+          isActive: true,
+        },
         OR: [
           { allowTenantVisible: true },
           {
             apiKey: {
               tenantId,
-              isActive: true,
             },
           },
         ],

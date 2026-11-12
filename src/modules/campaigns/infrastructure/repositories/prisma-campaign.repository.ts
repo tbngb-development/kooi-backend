@@ -1350,11 +1350,17 @@ export class PrismaCampaignRepository implements CampaignRepository {
       where: {
         id: sarvamAgentId,
         status: "ACTIVE",
-        allowTenantVisible: true,
         apiKey: {
-          tenantId,
           isActive: true,
         },
+        OR: [
+          { allowTenantVisible: true },
+          {
+            apiKey: {
+              tenantId,
+            },
+          },
+        ],
       },
       include: {
         apiKey: true,

@@ -9,6 +9,9 @@ vi.mock("../../../shared/config/database/prisma", () => ({
       count: vi.fn(),
       findFirst: vi.fn(),
     },
+    sarvamAgent: {
+      findFirst: vi.fn(),
+    },
     lead: {
       groupBy: vi.fn().mockResolvedValue([]),
     },
@@ -138,6 +141,80 @@ describe("Campaign Agent Listing - Provider-Aware Agent Resolution", () => {
         }),
       }),
     );
+  });
+
+  describe("findSarvamAgentWithApiKey", () => {
+    it("queries with ACTIVE status, active apiKey, and OR filter for allowTenantVisible and tenantId", async () => {
+      const mockAgentRecord = {
+        id: "sarvam-agent-1",
+        name: "Customer Support",
+        appId: "app-123",
+        appVersion: 1,
+        attemptsPerSecond: 2,
+        welcomeMessage: { defaultMessage: "Hello" },
+        agentVariables: [],
+        connectionConfigs: [],
+        retryConfig: {},
+        allowedSchedule: null,
+        allowTenantVisible: true,
+        status: "ACTIVE",
+        apiKey: {
+          id: "key-1",
+          tenantId: "platform-tenant-uuid",
+          apiKeyEncrypted: "encrypted",
+          workspaceId: "wrk-1",
+          organizationId: "org-1",
+          isActive: true,
+        },
+        overrides: [],
+        goals: [
+          { id: "goal-1", outputVariableName: "lead_status", expectedValue: "interested" },
+        ],
+      };
+
+      vi.mocked(prisma.sarvamAgent.findFirst).mockResolvedValue(mockAgentRecord as any);
+
+      const agent = await repo.findSarvamAgentWithApiKey(tenantId, "sarvam-agent-1");
+
+      expect(prisma.sarvamAgent.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "sarvam-agent-1",
+          status: "ACTIVE",
+          apiKey: {
+            isActive: true,
+          },
+          OR: [
+            { allowTenantVisible: true },
+            {
+              apiKey: {
+                tenantId,
+              },
+            },
+          ],
+        },
+        include: {
+          apiKey: true,
+          goals: true,
+          overrides: {
+            where: { tenantId },
+          },
+        },
+      });
+
+      expect(agent).not.toBeNull();
+      expect(agent?.id).toBe("sarvam-agent-1");
+      expect(agent?.name).toBe("Customer Support");
+      expect(agent?.apiKey.organizationId).toBe("org-1");
+      expect(agent?.goals).toHaveLength(1);
+    });
+
+    it("returns null when no matching agent is found", async () => {
+      vi.mocked(prisma.sarvamAgent.findFirst).mockResolvedValue(null);
+
+      const agent = await repo.findSarvamAgentWithApiKey(tenantId, "non-existent-agent");
+
+      expect(agent).toBeNull();
+    });
   });
 });
 
