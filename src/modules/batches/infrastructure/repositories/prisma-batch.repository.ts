@@ -10,6 +10,7 @@ import type {
 } from "../../application/dto/batch.dto";
 import type {
   BatchRepository,
+  ProcessingSarvamBatchRecord,
   BatchListItem,
   PendingLeadRow,
 } from "../../application/interfaces/batch-repository.interface";
@@ -17,12 +18,17 @@ import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entit
 import {
   type BatchStatus,
   LeadStatus,
+  type VoiceProvider,
   type LeadStopReason,
   type Prisma,
 } from "@prisma/client";
+import { getBatchExecutionMetricsMap } from "../../../campaigns/infrastructure/queries/lead-execution-metrics.query";
 
 export class PrismaBatchRepository implements BatchRepository {
-  private async getBatchMetricsMap(batchIds: string[]): Promise<
+  private async getBatchMetricsMap(
+    batchIds: string[],
+    tenantId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -33,71 +39,7 @@ export class PrismaBatchRepository implements BatchRepository {
       }
     >
   > {
-    const map = new Map<
-      string,
-      {
-        totalLeads: number;
-        calledLeads: number;
-        completedLeads: number;
-        failedLeads: number;
-      }
-    >();
-
-    if (batchIds.length === 0) return map;
-
-    for (const id of batchIds) {
-      map.set(id, {
-        totalLeads: 0,
-        calledLeads: 0,
-        completedLeads: 0,
-        failedLeads: 0,
-      });
-    }
-
-    const [leadGroups, callStatusGroups, calledLeadGroups] = await Promise.all([
-      prisma.lead.groupBy({
-        by: ["batchId"],
-        where: { batchId: { in: batchIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["batchId", "status"],
-        where: { batchId: { in: batchIds }, isDeleted: false },
-        _count: true,
-      }),
-      prisma.call.groupBy({
-        by: ["batchId", "leadId"],
-        where: {
-          batchId: { in: batchIds },
-          isDeleted: false,
-        },
-      }),
-    ]);
-
-    for (const lg of leadGroups) {
-      if (lg.batchId && map.has(lg.batchId)) {
-        map.get(lg.batchId)!.totalLeads = lg._count;
-      }
-    }
-
-    for (const cg of callStatusGroups) {
-      if (cg.batchId && map.has(cg.batchId)) {
-        const item = map.get(cg.batchId)!;
-        if (cg.status === "COMPLETED") {
-          item.completedLeads += cg._count;
-        } else if (cg.status === "FAILED") {
-          item.failedLeads += cg._count;
-        }
-      }
-    }
-
-    for (const clg of calledLeadGroups) {
-      if (clg.batchId && map.has(clg.batchId)) {
-        map.get(clg.batchId)!.calledLeads += 1;
-      }
-    }
-
-    return map;
+    return getBatchExecutionMetricsMap(prisma, batchIds, tenantId);
   }
 
   async list(
@@ -114,7 +56,7 @@ export class PrismaBatchRepository implements BatchRepository {
     });
 
     const batchIds = batches.map((b) => b.id);
-    const metricsMap = await this.getBatchMetricsMap(batchIds);
+    const metricsMap = await this.getBatchMetricsMap(batchIds, tenantId);
 
     return batches.map((batch) => {
       const counts = metricsMap.get(batch.id) ?? {
@@ -148,7 +90,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
     if (!batch) return null;
 
-    const metricsMap = await this.getBatchMetricsMap([batch.id]);
+    const metricsMap = await this.getBatchMetricsMap([batch.id], tenantId);
     const counts = metricsMap.get(batch.id);
 
     return this.toEntityData(batch, counts);
@@ -168,7 +110,7 @@ export class PrismaBatchRepository implements BatchRepository {
 
     if (!batch) return null;
 
-    const metricsMap = await this.getBatchMetricsMap([batch.id]);
+    const metricsMap = await this.getBatchMetricsMap([batch.id], tenantId);
     const counts = metricsMap.get(batch.id);
 
     return {
@@ -193,36 +135,34 @@ export class PrismaBatchRepository implements BatchRepository {
     if (!batch) return null;
 
     // Parallel aggregations for status breakdowns, costs, and durations
-    const [leadStats, callStats, callAgg, completedDurationAgg, calledLeadRows] =
+    const [leadStats, callStats, callAgg, completedDurationAgg, metricsMap] =
       await Promise.all([
         prisma.lead.groupBy({
           by: ["status"],
-          where: { batchId, isDeleted: false },
+          where: { batchId, tenantId, isDeleted: false },
           _count: true,
         }),
         prisma.call.groupBy({
           by: ["status"],
-          where: { batchId, isDeleted: false },
+          where: { batchId, tenantId, isDeleted: false },
           _count: true,
         }),
         prisma.call.aggregate({
-          where: { batchId, isDeleted: false },
+          where: { batchId, tenantId, isDeleted: false },
           _sum: { chargedAmount: true, duration: true },
           _count: true,
         }),
         prisma.call.aggregate({
           where: {
             batchId,
+            tenantId,
             status: "COMPLETED",
             duration: { not: null },
             isDeleted: false,
           },
           _avg: { duration: true },
         }),
-        prisma.call.groupBy({
-          by: ["leadId"],
-          where: { batchId, isDeleted: false },
-        }),
+        this.getBatchMetricsMap([batch.id], tenantId),
       ]);
 
     const leadCountsByStatus: Record<string, number> = {};
@@ -235,10 +175,16 @@ export class PrismaBatchRepository implements BatchRepository {
       callCountsByStatus[stat.status] = stat._count;
     }
 
-    const totalLeads = leadStats.reduce((acc, s) => acc + s._count, 0);
-    const calledLeads = calledLeadRows.length;
-    const completedLeads = callCountsByStatus["COMPLETED"] ?? 0;
-    const failedLeads = callCountsByStatus["FAILED"] ?? 0;
+    const batchMetrics = metricsMap.get(batch.id) ?? {
+      totalLeads: 0,
+      calledLeads: 0,
+      completedLeads: 0,
+      failedLeads: 0,
+    };
+    const totalLeads = batchMetrics.totalLeads;
+    const calledLeads = batchMetrics.calledLeads;
+    const completedLeads = batchMetrics.completedLeads;
+    const failedLeads = batchMetrics.failedLeads;
 
     const totalCalls = callAgg._count ?? 0;
     const totalCostPaisa = callAgg._sum.chargedAmount ?? 0;
@@ -289,6 +235,8 @@ export class PrismaBatchRepository implements BatchRepository {
       data: {
         name: data.name ?? null,
         campaignId: data.campaignId,
+        provider: data.provider ?? "BOLNA",
+        sarvamCohortId: data.sarvamCohortId ?? null,
         tenantId: data.tenantId,
         status: "CREATED",
         fileName: data.fileName,
@@ -381,15 +329,79 @@ export class PrismaBatchRepository implements BatchRepository {
       fileName?: string;
       status?: BatchStatus;
       bolnaBatchId?: string;
+      sarvamCohortId?: string | null;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
+      sarvamStatus?: string | null;
+      cohortResult?: Record<string, unknown> | null;
       scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData> {
+    const { cohortResult, ...rest } = data;
     const batch = await prisma.leadBatch.update({
       where: { id: batchId },
-      data,
+      data: {
+        ...rest,
+        ...(cohortResult !== undefined && {
+          cohortResult: cohortResult as Prisma.InputJsonValue,
+        }),
+      },
+    });
+
+    return this.toEntityData(batch);
+  }
+
+  async findProcessingSarvamBatches(): Promise<ProcessingSarvamBatchRecord[]> {
+    const batches = await prisma.leadBatch.findMany({
+      where: {
+        isDeleted: false,
+        provider: "SARVAM",
+        sarvamCohortId: { not: null },
+        OR: [
+          { status: "PROCESSING" },
+          { sarvamStatus: "processing" },
+        ],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        campaignId: true,
+        sarvamCohortId: true,
+        status: true,
+        sarvamStatus: true,
+      },
+    });
+
+    return batches.map((b) => ({
+      id: b.id,
+      tenantId: b.tenantId,
+      campaignId: b.campaignId,
+      sarvamCohortId: b.sarvamCohortId as string,
+      status: b.status,
+      sarvamStatus: b.sarvamStatus,
+    }));
+  }
+
+  async updateSarvamCohortStatus(
+    batchId: string,
+    sarvamStatus: string,
+    kooiStatus?: BatchStatus,
+    cohortResult?: Record<string, unknown> | null,
+    error?: string | null,
+  ): Promise<LeadBatchEntityData> {
+    const batch = await prisma.leadBatch.update({
+      where: { id: batchId },
+      data: {
+        sarvamStatus,
+        ...(kooiStatus && { status: kooiStatus }),
+        ...(cohortResult !== undefined && { cohortResult: cohortResult as Prisma.InputJsonValue }),
+        ...(error !== undefined && { processingError: error }),
+        ...(kooiStatus === "CREATED" && {
+          processingStage: null,
+          processingProgress: 100,
+        }),
+      },
     });
 
     return this.toEntityData(batch);
@@ -430,28 +442,39 @@ export class PrismaBatchRepository implements BatchRepository {
 
     if (!batch) throw new Error("Batch not found");
 
-    const leadStats = await prisma.lead.groupBy({
-      by: ["status"],
-      where: { batchId, isDeleted: false },
-      _count: true,
-    });
+    const [leadStats, callStats, costAgg, metricsMap] = await Promise.all([
+      prisma.lead.groupBy({
+        by: ["status"],
+        where: { batchId, tenantId, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.groupBy({
+        by: ["status"],
+        where: { batchId, tenantId, isDeleted: false },
+        _count: true,
+      }),
+      prisma.call.aggregate({
+        where: { batchId, tenantId, isDeleted: false },
+        _sum: { cost: true, chargedAmount: true },
+      }),
+      this.getBatchMetricsMap([batchId], tenantId),
+    ]);
 
-    const callStats = await prisma.call.groupBy({
-      by: ["status"],
-      where: { batchId, isDeleted: false },
-      _count: true,
-    });
-
-    const costAgg = await prisma.call.aggregate({
-      where: { batchId, cost: { not: null }, isDeleted: false },
-      _sum: { cost: true },
-    });
+    const counts = metricsMap.get(batchId) ?? {
+      totalLeads: 0,
+      calledLeads: 0,
+      completedLeads: 0,
+      failedLeads: 0,
+    };
 
     return {
-      batch: this.toEntityData(batch),
+      batch: this.toEntityData(batch, counts),
       leads: leadStats.map((s) => ({ status: s.status, _count: s._count })),
       calls: callStats.map((s) => ({ status: s.status, _count: s._count })),
-      totalCost: (costAgg._sum.cost ?? 0) / 100,
+      totalCost:
+        (costAgg._sum.cost ?? 0) > 0
+          ? (costAgg._sum.cost ?? 0) / 100
+          : (costAgg._sum.chargedAmount ?? 0) / 100,
     };
   }
 
@@ -760,6 +783,10 @@ export class PrismaBatchRepository implements BatchRepository {
     batch: {
       id: string;
       name?: string | null;
+      provider?: string | null;
+      sarvamCohortId?: string | null;
+      sarvamStatus?: string | null;
+      cohortResult?: unknown;
       bolnaBatchId: string | null;
       tenantId: string;
       campaignId: string;
@@ -794,6 +821,10 @@ export class PrismaBatchRepository implements BatchRepository {
     return {
       id: batch.id,
       name: batch.name ?? null,
+      provider: (batch.provider as VoiceProvider) ?? "BOLNA",
+      sarvamCohortId: batch.sarvamCohortId ?? null,
+      sarvamStatus: batch.sarvamStatus ?? null,
+      cohortResult: (batch.cohortResult as Record<string, unknown> | null) ?? null,
       bolnaBatchId: batch.bolnaBatchId,
       tenantId: batch.tenantId,
       campaignId: batch.campaignId,

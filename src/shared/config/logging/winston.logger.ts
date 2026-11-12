@@ -82,6 +82,9 @@ const errorExtractFormat = winston.format((info) => {
     if (typeof err.code === "string") info.errorCode = err.code;
     if (typeof err.statusCode === "number")
       info.errorStatusCode = err.statusCode;
+    if (Array.isArray(err.details)) {
+      info.validationDetails = err.details;
+    }
 
     delete info.error; // remove the raw Error object from JSON output
   }

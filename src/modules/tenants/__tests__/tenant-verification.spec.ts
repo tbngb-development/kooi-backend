@@ -33,6 +33,7 @@ describe("Tenant Identity Verification", () => {
     isVerified: false,
     phone: null,
     verifiedAt: null,
+    voiceProvider: "BOLNA",
     createdAt: new Date(),
     updatedAt: new Date(),
     _count: { memberships: 1, campaigns: 0, leads: 0, calls: 0 },

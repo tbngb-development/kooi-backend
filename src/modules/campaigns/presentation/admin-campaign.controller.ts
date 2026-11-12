@@ -3,6 +3,9 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
 import { sendSuccess } from "../../../shared/utils/response";
+import { HttpStatus } from "../../../shared/constants/http-status";
+import { AppError } from "../../../shared/errors/app.error";
+import type { ControlSarvamCampaignUseCase } from "../application/use-cases/control-sarvam-campaign.use-case";
 import { AdminMessages } from "../../../shared/constants/messages";
 import { param } from "../../../shared/utils/paramHelper";
 import { TenantBadRequestError } from "../../tenants/domain/tenant.errors";
@@ -17,6 +20,7 @@ import {
   listCampaignsQuerySchema,
   updateCampaignStatusSchema,
   updateCampaignSchema,
+  controlSarvamCampaignSchema,
 } from "./campaign.schema";
 
 export class AdminCampaignController {
@@ -28,6 +32,7 @@ export class AdminCampaignController {
     private readonly restoreCampaignUseCase: RestoreCampaignUseCase,
     private readonly updateCampaignStatusUseCase: UpdateCampaignStatusUseCase,
     private readonly updateCampaignUseCase: UpdateCampaignUseCase,
+    private readonly controlSarvamCampaignUseCase?: ControlSarvamCampaignUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -133,6 +138,43 @@ export class AdminCampaignController {
       next(err);
     }
   };
+
+
+  control = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const tenantId = this.resolveTenantId(req);
+      const campaignId = param(req, "id");
+      const { action } = controlSarvamCampaignSchema.parse(req.body);
+
+      if (!this.controlSarvamCampaignUseCase) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          "Campaign control service is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const updated = await this.controlSarvamCampaignUseCase.execute({
+        tenantId,
+        campaignId,
+        action,
+      });
+
+      sendSuccess(
+        res,
+        updated,
+        HttpStatus.OK,
+        `Campaign ${action} action executed successfully`,
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
 
   updateStatus = async (
     req: Request,

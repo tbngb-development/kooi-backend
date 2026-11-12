@@ -5,6 +5,16 @@ import type { BatchRepository } from "../../application/interfaces/batch-reposit
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { BolnaBatchProvider } from "../../application/interfaces/bolna-batch-provider.interface";
+import type { ISarvamCohortClient } from "../../application/interfaces/sarvam-cohort-client.interface";
+import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
+import { SarvamCohortTransformer } from "../sarvam-cohort-transformer";
+import type {
+  SarvamAgentVariable,
+  WelcomeMessageConfig,
+} from "../../../sarvam-agents/domain/types/sarvam-agent.types";
+import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
+import type { PendingLeadRow } from "../../application/interfaces/batch-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import {
   parseLeadBuffer,
@@ -46,15 +56,21 @@ const CHUNK_SIZE = 500;
 export class BatchProcessingWorker {
   private readonly log: Logger | undefined;
 
+  private readonly sarvamCohortTransformer: SarvamCohortTransformer;
+
   constructor(
     private readonly batchRepo: BatchRepository,
     private readonly campaignRepo: CampaignRepository,
     private readonly planRepo: PlanRepository,
     private readonly bolnaProvider: BolnaBatchProvider,
     private readonly phoneNumberRepo: IPhoneNumberRepository,
+    private readonly sarvamCohortClient?: ISarvamCohortClient,
+    private readonly sarvamEncryptionService?: ISarvamApiKeyEncryptionService,
+    private readonly storage?: FileStorageProvider,
     logger?: Logger,
   ) {
     this.log = logger?.child({ component: "BatchProcessingWorker" });
+    this.sarvamCohortTransformer = new SarvamCohortTransformer();
   }
 
   async process(job: Job<BatchJobData>): Promise<void> {
@@ -271,6 +287,21 @@ export class BatchProcessingWorker {
         return;
       }
 
+      if (campaign.provider === "SARVAM") {
+        await this.processSarvamCohortSync({
+          campaign,
+          batchId,
+          tenantId,
+          campaignId,
+          fileName,
+          scheduledAt,
+          runImmediately,
+          pendingLeads,
+          existingBatch,
+        });
+        return;
+      }
+
       if (!campaign.assistant) {
         await this.failBatch(
           batchId,
@@ -382,7 +413,9 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.update(batchId, {
         name: finalCheck.name || bolnaFileName.replace(/\.csv$/, ""),
-        fileName: finalCheck.fileName?.startsWith("batch-manual-") ? bolnaFileName : undefined,
+        fileName: finalCheck.fileName?.startsWith("batch-manual-")
+          ? bolnaFileName
+          : undefined,
         bolnaBatchId,
         status: finalStatus,
         scheduledAt: localScheduledAt,
@@ -431,6 +464,373 @@ export class BatchProcessingWorker {
 
       throw err;
     }
+  }
+
+  private async processSarvamCohortSync(params: {
+    campaign: NonNullable<
+      Awaited<ReturnType<CampaignRepository["findByIdWithRelations"]>>
+    >;
+    batchId: string;
+    tenantId: string;
+    campaignId: string;
+    fileName: string;
+    scheduledAt: string | null;
+    runImmediately: boolean;
+    pendingLeads: PendingLeadRow[];
+    existingBatch: LeadBatchEntityData;
+  }): Promise<void> {
+    const {
+      campaign,
+      batchId,
+      tenantId,
+      campaignId,
+      fileName,
+      scheduledAt,
+      runImmediately,
+      pendingLeads,
+      existingBatch,
+    } = params;
+
+    if (!campaign.sarvamAgentId) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Campaign Sarvam agent is not configured or missing.",
+      );
+      return;
+    }
+
+    if (!campaign.sarvamCampaignId) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Campaign does not have an external Sarvam campaign ID.",
+      );
+      return;
+    }
+
+    if (!this.sarvamCohortClient || !this.sarvamEncryptionService) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Sarvam cohort client or encryption service is not configured.",
+      );
+      return;
+    }
+
+    const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+      tenantId,
+      campaign.sarvamAgentId,
+    );
+    if (!sarvamAgent) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Sarvam agent could not be found or is not accessible.",
+      );
+      return;
+    }
+
+    const decryptedApiKey = this.sarvamEncryptionService.decrypt(
+      sarvamAgent.apiKey.apiKeyEncrypted,
+    );
+
+    const leadsForSarvam: LeadRow[] = pendingLeads.map((l) => ({
+      ...(l.metadata as Record<string, unknown>),
+      phone: l.phone,
+      name: l.name,
+      email: l.email ?? undefined,
+      company: l.company ?? undefined,
+    }));
+
+    const agentVariables =
+      (sarvamAgent.agentVariables as SarvamAgentVariable[]) ?? [];
+    const variableOverrides =
+      (sarvamAgent.overrides?.[0]?.variableOverrides as Record<
+        string,
+        string
+      >) ?? {};
+    const campaignVariables =
+      (campaign.variables as Record<string, string>) ?? {};
+    const welcomeMessageConfig =
+      (sarvamAgent.welcomeMessage as WelcomeMessageConfig | undefined) ??
+      undefined;
+
+    const transformResult = this.sarvamCohortTransformer.transform(
+      leadsForSarvam,
+      agentVariables,
+      variableOverrides,
+      campaignVariables,
+      welcomeMessageConfig,
+      this.log,
+    );
+
+    if (transformResult.missingRequiredVariables.length > 0) {
+      const firstDetail = transformResult.missingRequiredDetails?.[0];
+      const failureReason = firstDetail
+        ? `Missing required variable '${firstDetail.variable}' for contact '${firstDetail.contactPhone}'. Variable is not set in campaign configuration or contact data.`
+        : `Missing required Sarvam agent variable(s): ${transformResult.missingRequiredVariables.join(", ")}. Variable is not set in campaign configuration or contact data.`;
+
+      await this.failBatch(batchId, campaignId, failureReason);
+      return;
+    }
+
+    if (transformResult.totalLeads === 0) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "No valid Indian contact numbers found for Sarvam cohort upload.",
+      );
+      return;
+    }
+
+    await this.batchRepo.updateProgress(batchId, "SYNCING", 75);
+
+    let transformedCsvUrl: string | undefined = undefined;
+    if (this.storage) {
+      try {
+        transformedCsvUrl = await this.storage.uploadBuffer(
+          transformResult.transformedCsvBuffer,
+          `sarvam-${fileName}`,
+          `kooi/${tenantId}/campaigns/${campaignId}/batches/transformed`,
+        );
+      } catch (storageErr) {
+        this.log?.warn(
+          "Failed to upload transformed Sarvam CSV to storage, proceeding with upload buffer",
+          { batchId, error: (storageErr as Error).message },
+        );
+      }
+    }
+
+    const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
+      campaignId,
+      batchId,
+    );
+    const resolvedBatchName = existingBatch.name || `Batch-${sequenceNumber}`;
+
+    // Re-fetch campaign state immediately before Sarvam upload
+    const campaignBeforeUpload = await this.campaignRepo.findByIdWithRelations(
+      tenantId,
+      campaignId,
+    );
+    if (!campaignBeforeUpload || campaignBeforeUpload.isDeleted) {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Campaign was deleted before cohort upload.",
+      );
+      return;
+    }
+
+    const isCampaignExpired = Boolean(
+      campaignBeforeUpload.endTimestamp &&
+        new Date(campaignBeforeUpload.endTimestamp).getTime() <= Date.now(),
+    );
+    const isCampaignEnded =
+      isCampaignExpired ||
+      campaignBeforeUpload.sarvamStatus?.toLowerCase() === "ended";
+    const isCampaignTerminal =
+      isCampaignEnded || campaignBeforeUpload.status === "CANCELLED";
+
+    if (isCampaignTerminal) {
+      this.log?.warn(
+        "Aborting Sarvam cohort upload: campaign expired or reached terminal state",
+        {
+          action: "batch.worker.sarvam_upload_aborted",
+          batchId,
+          campaignId,
+          status: campaignBeforeUpload.status,
+          isCampaignExpired,
+          isCampaignEnded,
+        },
+      );
+
+      await this.batchRepo.markPendingLeadsAsStopped(batchId, "MANUAL");
+      await this.batchRepo.update(batchId, {
+        name: existingBatch.name || resolvedBatchName,
+        status: "STOPPED",
+      });
+      await this.batchRepo.recalculateCampaignStats(campaignId);
+      return;
+    }
+
+    this.log?.info("Uploading cohort to Sarvam AI", {
+      action: "batch.worker.sarvam_upload",
+      batchId,
+      campaignId,
+      sarvamCampaignId: campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId,
+      totalLeads: transformResult.totalLeads,
+    });
+
+    const uploadResponse = await this.sarvamCohortClient.uploadCohort({
+      organizationId: sarvamAgent.apiKey.organizationId,
+      workspaceId: sarvamAgent.apiKey.workspaceId,
+      campaignId: (campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId) as string,
+      apiKey: decryptedApiKey,
+      name: resolvedBatchName.slice(0, 50),
+      cohortFile: transformResult.transformedCsvBuffer,
+      cohortFileName: `${resolvedBatchName}.csv`,
+      transformationJson: transformResult.transformationJson,
+      cohortCategory: "cohort",
+    });
+
+    const sarvamCohortId = uploadResponse.cohort_id;
+    await this.batchRepo.update(batchId, {
+      sarvamCohortId,
+      transformedCsvUrl,
+    });
+    await this.batchRepo.updateProgress(batchId, "SYNCING", 85);
+
+    // Poll cohort status with backoff (up to 30s)
+    let cohortStatus = uploadResponse.status;
+    const pollDelays = [2000, 3000, 5000, 8000, 12000];
+
+    for (const delay of pollDelays) {
+      if (cohortStatus !== "processing") break;
+      await new Promise((r) => setTimeout(r, delay));
+      try {
+        const statusCheck = await this.sarvamCohortClient.getCohort({
+          organizationId: sarvamAgent.apiKey.organizationId,
+          workspaceId: sarvamAgent.apiKey.workspaceId,
+          campaignId: (campaignBeforeUpload.sarvamCampaignId || campaign.sarvamCampaignId) as string,
+          cohortId: sarvamCohortId,
+          apiKey: decryptedApiKey,
+        });
+        cohortStatus = statusCheck.status;
+      } catch (pollErr) {
+        this.log?.warn("Sarvam cohort status poll check error, continuing", {
+          batchId,
+          cohortId: sarvamCohortId,
+          error: (pollErr as Error).message,
+        });
+      }
+    }
+
+    await this.batchRepo.updateProgress(batchId, "FINALIZING", 90);
+
+    const finalCheck = await this.batchRepo.findById(
+      tenantId,
+      campaignId,
+      batchId,
+    );
+    if (!finalCheck) {
+      this.log?.warn("Batch was deleted before finalize update, exiting", {
+        batchId,
+      });
+      return;
+    }
+
+    if (cohortStatus === "failed") {
+      await this.failBatch(
+        batchId,
+        campaignId,
+        "Sarvam cohort processing failed at voice provider.",
+      );
+      return;
+    }
+
+    // Determine batch status and execution time accurately
+    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" =
+      "CREATED";
+
+    const freshCampaign = await this.campaignRepo.findByIdWithRelations(
+      tenantId,
+      campaignId,
+    );
+
+    let hasAvailableSlot = true;
+    if (freshCampaign?.sarvamAgentId && this.campaignRepo.countActiveCampaignsForAgent) {
+      const activeCount = await this.campaignRepo.countActiveCampaignsForAgent(
+        freshCampaign.sarvamAgentId,
+        campaignId,
+      );
+      if (activeCount >= 5) {
+        hasAvailableSlot = false;
+        this.log?.warn(
+          "Sarvam agent active campaign capacity reached (5/5). Campaign execution deferred.",
+          {
+            action: "sarvam.capacity.deferred",
+            campaignId,
+            sarvamAgentId: freshCampaign.sarvamAgentId,
+            activeCount,
+          },
+        );
+      }
+    }
+
+    if (cohortStatus === "processing") {
+      finalStatus = "PROCESSING";
+    } else if (scheduledAt) {
+      finalStatus = "SCHEDULED";
+    } else if (runImmediately) {
+      const isStartTimeReached =
+        !freshCampaign?.startTimestamp ||
+        new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
+
+      if (freshCampaign?.status === "RUNNING") {
+        finalStatus = "RUNNING";
+      } else if (freshCampaign?.status === "DRAFT" && isStartTimeReached) {
+        finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
+      } else if (freshCampaign?.status === "DRAFT" && !isStartTimeReached) {
+        finalStatus = "SCHEDULED";
+      } else {
+        // Campaign is PAUSED or SCHEDULED
+        finalStatus = "CREATED";
+      }
+    } else {
+      finalStatus = "CREATED";
+    }
+
+    const resolvedScheduledAt = scheduledAt
+      ? new Date(scheduledAt)
+      : finalStatus === "RUNNING"
+        ? new Date()
+        : finalStatus === "SCHEDULED" && freshCampaign?.startTimestamp
+          ? new Date(freshCampaign.startTimestamp)
+          : finalStatus === "SCHEDULED"
+            ? new Date()
+            : null;
+
+    await this.batchRepo.update(batchId, {
+      name: finalCheck.name || resolvedBatchName,
+      sarvamCohortId,
+      status: finalStatus,
+      scheduledAt: resolvedScheduledAt,
+    });
+
+    // Only transition DRAFT campaigns to RUNNING if runImmediately is true, start time reached, and slot is available;
+    // preserve existing PAUSED, SCHEDULED, and RUNNING campaign states
+    if (freshCampaign && freshCampaign.status === "DRAFT") {
+      const isStartTimeReached =
+        !freshCampaign.startTimestamp ||
+        new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
+
+      const nextCampaignStatus =
+        runImmediately && isStartTimeReached && hasAvailableSlot
+          ? "RUNNING"
+          : "SCHEDULED";
+
+      await this.campaignRepo.updateStatus(campaignId, nextCampaignStatus, {
+        ...(nextCampaignStatus === "RUNNING" ? { startedAt: new Date() } : {}),
+      });
+    }
+
+    await this.batchRepo.recalculateCampaignStats(campaignId);
+
+    if (finalStatus !== "PROCESSING") {
+      await this.batchRepo.updateProgress(batchId, "FINALIZING", 100);
+    }
+
+    this.log?.info("Sarvam batch processing complete", {
+      action: "batch.worker.complete",
+      batchId,
+      tenantId,
+      campaignId,
+      totalLeads: pendingLeads.length,
+      sarvamCohortId,
+      finalStatus,
+      cohortStatus,
+    });
   }
 
   private async failBatch(

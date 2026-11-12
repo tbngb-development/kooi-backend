@@ -7,6 +7,7 @@ import type { CreateBatchInput } from "../dto/batch.dto";
 import {
   CampaignNotFoundError,
   CampaignFailedError,
+  CampaignNotEligibleForUploadError,
   MaxActiveCampaignsReachedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
 import {
@@ -48,10 +49,29 @@ export class EnqueueBatchUploadUseCase {
       input.campaignId,
     );
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("upload to");
+    if (campaign.provider === "SARVAM") {
+      if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
+        throw new CampaignNotFoundError();
+      }
+      const isExpired = Boolean(
+        campaign.endTimestamp &&
+          new Date(campaign.endTimestamp).getTime() <= Date.now(),
+      );
+      const isEnded =
+        isExpired || campaign.sarvamStatus?.toLowerCase() === "ended";
+
+      if (isEnded) {
+        throw new CampaignNotEligibleForUploadError("ended");
+      }
+      if (campaign.status === "CANCELLED") {
+        throw new CampaignNotEligibleForUploadError(campaign.status);
+      }
+    } else {
+      if (!campaign.assistant) throw new CampaignNotFoundError();
+      if (campaign.status === "CANCELLED") {
+        throw new CampaignNotEligibleForUploadError(campaign.status);
+      }
     }
-    if (!campaign.assistant) throw new CampaignNotFoundError();
 
     // 2. Validate active plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -160,6 +180,7 @@ export class EnqueueBatchUploadUseCase {
       name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       fileName: input.fileName,
       totalLeads: 0,
       retryConfig: input.retryConfig,
@@ -167,6 +188,23 @@ export class EnqueueBatchUploadUseCase {
       termsAcceptedAt: new Date(),
       termsVersion: input.termsVersion,
     });
+
+    // Reactivate failed campaigns, or completed Sarvam campaigns whose schedule is active
+    if (
+      campaign.status === "FAILED" ||
+      (campaign.provider === "SARVAM" && campaign.status === "COMPLETED")
+    ) {
+      const nextStatus = input.runImmediately ? "RUNNING" : "SCHEDULED";
+      await this.campaignRepo.updateStatus(campaign.id, nextStatus, {
+        completedAt: null,
+      });
+      this.log?.info("Reactivated campaign on new batch upload", {
+        action: "campaign.reactivate",
+        campaignId: campaign.id,
+        previousStatus: campaign.status,
+        newStatus: nextStatus,
+      });
+    }
 
     // Auto-generate standardized batch name if not explicitly provided
     const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
@@ -192,6 +230,8 @@ export class EnqueueBatchUploadUseCase {
     await this.batchRepo.updateRawFileUrl(batch.id, rawFileUrl);
 
     // 8. Enqueue the heavy processing job
+    const resolvedScheduledAt = input.scheduledAt ?? (input.runImmediately ? new Date().toISOString() : null);
+
     await queue.add(
       "process-batch",
       {
@@ -200,7 +240,7 @@ export class EnqueueBatchUploadUseCase {
         campaignId: input.campaignId,
         rawFileUrl,
         fileName: finalFileName,
-        scheduledAt: input.scheduledAt ?? null,
+        scheduledAt: resolvedScheduledAt,
         runImmediately: input.runImmediately ?? false,
         retryConfig: input.retryConfig ?? null,
         termsVersion: input.termsVersion,

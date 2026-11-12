@@ -1,24 +1,167 @@
 // modules/campaigns/presentation/campaign.schema.ts
 
 import { z } from "zod";
+import { sarvamRetryOnConfigSchema } from "../../sarvam-agents/presentation/admin/admin-sarvam-agent.schema";
 
-export const createCampaignSchema = z.object({
-  name: z.string().min(1, "Campaign name is required").max(200),
-  description: z.string().max(2000).optional(),
-  assistantId: z.string().uuid("Invalid assistant ID"),
-  variables: z.record(z.string(), z.string()).optional(),
-  defaultRetryConfig: z
-    .object({
-      enabled: z.boolean(),
-      max_retries: z.number().int().min(0).max(5).optional(),
-      retry_on_statuses: z
-        .array(z.enum(["no-answer", "busy", "failed"]))
-        .optional(),
-      retry_on_voicemail: z.boolean().optional(),
-      retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
-    })
+export const bolnaCampaignRetryConfigSchema = z.object({
+  enabled: z.boolean(),
+  max_retries: z.number().int().min(0).max(5).optional(),
+  retry_on_statuses: z
+    .array(z.enum(["no-answer", "busy", "failed"]))
+    .optional(),
+  retry_on_voicemail: z.boolean().optional(),
+  retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
+});
+
+export const sarvamCampaignRetryOverrideSchema = z.object({
+  enabled: z.boolean(),
+  max_retries: z.number().int().min(0).max(20).optional(),
+  retry_on: sarvamRetryOnConfigSchema.nullable().optional(),
+  retry_interval_minutes: z
+    .union([
+      z.number().int().min(1),
+      z.array(z.number().int().min(1)),
+    ])
+    .nullable()
     .optional(),
 });
+
+export const campaignRetryConfigSchema = z.lazy(() =>
+  z
+    .custom<Record<string, unknown>>(
+      (val) => typeof val === "object" && val !== null,
+    )
+    .transform((data, ctx) => {
+      // 1. If payload contains Sarvam-specific fields
+      if ("retry_interval_minutes" in data || "retry_on" in data) {
+        const result = sarvamCampaignRetryOverrideSchema.safeParse(data);
+        if (!result.success) {
+          result.error.issues.forEach((issue) =>
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: issue.path,
+              message: issue.message,
+            }),
+          );
+          return z.NEVER;
+        }
+        return result.data;
+      }
+
+      // 2. If payload contains Bolna-specific fields
+      if (
+        "retry_intervals_minutes" in data ||
+        "retry_on_statuses" in data ||
+        "retry_on_voicemail" in data
+      ) {
+        const result = bolnaCampaignRetryConfigSchema.safeParse(data);
+        if (!result.success) {
+          result.error.issues.forEach((issue) =>
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: issue.path,
+              message: issue.message,
+            }),
+          );
+          return z.NEVER;
+        }
+        return result.data;
+      }
+
+      // 3. Fallback for shared/minimal payloads (e.g. { enabled: false, max_retries: 0 })
+      const sarvamResult = sarvamCampaignRetryOverrideSchema.safeParse(data);
+      if (sarvamResult.success) {
+        return sarvamResult.data;
+      }
+
+      const bolnaResult = bolnaCampaignRetryConfigSchema.safeParse(data);
+      if (bolnaResult.success) {
+        return bolnaResult.data;
+      }
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid campaign retry configuration",
+      });
+      return z.NEVER;
+    }),
+);
+
+export const allowedScheduleSchema = z.object({
+  allowed_start_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format"),
+  allowed_end_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid HH:MM 24-hour format"),
+  allowed_days: z
+    .array(
+      z.enum([
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ]),
+    )
+    .min(1, "At least one day must be allowed"),
+  timezone: z.string().optional().default("Asia/Kolkata"),
+});
+
+export const MAX_CAMPAIGN_DURATION_DAYS = 90;
+export const MAX_CAMPAIGN_DURATION_MS =
+  MAX_CAMPAIGN_DURATION_DAYS * 24 * 60 * 60 * 1000;
+
+export const createCampaignSchema = z
+  .object({
+    name: z.string().min(1, "Campaign name is required").max(200),
+    description: z.string().max(2000).optional(),
+    assistantId: z.string().uuid("Invalid assistant ID").optional(),
+    sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID").optional(),
+    startTimestamp: z
+      .string()
+      .datetime({ message: "Invalid start timestamp format" })
+      .optional(),
+    endTimestamp: z
+      .string()
+      .datetime({ message: "Invalid end timestamp format" })
+      .optional(),
+    allowedSchedule: allowedScheduleSchema.optional(),
+    variables: z.record(z.string(), z.string()).optional(),
+    defaultRetryConfig: campaignRetryConfigSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sarvamAgentId) {
+      if (data.startTimestamp && data.endTimestamp) {
+        const start = new Date(data.startTimestamp);
+        const end = new Date(data.endTimestamp);
+
+        if (end <= start) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["endTimestamp"],
+            message: "endTimestamp must be after startTimestamp",
+          });
+        }
+
+        if (end.getTime() - start.getTime() > MAX_CAMPAIGN_DURATION_MS) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["endTimestamp"],
+            message: `Campaign duration cannot exceed ${MAX_CAMPAIGN_DURATION_DAYS} days from start date`,
+          });
+        }
+      }
+    } else if (!data.assistantId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assistantId"],
+        message: "Either assistantId or sarvamAgentId is required",
+      });
+    }
+  });
 
 export const listCampaignsQuerySchema = z.object({
   search: z.string().trim().optional(),
@@ -59,21 +202,15 @@ export const parseManualLeadsSchema = z.object({
     .max(1000, "Maximum 1000 leads per manual submission"),
 });
 
-export const campaignRetryConfigSchema = z.object({
-  enabled: z.boolean(),
-  max_retries: z.number().int().min(0).max(5).optional(),
-  retry_on_statuses: z
-    .array(z.enum(["no-answer", "busy", "failed"]))
-    .optional(),
-  retry_on_voicemail: z.boolean().optional(),
-  retry_intervals_minutes: z.array(z.number().int().positive()).optional(),
-});
-
 export const updateCampaignSchema = z.object({
   name: z.string().trim().min(1, "Campaign name cannot be empty").max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   platformAgentId: z.string().uuid("Invalid platform agent ID").optional(),
   assistantId: z.string().uuid("Invalid assistant ID").optional(),
+  sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID").optional(),
+  startTimestamp: z.string().datetime().nullable().optional(),
+  endTimestamp: z.string().datetime().nullable().optional(),
+  allowedSchedule: allowedScheduleSchema.nullable().optional(),
   variables: z.record(z.string(), z.string()).optional(),
   defaultRetryConfig: campaignRetryConfigSchema.nullable().optional(),
   retryConfig: campaignRetryConfigSchema.nullable().optional(),
@@ -83,7 +220,15 @@ export const updateCampaignSchema = z.object({
 export const updateDraftCampaignSchema = updateCampaignSchema;
 
 export const updateCampaignStatusSchema = z.object({
-  status: z.enum(["DRAFT", "RUNNING", "COMPLETED", "FAILED"]),
+  status: z.enum([
+    "DRAFT",
+    "SCHEDULED",
+    "RUNNING",
+    "PAUSED",
+    "COMPLETED",
+    "CANCELLED",
+    "FAILED",
+  ]),
   cascadeToBatches: z.boolean().optional().default(true),
 });
 
@@ -96,3 +241,18 @@ export type ParseManualLeadsBody = z.infer<typeof parseManualLeadsSchema>;
 export type CreateCampaignBody = z.infer<typeof createCampaignSchema>;
 export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
 export type ExtractVariablesBody = z.infer<typeof extractVariablesSchema>;
+
+export const controlSarvamCampaignSchema = z.object({
+  action: z.enum(["pause", "resume", "cancel"]),
+});
+export type ControlSarvamCampaignBody = z.infer<typeof controlSarvamCampaignSchema>;
+
+export const campaignGoalMetricsQuerySchema = z.object({
+  batchId: z.string().uuid("Invalid batch ID").optional(),
+});
+export type CampaignGoalMetricsQuery = z.infer<typeof campaignGoalMetricsQuerySchema>;
+
+export const activeSarvamCampaignsQuerySchema = z.object({
+  sarvamAgentId: z.string().uuid("Invalid Sarvam agent ID"),
+});
+export type ActiveSarvamCampaignsQuery = z.infer<typeof activeSarvamCampaignsQuerySchema>;

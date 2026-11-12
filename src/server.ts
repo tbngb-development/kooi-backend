@@ -24,6 +24,7 @@ const server = app.listen(env.port, () => {
     container.auth.schedulers.refreshTokenCleanup.start();
     container.classifier.schedulers.classifierExtraction.start();
     container.payments.schedulers.paymentReconciliation.start();
+    container.calls.schedulers.sarvamRecording?.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -40,6 +41,7 @@ function gracefulShutdown(signal: string): void {
   container.auth.schedulers.refreshTokenCleanup.stop();
   container.classifier.schedulers.classifierExtraction.stop();
   container.payments.schedulers.paymentReconciliation.stop();
+  container.calls.schedulers.sarvamRecording?.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);

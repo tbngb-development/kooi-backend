@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
 import type {
   AvailableFiltersResponse,
@@ -6,8 +7,9 @@ import type {
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
 export interface ListCallsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
-  assistantId?: string;
+  agentId?: string;
   leadId?: string;
   status?: string;
   type?: "OUTBOUND" | "INBOUND";
@@ -22,6 +24,8 @@ export interface ListCallsFilters {
   limit?: number;
   dynamicFilters?: DynamicFilterMap;
   isDeleted?: boolean;
+  goalId?: string;
+  goalPassed?: boolean;
 }
 
 export interface PaginatedCallsResult {
@@ -37,7 +41,7 @@ export interface PaginatedCallsResult {
         id: string;
         name: string;
       } | null;
-      assistant?: {
+      agent: {
         id: string;
         name: string;
       } | null;
@@ -79,7 +83,7 @@ export interface DetailedCallResult extends CallEntityData {
     name: string;
     description: string | null;
   } | null;
-  assistant?: {
+  agent: {
     id: string;
     name: string;
   } | null;
@@ -87,7 +91,19 @@ export interface DetailedCallResult extends CallEntityData {
     id: string;
     dynamicExtractions: string | null;
     extractionResult: string | null;
+    outputVariables?: unknown;
   } | null;
+  goalResults?: Array<{
+    id: string;
+    campaignGoalId: string;
+    attemptId: string;
+    createdAt: Date;
+    campaignGoal: {
+      displayName: string;
+      outputVariableName: string;
+      expectedValue: string;
+    };
+  }>;
 }
 
 export interface CallTranscriptResult {
@@ -102,6 +118,7 @@ export interface CallTranscriptResult {
 }
 
 export interface CallStatsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
   leadId?: string;
 }
@@ -159,6 +176,7 @@ export interface CallRepository {
     assistantId: string;
     leadId: string;
     agentNumber: string | null;
+    provider?: VoiceProvider;
   }): Promise<{ id: string }>;
 
   createInboundCallRecord(data: {
@@ -166,6 +184,7 @@ export interface CallRepository {
     tenantId: string;
     assistantId: string;
     leadId: string;
+    provider?: VoiceProvider;
   }): Promise<void>;
 
   softDelete(callId: string): Promise<void>;

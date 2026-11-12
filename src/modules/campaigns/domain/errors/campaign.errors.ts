@@ -17,6 +17,54 @@ export class CampaignAssistantNotFoundError extends NotFoundError {
   }
 }
 
+export class CampaignAssistantRequiredError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.BAD_REQUEST,
+      "assistantId is required for Bolna campaigns",
+      "CAMPAIGN_ASSISTANT_REQUIRED",
+    );
+  }
+}
+
+export class CampaignSarvamAgentNotFoundError extends NotFoundError {
+  constructor() {
+    super("SarvamAgent");
+  }
+}
+
+export class CampaignSarvamAgentRequiredError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.BAD_REQUEST,
+      "sarvamAgentId is required for Sarvam campaigns",
+      "CAMPAIGN_SARVAM_AGENT_REQUIRED",
+    );
+  }
+}
+
+export class ExternalCampaignCreationFailedError extends AppError {
+  constructor(_reason?: string) {
+    super(
+      HttpStatus.BAD_GATEWAY,
+      "Unable to create campaign at this time. Please contact support if the issue persists.",
+      "CAMPAIGN_CREATION_FAILED",
+    );
+  }
+}
+
+export class CampaignScheduleRequiredError extends AppError {
+  constructor(
+    message: string = "Campaign scheduling (start/end timestamp and allowed schedule) is required for Sarvam campaigns",
+  ) {
+    super(
+      HttpStatus.BAD_REQUEST,
+      message,
+      "CAMPAIGN_SCHEDULE_REQUIRED",
+    );
+  }
+}
+
 export class CampaignIdRequiredError extends AppError {
   constructor() {
     super(
@@ -37,12 +85,59 @@ export class CampaignFailedError extends AppError {
   }
 }
 
+export class CampaignNotEligibleForUploadError extends AppError {
+  constructor(status: CampaignStatus | "ENDED" | "ended") {
+    const statusStr = typeof status === "string" ? status.toLowerCase() : status;
+    const article = statusStr === "ended" ? "an" : "a";
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Cannot upload batches to ${article} ${statusStr} campaign.`,
+      "CAMPAIGN_NOT_ELIGIBLE_FOR_UPLOAD",
+    );
+  }
+}
+
+export class CampaignExpiredError extends AppError {
+  constructor(
+    message: string = "This campaign has reached its end time and cannot accept new lead uploads. Please create a new campaign.",
+  ) {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      message,
+      "CAMPAIGN_EXPIRED",
+    );
+  }
+}
+
 export class MaxActiveCampaignsReachedError extends AppError {
   constructor(maxAllowed: number) {
     super(
       HttpStatus.UNPROCESSABLE_ENTITY,
       `You have reached the maximum active campaigns limit (${maxAllowed}) allowed on your plan`,
       "MAX_ACTIVE_CAMPAIGNS_REACHED",
+    );
+  }
+}
+
+export class SarvamAgentMaxActiveCampaignsError extends AppError {
+  constructor(agentName?: string) {
+    const target = agentName ? `for Sarvam agent "${agentName}"` : "for this Sarvam agent";
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Maximum limit of 5 active running campaigns ${target} has been reached. Please pause an existing running campaign before starting or resuming this one.`,
+      "SARVAM_AGENT_MAX_ACTIVE_CAMPAIGNS_REACHED",
+    );
+  }
+}
+
+export class SarvamActiveCampaignLimitReachedError extends AppError {
+  constructor(sarvamAgentId?: string) {
+    super(
+      HttpStatus.TOO_MANY_REQUESTS,
+      "Maximum active Sarvam campaigns limit reached for this agent. Please pause or cancel an existing campaign to create a new one.",
+      "SARVAM_ACTIVE_CAMPAIGN_LIMIT_REACHED",
+      true,
+      sarvamAgentId ? { sarvamAgentId } : undefined,
     );
   }
 }
@@ -63,6 +158,17 @@ export class MissingRequiredVariablesError extends AppError {
       HttpStatus.UNPROCESSABLE_ENTITY,
       `Missing required campaign variables: ${missingVariables.join(", ")}`,
       "MISSING_REQUIRED_VARIABLES",
+    );
+  }
+}
+
+export class InvalidCampaignVariableValueError extends AppError {
+  constructor(invalidVariables: Array<{ key: string; reason: string }>) {
+    const details = invalidVariables.map((iv) => `${iv.key} (${iv.reason})`).join(", ");
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      `Invalid campaign variable value(s): ${details}`,
+      "INVALID_CAMPAIGN_VARIABLE_VALUE",
     );
   }
 }
@@ -113,6 +219,16 @@ export class CampaignNotDraftError extends AppError {
       HttpStatus.UNPROCESSABLE_ENTITY,
       `Campaign can only be updated when in DRAFT status. Current status is '${status}'.`,
       "CAMPAIGN_NOT_DRAFT",
+    );
+  }
+}
+
+export class CampaignRetryConfigImmutableAfterStartError extends AppError {
+  constructor(status: CampaignStatus) {
+    super(
+      HttpStatus.CONFLICT,
+      `Campaign retry configuration cannot be modified once the campaign has started. Current status is '${status}'.`,
+      "CAMPAIGN_RETRY_CONFIG_IMMUTABLE",
     );
   }
 }

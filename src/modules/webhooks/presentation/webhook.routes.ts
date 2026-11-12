@@ -12,6 +12,7 @@ export function buildWebhookRoutes(controller: WebhookController): Router {
 
   router.post("/bolna", controller.bolna);
   router.post("/bolna-batch", controller.bolnaBatch);
+  router.post("/sarvam", controller.sarvam);
 
   return router;
 }

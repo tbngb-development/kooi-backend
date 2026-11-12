@@ -48,6 +48,15 @@ export const env = {
     bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
   },
 
+  sarvam: {
+    apiUrl: process.env.SARVAM_API_URL || "https://apps.sarvam.ai",
+    costPerMinutePaisa: parseInt(process.env.SARVAM_COST_PER_MINUTE_PAISA || "0", 10),
+    encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
+    webhookSecret:
+      process.env.SARVAM_WEBHOOK_SECRET ||
+      "kooi-sarvam-secret",
+  },
+
   webhook: {
     baseUrl: process.env.WEBHOOK_BASE_URL || "",
     webhookSecret: process.env.WEBHOOK_SECRET || "",

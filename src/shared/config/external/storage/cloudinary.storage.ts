@@ -1,6 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import streamifier from "streamifier";
-import type { FileStorageProvider } from "./file-storage.interface";
+import type { FileStorageProvider, UploadOptions } from "./file-storage.interface";
 import type { Logger } from "../../../logging/logger.interface";
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -29,19 +29,24 @@ export class CloudinaryStorageProvider implements FileStorageProvider {
     buffer: Buffer,
     fileName: string,
     folder: string,
+    options?: UploadOptions,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       this.logger?.debug("Starting file upload to Cloudinary", {
         action: "cloudinary.upload_start",
         fileName,
         folder,
+        resourceType: options?.resourceType ?? "raw",
       });
+
+      const resource_type = options?.resourceType ?? "raw";
+      const sanitizedBaseName = fileName.replace(/\.[^/.]+$/, "");
 
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          resource_type: "raw",
+          resource_type,
           folder,
-          public_id: `${Date.now()}-${fileName.replace(/\.[^/.]+$/, "")}`,
+          public_id: `${Date.now()}-${sanitizedBaseName}`,
         },
         (error, result) => {
           if (error) {
@@ -49,6 +54,7 @@ export class CloudinaryStorageProvider implements FileStorageProvider {
               action: "cloudinary.upload_failed",
               fileName,
               folder,
+              resourceType: resource_type,
             });
             reject(new Error(`Cloudinary upload failed: ${error.message}`));
             return;
@@ -67,6 +73,7 @@ export class CloudinaryStorageProvider implements FileStorageProvider {
             action: "cloudinary.upload_success",
             fileName,
             folder,
+            resourceType: resource_type,
             secureUrl: result.secure_url,
           });
 

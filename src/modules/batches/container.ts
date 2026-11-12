@@ -27,11 +27,18 @@ import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue
 import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 import { RetryFailedBatchUseCase } from "./application/use-cases/retry-failed-batch.use-case";
 import { UpdateBatchNameUseCase } from "./application/use-cases/update-batch-name.use-case";
+import { SyncSarvamCohortLifecycleUseCase } from "./application/use-cases/sync-sarvam-cohort-lifecycle.use-case";
+import type { SyncSarvamCampaignLifecycleUseCase } from "../campaigns/application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
+import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort-client.interface";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
   checkBalanceForBatch?: CheckBalanceForBatchUseCase;
   logger?: Logger;
+  sarvamCohortClient?: ISarvamCohortClient;
+  sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
 }
 
 export interface BatchModule {
@@ -51,7 +58,13 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const planRepo = new PrismaPlanRepository();
   const phoneNumberRepo = new PrismaPhoneNumberRepository();
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
-  const getBatch = new GetBatchUseCase(batchRepo);
+  const getBatch = new GetBatchUseCase(
+    batchRepo,
+    campaignRepo,
+    deps.sarvamCohortClient,
+    deps.sarvamEncryptionService,
+    log,
+  );
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
   const archiveBatch = new ArchiveBatchUseCase(batchRepo);
   const restoreBatch = new RestoreBatchUseCase(batchRepo);
@@ -96,10 +109,29 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     planRepo,
     bolnaProvider,
     phoneNumberRepo,
+    deps.sarvamCohortClient,
+    deps.sarvamEncryptionService,
+    storage,
     log,
   );
 
-  const batchProcessingScheduler = new BatchProcessingScheduler(worker, log);
+  const syncCohortLifecycle =
+    deps.sarvamCohortClient && deps.sarvamEncryptionService
+      ? new SyncSarvamCohortLifecycleUseCase(
+          batchRepo,
+          campaignRepo,
+          deps.sarvamCohortClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
+  const batchProcessingScheduler = new BatchProcessingScheduler(
+    worker,
+    deps.syncCampaignLifecycle,
+    syncCohortLifecycle,
+    log,
+  );
 
   return {
     tenantController: new TenantBatchController(

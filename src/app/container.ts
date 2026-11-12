@@ -29,6 +29,8 @@ import {
   buildCampaignModule,
   type CampaignModule,
 } from "../modules/campaigns/container";
+import { SarvamCampaignClient } from "../modules/campaigns/infrastructure/clients/sarvam-campaign.client";
+import { SarvamCohortClient } from "../modules/batches/infrastructure/clients/sarvam-cohort.client";
 import {
   buildBatchModule,
   type BatchModule,
@@ -45,6 +47,15 @@ import {
   type WebhookModule,
 } from "../modules/webhooks/container";
 import { buildPlanModule, type PlanModule } from "../modules/plans/container";
+import {
+  buildSarvamApiKeyModule,
+  type SarvamApiKeyModule,
+} from "../modules/sarvam-api-keys/container";
+import {
+  buildSarvamAgentModule,
+  type SarvamAgentModule,
+} from "../modules/sarvam-agents/container";
+import { env } from "../shared/config/env";
 import {
   buildBolnaApiKeyModule,
   type BolnaApiKeyModule,
@@ -128,6 +139,8 @@ export interface AppContainer {
   phoneNumbers: PhoneNumberModule;
   contact: ContactModule;
   tenantApiKeys: TenantApiKeyModule;
+  sarvamApiKeys: SarvamApiKeyModule;
+  sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
 
   // Backwards compatibility references
@@ -252,24 +265,33 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
+  const tenantApiKeys = buildTenantApiKeyModule(logger);
+
+  const sarvamApiKeys = buildSarvamApiKeyModule({
+    encryptionSecret: env.sarvam.encryptionSecret,
+    logger,
+  });
+
+  const tenants = buildTenantModule({
+    otpService,
+    emailService: email,
+    redis,
+    logger,
+    bolnaApiKeyRepository: bolnaApiKeys.repository,
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
+  });
+
   const calls = buildCallModule({
     bolnaClientFactory,
     callWalletGuard: wallet.guards.callWalletGuard,
+    voiceProviderService: tenants.voiceProviderService,
     walletRepo: wallet.repository,
     debitWalletForCall: wallet.useCases.debitWalletForCall,
     classifierQueue: classifier.queue,
     processClassifierExtractionUseCase:
       classifier.useCases.processClassifierExtraction,
     classifierRepo: classifier.repository,
-    logger,
-  });
-
-  const tenantApiKeys = buildTenantApiKeyModule(logger);
-
-  const tenants = buildTenantModule({
-    otpService,
-    emailService: email,
-    redis,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
     logger,
   });
 
@@ -279,17 +301,45 @@ export function buildContainer(): AppContainer {
     logger,
   );
 
+  const authenticate = new AuthenticateMiddleware(tokenService, authRepository);
+  const authorize = new AuthorizeMiddleware();
+
+  const sarvamAgents = buildSarvamAgentModule({
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
+    authenticate,
+    authorize,
+    logger,
+  });
+
+  const sarvamCohortClient = new SarvamCohortClient(env.sarvam.apiUrl, logger?.child({ component: "SarvamCohortClient" }));
+  const sarvamCampaignClient = new SarvamCampaignClient(
+    env.sarvam.apiUrl,
+    logger,
+  );
+
+  const campaigns = buildCampaignModule({
+    logger,
+    voiceProviderService: tenants.voiceProviderService,
+    sarvamCampaignClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+  });
+
+  const batches = buildBatchModule({
+    bolnaClientFactory,
+    checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
+    logger,
+    sarvamCohortClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+    syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+  });
+
   return {
     logger,
     auth,
     assistants,
     tenants,
-    campaigns: buildCampaignModule({ logger }),
-    batches: buildBatchModule({
-      bolnaClientFactory,
-      checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
-      logger,
-    }),
+    campaigns,
+    batches,
     leads: buildLeadModule(),
     calls,
     dashboard: buildDashboardModule(),
@@ -309,6 +359,8 @@ export function buildContainer(): AppContainer {
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),
     tenantApiKeys,
+    sarvamApiKeys,
+    sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
 
     // Aliased references preserving clean DI architecture
@@ -316,8 +368,8 @@ export function buildContainer(): AppContainer {
     platformAgentModule: platformAgents,
     bolnaApiKeyModule: bolnaApiKeys,
 
-    authenticate: new AuthenticateMiddleware(tokenService, authRepository),
-    authorize: new AuthorizeMiddleware(),
+    authenticate,
+    authorize,
     enforcePlan,
     enforceTenantVerification,
     bolnaClientFactory,

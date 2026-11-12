@@ -1,6 +1,6 @@
 // modules/campaigns/application/interfaces/campaign-repository.interface.ts
 
-import type { CampaignStatus } from "@prisma/client";
+import type { CampaignStatus, VoiceProvider } from "@prisma/client";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import type { RequiredVariable } from "../../../../shared/types/bolna.types";
 import type {
@@ -8,22 +8,42 @@ import type {
   ExtractionInsightResult,
   ExtractionOverviewResult,
   CampaignCallMetricsResult,
+  CampaignGoalMetricsResult,
   ListCampaignsFilters,
   PaginatedCampaignsResult,
 } from "../dto/campaign.dto";
 
 export interface CreateCampaignData {
+  id?: string;
   name: string;
   description?: string;
-  assistantId: string;
+  assistantId?: string;
+  sarvamAgentId?: string;
+  startTimestamp?: string | Date;
+  endTimestamp?: string | Date;
+  allowedSchedule?: Record<string, unknown>;
+  status?: CampaignStatus;
+  provider?: VoiceProvider;
+  sarvamCampaignId?: string | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown>;
+  goals?: Array<{
+    agentGoalId?: string;
+    outputVariableName: string;
+    expectedValue: string;
+    displayName: string;
+  }>;
 }
 
 export interface UpdateCampaignData {
   name?: string;
   description?: string | null;
-  assistantId?: string;
+  assistantId?: string | null;
+  sarvamAgentId?: string | null;
+  sarvamCampaignId?: string | null;
+  startTimestamp?: string | Date | null;
+  endTimestamp?: string | Date | null;
+  allowedSchedule?: Record<string, unknown> | null;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown> | null;
 }
@@ -55,6 +75,8 @@ export interface CampaignListItem {
   name: string;
   description: string | null;
   status: CampaignStatus;
+  provider: VoiceProvider;
+  sarvamCampaignId?: string | null;
   totalLeads: number;
   calledLeads: number;
   completedLeads: number;
@@ -64,12 +86,24 @@ export interface CampaignListItem {
   isDeleted: boolean;
   deletedAt: Date | null;
   assistant: { id: string; name: string } | null;
+  sarvamAgent?: { id: string; name: string } | null;
+  agent?: { id: string; name: string } | null;
   batches: Array<{
     id: string;
     status: string;
     totalLeads: number;
     completedLeads: number;
   }>;
+}
+
+export interface ActiveSarvamCampaignRecord {
+  id: string;
+  tenantId: string;
+  sarvamCampaignId: string;
+  sarvamAgentId: string;
+  status: CampaignStatus;
+  sarvamStatus: string | null;
+  endTimestamp?: Date | null;
 }
 
 export interface AssistantWithAgentData {
@@ -80,6 +114,36 @@ export interface AssistantWithAgentData {
     bolnaId: string;
     requiredVariables: RequiredVariable[] | null;
   };
+}
+
+export interface SarvamAgentWithApiKeyData {
+  id: string;
+  name: string;
+  appId: string;
+  appVersion: number;
+  attemptsPerSecond: number | null;
+  welcomeMessage?: unknown;
+  agentVariables: unknown;
+  connectionConfigs: unknown;
+  retryConfig: unknown;
+  allowedSchedule?: unknown;
+  allowTenantVisible: boolean;
+  status: string;
+  apiKey: {
+    id: string;
+    tenantId: string;
+    apiKeyEncrypted: string;
+    workspaceId: string;
+    organizationId: string;
+    isActive: boolean;
+  };
+  overrides?: Array<{ variableOverrides: unknown }> | null;
+  goals?: Array<{
+    id: string;
+    outputVariableName: string;
+    expectedValue: string;
+    displayName: string;
+  }>;
 }
 
 export interface CampaignCascadeResult {
@@ -114,6 +178,12 @@ export interface CampaignRepository {
           name: string;
           platformAgent: { bolnaId: string };
         } | null;
+        sarvamAgent?: {
+          id: string;
+          name: string;
+          appId: string;
+          agentVariables?: unknown;
+        } | null;
         batches: Array<{ id: string; status: string }>;
       })
     | null
@@ -138,7 +208,26 @@ export interface CampaignRepository {
   updateStatus(
     campaignId: string,
     status: CampaignStatus,
-    extra?: { startedAt?: Date; completedAt?: Date },
+    extra?: { startedAt?: Date | null; completedAt?: Date | null },
+  ): Promise<CampaignEntityData>;
+
+  findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]>;
+
+  findActiveSarvamCampaignsForAgent(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<CampaignEntityData[]>;
+
+  countActiveCampaignsForAgent(
+    sarvamAgentId: string,
+    excludeCampaignId?: string,
+  ): Promise<number>;
+
+  updateSarvamStatus(
+    campaignId: string,
+    sarvamStatus: string,
+    kooiStatus?: CampaignStatus,
+    extra?: { completedAt?: Date },
   ): Promise<CampaignEntityData>;
 
   getStats(tenantId: string, campaignId: string): Promise<CampaignStatsResult>;
@@ -162,10 +251,21 @@ export interface CampaignRepository {
     batchId?: string,
   ): Promise<CampaignCallMetricsResult>;
 
+  getCampaignGoalMetrics(
+    tenantId: string,
+    campaignId: string,
+    batchId?: string,
+  ): Promise<CampaignGoalMetricsResult>;
+
   findAssistantWithAgent(
     tenantId: string,
     assistantId: string,
   ): Promise<AssistantWithAgentData | null>;
+
+  findSarvamAgentWithApiKey(
+    tenantId: string,
+    sarvamAgentId: string,
+  ): Promise<SarvamAgentWithApiKeyData | null>;
 
   resolveAssistantForPlatformAgent(
     tenantId: string,

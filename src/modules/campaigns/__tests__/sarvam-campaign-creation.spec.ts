@@ -1,0 +1,867 @@
+// modules/campaigns/__tests__/sarvam-campaign-creation.spec.ts
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CreateCampaignUseCase } from "../application/use-cases/create-campaign.use-case";
+import {
+  createCampaignSchema,
+  campaignRetryConfigSchema,
+} from "../presentation/campaign.schema";
+import type { CampaignRepository } from "../application/interfaces/campaign-repository.interface";
+import type { PlanRepository } from "../../plans/application/interfaces/plan-repository.interface";
+import type { ITenantVoiceProviderService } from "../../tenants/application/services/tenant-voice-provider.service";
+import type { ISarvamCampaignClient } from "../infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import {
+  CampaignAssistantRequiredError,
+  CampaignAssistantNotFoundError,
+  CampaignSarvamAgentRequiredError,
+  CampaignSarvamAgentNotFoundError,
+  CampaignScheduleRequiredError,
+  ExternalCampaignCreationFailedError,
+  MissingRequiredVariablesError,
+  RetryConfigNotAllowedError,
+  SarvamActiveCampaignLimitReachedError,
+} from "../domain/errors/campaign.errors";
+
+describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
+  const tenantId = "tenant-sarvam-001";
+  const validAgentId = "b97d1956-fdf9-4c80-be34-e4210e7ee61b";
+  const validAssistantId = "a11d1956-fdf9-4c80-be34-e4210e7ee61a";
+
+  const validSchedule = {
+    allowed_start_time: "09:30",
+    allowed_end_time: "18:30",
+    allowed_days: [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+    ] as any,
+    timezone: "Asia/Kolkata",
+  };
+
+  const sampleSarvamAgent = {
+    id: validAgentId,
+    name: "Customer Support Agent",
+    appId: "sarvam-app-999",
+    appVersion: 1,
+    attemptsPerSecond: 2,
+    webhookUrl: null,
+    agentVariables: [
+      {
+        key: "customer_name",
+        defaultValue: "",
+        isTenantVisible: true,
+        isTenantEditable: true,
+      },
+    ],
+    connectionConfigs: [
+      { connection_id: "conn-1", agent_phone_number: "+918000000000" },
+    ],
+    retryConfig: { max_retries: 2 },
+    allowedSchedule: validSchedule,
+    allowTenantVisible: true,
+    status: "ACTIVE",
+    apiKey: {
+      id: "key-1",
+      tenantId,
+      apiKeyEncrypted: "enc:iv:tag:ciphertext",
+      workspaceId: "workspace-123",
+      organizationId: "org-456",
+      isActive: true,
+    },
+  };
+
+  describe("Schema Validation (createCampaignSchema)", () => {
+    it("should accept valid Sarvam campaign payload", () => {
+      const payload = {
+        name: "Sarvam Support Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+        allowedSchedule: validSchedule,
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    it("should accept valid Bolna campaign payload", () => {
+      const payload = {
+        name: "Bolna Sales Campaign",
+        assistantId: validAssistantId,
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject payload missing both assistantId and sarvamAgentId", () => {
+      const payload = {
+        name: "Missing Agent Campaign",
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some((i) =>
+          i.message.includes("Either assistantId or sarvamAgentId is required"),
+        ),
+      ).toBe(true);
+    });
+
+    it("should accept Sarvam payload without allowedSchedule", () => {
+      const payload = {
+        name: "Sarvam Campaign Without Tenant Schedule",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    
+    it("should accept Sarvam payload with duration up to 90 days", () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+      const payload = {
+        name: "90 Days Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+        endTimestamp: end.toISOString(),
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject Sarvam payload where duration exceeds 90 days", () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 91 * 24 * 60 * 60 * 1000);
+      const payload = {
+        name: "Excessive Duration Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+        endTimestamp: end.toISOString(),
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some((i) =>
+          i.message.includes("Campaign duration cannot exceed 90 days from start date"),
+        ),
+      ).toBe(true);
+    });
+
+    it("should reject Sarvam payload where endTimestamp is before startTimestamp", () => {
+      const payload = {
+        name: "Inverted Schedule Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-15T18:00:00.000Z",
+        endTimestamp: "2026-05-01T09:00:00.000Z",
+        allowedSchedule: validSchedule,
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some((i) =>
+          i.message.includes("endTimestamp must be after startTimestamp"),
+        ),
+      ).toBe(true);
+    });
+
+    it("should reject invalid time format in allowedSchedule", () => {
+      const payload = {
+        name: "Bad Schedule Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+        allowedSchedule: {
+          ...validSchedule,
+          allowed_start_time: "25:00", // invalid hour
+        },
+      };
+
+      const result = createCampaignSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("CreateCampaignUseCase Execution", () => {
+    let mockCampaignRepo: Partial<CampaignRepository>;
+    let mockPlanRepo: Partial<PlanRepository>;
+    let mockVoiceProviderService: Partial<ITenantVoiceProviderService>;
+    let mockSarvamClient: Partial<ISarvamCampaignClient>;
+    let mockEncryptionService: Partial<ISarvamApiKeyEncryptionService>;
+    let useCase: CreateCampaignUseCase;
+    let storedCampaign: any;
+
+    beforeEach(() => {
+      storedCampaign = {
+        id: "kooi-camp-100",
+        tenantId,
+        name: "Sarvam Support Campaign",
+        status: "SCHEDULED",
+        provider: "SARVAM",
+        sarvamAgentId: validAgentId,
+        sarvamCampaignId: null,
+      };
+
+      mockCampaignRepo = {
+        create: vi.fn().mockImplementation((_t, data) => {
+          storedCampaign = {
+            ...storedCampaign,
+            ...data,
+          };
+          return Promise.resolve(storedCampaign);
+        }),
+        update: vi.fn().mockImplementation((_t, _id, data) => {
+          storedCampaign = {
+            ...storedCampaign,
+            ...data,
+          };
+          return Promise.resolve(storedCampaign);
+        }),
+        updateStatus: vi.fn().mockImplementation((_id, status) => {
+          storedCampaign.status = status;
+          return Promise.resolve(storedCampaign);
+        }),
+        findSarvamAgentWithApiKey: vi.fn().mockResolvedValue(sampleSarvamAgent),
+        findAssistantWithAgent: vi.fn().mockResolvedValue({
+          id: validAssistantId,
+          name: "Bolna Sales Assistant",
+          platformAgent: {
+            id: "agent-1",
+            bolnaId: "bolna-agent-1",
+            requiredVariables: null,
+          },
+        }),
+      };
+
+      mockPlanRepo = {
+        getActivePlanForTenant: vi.fn().mockResolvedValue({
+          id: "plan-1",
+          maxActiveCampaigns: 5,
+          retryAutomation: true,
+        }),
+        countActiveCampaigns: vi.fn().mockResolvedValue(0),
+      };
+
+      mockVoiceProviderService = {
+        resolveActiveProvider: vi.fn().mockResolvedValue({
+          provider: "SARVAM",
+          credential: { id: "sarvam-key-1", isActive: true, provider: "SARVAM" },
+        }),
+      };
+
+      mockSarvamClient = {
+        updateStatus: vi.fn().mockResolvedValue({
+          campaign_id: "ext-sarvam-camp-999",
+          status: "cancelled",
+        }),
+        createCampaign: vi.fn().mockResolvedValue({
+          campaign_id: "ext-sarvam-camp-999",
+          name: "Sarvam Support Campaign",
+          status: "scheduled",
+          app_id: "sarvam-app-999",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      };
+
+      mockEncryptionService = {
+        encrypt: vi.fn().mockReturnValue("encrypted"),
+        decrypt: vi.fn().mockReturnValue("decrypted-api-key-test"),
+      };
+
+      useCase = new CreateCampaignUseCase(
+        mockCampaignRepo as CampaignRepository,
+        mockPlanRepo as PlanRepository,
+        mockVoiceProviderService as ITenantVoiceProviderService,
+        mockSarvamClient as ISarvamCampaignClient,
+        mockEncryptionService as ISarvamApiKeyEncryptionService,
+      );
+    });
+
+    it("should create Sarvam campaign first externally and persist locally with DRAFT status", async () => {
+      const result = await useCase.execute(tenantId, {
+        name: "Sarvam Support Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+        allowedSchedule: validSchedule,
+      });
+
+      // 1. Verify decryption occurred
+      expect(mockEncryptionService.decrypt).toHaveBeenCalledWith(
+        sampleSarvamAgent.apiKey.apiKeyEncrypted,
+      );
+
+      // 2. Verify external Sarvam API call was dispatched FIRST
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          name: "Sarvam Support Campaign",
+          start_timestamp: "2026-05-01T09:00:00.000Z",
+          end_timestamp: "2026-05-15T18:00:00.000Z",
+          app_config: expect.objectContaining({
+            app_id: "sarvam-app-999",
+            app_version: 1,
+            attempts_per_second: 2,
+            webhook_config: expect.objectContaining({
+              metadata: expect.objectContaining({
+                tenantId,
+                campaignId: expect.any(String),
+              }),
+            }),
+          }),
+        }),
+      );
+
+      // 3. Verify local campaign creation occurred AFTER provider success with DRAFT status
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          provider: "SARVAM",
+          status: "DRAFT",
+          sarvamAgentId: validAgentId,
+          sarvamCampaignId: "ext-sarvam-camp-999",
+          id: expect.any(String),
+        }),
+      );
+
+      expect(result.status).toBe("DRAFT");
+      expect(result.sarvamCampaignId).toBe("ext-sarvam-camp-999");
+      expect(result.provider).toBe("SARVAM");
+    });
+
+    it("should NOT create a local campaign if external Sarvam API fails, and throw sanitized error", async () => {
+      mockSarvamClient.createCampaign = vi
+        .fn()
+        .mockRejectedValue(new Error("Sarvam 422: Invalid connection_id"));
+
+      let thrownError: any;
+      try {
+        await useCase.execute(tenantId, {
+          name: "Failing Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      expect(thrownError).toBeInstanceOf(ExternalCampaignCreationFailedError);
+      // Verify tenant-safe generic error message
+      expect(thrownError.message).toBe("Unable to create campaign at this time. Please contact support if the issue persists.");
+      expect(thrownError.code).toBe("CAMPAIGN_CREATION_FAILED");
+      expect(thrownError.statusCode).toBe(502);
+
+      // Verify no local campaign was created or updated
+      expect(mockCampaignRepo.create).not.toHaveBeenCalled();
+      expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it("should trigger compensating cancellation of external campaign when local DB persistence fails", async () => {
+      mockCampaignRepo.create = vi.fn().mockRejectedValue(new Error("Database connection pool exhausted"));
+
+      let thrownError: any;
+      try {
+        await useCase.execute(tenantId, {
+          name: "DB Failure Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      expect(thrownError).toBeInstanceOf(ExternalCampaignCreationFailedError);
+      // Verify external campaign was created first
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledTimes(1);
+
+      // Verify compensation: external campaign was cancelled via Sarvam API
+      expect(mockSarvamClient.updateStatus).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "ext-sarvam-camp-999",
+        "decrypted-api-key-test",
+        "cancel",
+      );
+    });
+
+    it("should reject if sarvamAgentId is missing for SARVAM provider", async () => {
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Missing Sarvam Agent",
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+        } as any),
+      ).rejects.toThrow(CampaignSarvamAgentRequiredError);
+    });
+
+    it("should reject if schedule is missing on Sarvam agent", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue({
+        ...sampleSarvamAgent,
+        allowedSchedule: null,
+      });
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Missing Schedule",
+          sarvamAgentId: validAgentId,
+        } as any),
+      ).rejects.toThrow(CampaignScheduleRequiredError);
+    });
+
+    it("should reject if Sarvam agent is not found or not accessible", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi
+        .fn()
+        .mockResolvedValue(null);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Unassigned Agent Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+        }),
+      ).rejects.toThrow(CampaignSarvamAgentNotFoundError);
+    });
+
+    it("should handle BOLNA provider normally without calling Sarvam client", async () => {
+      mockVoiceProviderService.resolveActiveProvider = vi.fn().mockResolvedValue({
+        provider: "BOLNA",
+        credential: { id: "bolna-key-1", isActive: true, provider: "BOLNA" },
+      });
+
+      const bolnaCampaign = await useCase.execute(tenantId, {
+        name: "Normal Bolna Campaign",
+        assistantId: validAssistantId,
+      });
+
+      expect(mockSarvamClient.createCampaign).not.toHaveBeenCalled();
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          provider: "BOLNA",
+          assistantId: validAssistantId,
+        }),
+      );
+      expect(bolnaCampaign.provider).toBe("BOLNA");
+    });
+
+    it("should reject BOLNA provider if assistantId is missing", async () => {
+      mockVoiceProviderService.resolveActiveProvider = vi.fn().mockResolvedValue({
+        provider: "BOLNA",
+        credential: { id: "bolna-key-1", isActive: true, provider: "BOLNA" },
+      });
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Missing Assistant Bolna Campaign",
+        } as any),
+      ).rejects.toThrow(CampaignAssistantRequiredError);
+    });
+
+    it("should reject campaign creation when a required Sarvam agent variable is missing", async () => {
+      const agentWithRequired = {
+        ...sampleSarvamAgent,
+        agentVariables: [
+          {
+            key: "company_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRequired);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Campaign with missing required var",
+          sarvamAgentId: validAgentId,
+          startTimestamp: "2026-05-01T09:00:00.000Z",
+          endTimestamp: "2026-05-15T18:00:00.000Z",
+          allowedSchedule: validSchedule,
+          variables: {},
+        }),
+      ).rejects.toThrow(MissingRequiredVariablesError);
+    });
+
+    it("should succeed and persist campaign-level variables when all required variables are supplied", async () => {
+      const agentWithRequired = {
+        ...sampleSarvamAgent,
+        agentVariables: [
+          {
+            key: "company_name",
+            defaultValue: "",
+            required: true,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+          {
+            key: "campaign_theme",
+            defaultValue: "Default Theme",
+            required: false,
+            isTenantVisible: true,
+            isTenantEditable: true,
+          },
+        ],
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRequired);
+
+      const campaign = await useCase.execute(tenantId, {
+        name: "Campaign with valid required var",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+        allowedSchedule: validSchedule,
+        variables: {
+          company_name: "Acme SuperCorp",
+        },
+      });
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          variables: {
+            company_name: "Acme SuperCorp",
+          },
+        }),
+      );
+      expect(campaign.status).toBe("DRAFT");
+    });
+
+    it("should successfully create Sarvam campaign using agent allowedSchedule when tenant does not supply allowedSchedule", async () => {
+      const campaign = await useCase.execute(tenantId, {
+        name: "Campaign with agent allowedSchedule",
+        sarvamAgentId: validAgentId,
+        startTimestamp: "2026-05-01T09:00:00.000Z",
+        endTimestamp: "2026-05-15T18:00:00.000Z",
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          allowed_schedule: expect.objectContaining({
+            allowed_start_time: validSchedule.allowed_start_time,
+            allowed_end_time: validSchedule.allowed_end_time,
+          }),
+        }),
+      );
+      expect(campaign.status).toBe("DRAFT");
+    });
+
+    it("should reject campaign creation if sarvam agent is missing allowedSchedule", async () => {
+      const agentWithoutSchedule = {
+        ...sampleSarvamAgent,
+        allowedSchedule: null,
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithoutSchedule);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Campaign with unscheduled agent",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(CampaignScheduleRequiredError);
+    });
+
+    it("should reject campaign creation if campaign duration exceeds 90 days", async () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const end = new Date(start.getTime() + 91 * 24 * 60 * 60 * 1000);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Too Long Campaign",
+          sarvamAgentId: validAgentId,
+          startTimestamp: start.toISOString(),
+          endTimestamp: end.toISOString(),
+        }),
+      ).rejects.toThrow(
+        new CampaignScheduleRequiredError(
+          "Campaign duration cannot exceed 90 days from start date",
+        ),
+      );
+    });
+
+    it("should default campaign end date to 90 days from start date when omitted", async () => {
+      const start = new Date("2026-05-01T09:00:00.000Z");
+      const expectedEnd = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+      await useCase.execute(tenantId, {
+        name: "Default 90 Days Campaign",
+        sarvamAgentId: validAgentId,
+        startTimestamp: start.toISOString(),
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          start_timestamp: start.toISOString(),
+          end_timestamp: expectedEnd.toISOString(),
+        }),
+      );
+    });
+
+    it("should inherit agent retryConfig and pass to Sarvam when plan allows retry", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-pro",
+        retryAutomation: true,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 3,
+          retry_interval_minutes: 10,
+          retry_on: {
+            busy: { enabled: true },
+            short_duration: { enabled: true, threshold_seconds: 30 },
+          },
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Inherited Retry Campaign",
+        sarvamAgentId: validAgentId,
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 3,
+              retry_interval_minutes: 10,
+              retry_on: expect.objectContaining({
+                busy: { enabled: true },
+                short_duration: { enabled: true, threshold_seconds: 30 },
+              }),
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: true,
+            max_retries: 3,
+          }),
+        }),
+      );
+    });
+
+    it("should throw RetryConfigNotAllowedError when tenant attempts to enable retry but plan forbids it", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-starter",
+        retryAutomation: false,
+      });
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Plan Restricted Retry Campaign",
+          sarvamAgentId: validAgentId,
+          defaultRetryConfig: {
+            enabled: true,
+            max_retries: 2,
+          },
+        }),
+      ).rejects.toThrow(RetryConfigNotAllowedError);
+    });
+
+    it("should force disabled retryConfig when plan does not allow retry even if agent had retries", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-basic",
+        retryAutomation: false,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 5,
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Plan Disables Agent Retry Campaign",
+        sarvamAgentId: validAgentId,
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 0,
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: false,
+            max_retries: 0,
+          }),
+        }),
+      );
+    });
+
+    it("should respect tenant override turning retries OFF (enabled: false)", async () => {
+      mockPlanRepo.getActivePlanForTenant = vi.fn().mockResolvedValue({
+        id: "plan-enterprise",
+        retryAutomation: true,
+      });
+
+      const agentWithRetry = {
+        ...sampleSarvamAgent,
+        retryConfig: {
+          max_retries: 4,
+          retry_on: {
+            busy: { enabled: true },
+          },
+        },
+      };
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(agentWithRetry);
+
+      await useCase.execute(tenantId, {
+        name: "Tenant Turned Off Retry",
+        sarvamAgentId: validAgentId,
+        defaultRetryConfig: {
+          enabled: false,
+        },
+      });
+
+      expect(mockSarvamClient.createCampaign).toHaveBeenCalledWith(
+        "org-456",
+        "workspace-123",
+        "decrypted-api-key-test",
+        expect.objectContaining({
+          app_config: expect.objectContaining({
+            retry_config: expect.objectContaining({
+              max_retries: 0,
+            }),
+          }),
+        }),
+      );
+
+      expect(mockCampaignRepo.create).toHaveBeenCalledWith(
+        tenantId,
+        expect.objectContaining({
+          defaultRetryConfig: expect.objectContaining({
+            enabled: false,
+            max_retries: 0,
+          }),
+        }),
+      );
+    });
+
+    it("should throw SarvamActiveCampaignLimitReachedError when Sarvam API returns 429", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(sampleSarvamAgent);
+      const err = new Error("Rate limit exceeded / Active campaigns limit reached") as any;
+      err.statusCode = 429;
+      mockSarvamClient.createCampaign = vi.fn().mockRejectedValue(err);
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Limit Reached Campaign",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(SarvamActiveCampaignLimitReachedError);
+    });
+
+    it("should throw SarvamActiveCampaignLimitReachedError when error message contains 429 limit", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue(sampleSarvamAgent);
+      mockSarvamClient.createCampaign = vi
+        .fn()
+        .mockRejectedValue(new Error("Sarvam API error: 429 too many requests active campaign limit reached"));
+
+      await expect(
+        useCase.execute(tenantId, {
+          name: "Limit Message Campaign",
+          sarvamAgentId: validAgentId,
+        }),
+      ).rejects.toThrow(SarvamActiveCampaignLimitReachedError);
+    });
+  });
+
+  describe("campaignRetryConfigSchema Discriminating Union Validation", () => {
+    it("preserves retry_interval_minutes and retry_on for Sarvam retry configs without stripping", () => {
+      const sarvamPayload = {
+        enabled: true,
+        max_retries: 1,
+        retry_interval_minutes: [60],
+        retry_on: {
+          no_answer: { enabled: true },
+          busy: { enabled: true },
+          failed: { enabled: true },
+        },
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(sarvamPayload) as any;
+      expect(parsed.enabled).toBe(true);
+      expect(parsed.max_retries).toBe(1);
+      expect(parsed.retry_interval_minutes).toEqual([60]);
+      expect(parsed.retry_on.no_answer.enabled).toBe(true);
+      expect(parsed.retry_on.busy.enabled).toBe(true);
+      expect(parsed.retry_on.failed.enabled).toBe(true);
+    });
+
+    it("preserves retry_intervals_minutes and retry_on_statuses for Bolna retry configs", () => {
+      const bolnaPayload = {
+        enabled: true,
+        max_retries: 2,
+        retry_intervals_minutes: [60, 240],
+        retry_on_statuses: ["busy", "failed"],
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(bolnaPayload) as any;
+      expect(parsed.enabled).toBe(true);
+      expect(parsed.max_retries).toBe(2);
+      expect(parsed.retry_intervals_minutes).toEqual([60, 240]);
+      expect(parsed.retry_on_statuses).toEqual(["busy", "failed"]);
+    });
+
+    it("correctly parses disabled retry configuration", () => {
+      const disabledPayload = {
+        enabled: false,
+        max_retries: 0,
+      };
+
+      const parsed = campaignRetryConfigSchema.parse(disabledPayload) as any;
+      expect(parsed.enabled).toBe(false);
+      expect(parsed.max_retries).toBe(0);
+    });
+  });
+});
+

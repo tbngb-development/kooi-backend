@@ -33,6 +33,9 @@ export function buildAdminCallRoutes(
   router.post("/sync-bolna", controller.syncBolna);
   router.post("/:id/sync-bolna", controller.syncBolna);
 
+  // Sarvam recording retrieval
+  router.post("/:id/fetch-recording", controller.fetchSarvamRecording);
+
   // Admin soft delete & restore
   router.patch("/:id/archive", controller.archive);
   router.patch("/:id/restore", controller.restore);

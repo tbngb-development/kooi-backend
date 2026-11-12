@@ -13,6 +13,14 @@ export function getQueue(name: string): Queue.Queue {
 
   const queue = new Queue(name, env.redis.url, {
     prefix: env.redis.prefix,
+    settings: {
+      backoffStrategies: {
+        sarvamBackoff(attemptsMade: number) {
+          const delays = [30_000, 60_000, 120_000, 240_000];
+          return delays[Math.min(attemptsMade - 1, delays.length - 1)] ?? 240_000;
+        },
+      },
+    },
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "exponential", delay: 5000 },

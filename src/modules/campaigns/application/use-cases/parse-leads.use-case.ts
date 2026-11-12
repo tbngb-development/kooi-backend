@@ -46,9 +46,6 @@ export class ParseLeadsUseCase {
     );
 
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("parse leads for");
-    }
 
     // 1. Fetch active plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -85,6 +82,7 @@ export class ParseLeadsUseCase {
         detectedHeaders: {
           contact_number: headerInfo.hasContactNumber,
           customer_name: headerInfo.hasCustomerName,
+          rawHeaders: headerInfo.rawHeaders,
         },
         estimation: zeroEstimation,
       };
@@ -203,6 +201,7 @@ export class ParseLeadsUseCase {
       detectedHeaders: {
         contact_number: headerInfo.hasContactNumber,
         customer_name: headerInfo.hasCustomerName,
+        rawHeaders: headerInfo.rawHeaders,
       },
       estimation,
       trialUsage: activePlan.isTrial

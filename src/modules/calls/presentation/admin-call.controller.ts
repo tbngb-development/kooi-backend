@@ -17,6 +17,7 @@ import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.u
 import type { RestoreCallUseCase } from "../application/use-cases/restore-call.use-case";
 import type { SyncBolnaExecutionUseCase } from "../application/use-cases/sync-bolna-execution.use-case";
 import type { ReEvaluateClassifierUseCase } from "../application/use-cases/re-evaluate-classifier.use-case";
+import type { FetchSarvamRecordingUseCase } from "../application/use-cases/fetch-sarvam-recording.use-case";
 
 export class AdminCallController {
   constructor(
@@ -29,6 +30,7 @@ export class AdminCallController {
     private readonly restoreCallUseCase: RestoreCallUseCase,
     private readonly syncBolnaExecutionUseCase: SyncBolnaExecutionUseCase,
     private readonly reEvaluateClassifierUseCase?: ReEvaluateClassifierUseCase,
+    private readonly fetchSarvamRecordingUseCase?: FetchSarvamRecordingUseCase,
   ) {}
 
   private resolveTenantId(req: Request): string {
@@ -54,7 +56,9 @@ export class AdminCallController {
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
+        agentId: query.agentId,
         leadId: query.leadId,
         status: query.status,
         search: query.search,
@@ -65,7 +69,14 @@ export class AdminCallController {
         page: query.page,
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
-        isDeleted: query.isDeleted, 
+        isDeleted: query.isDeleted,
+        goalId: query.goalId,
+        goalPassed:
+          query.goalPassed === "true"
+            ? true
+            : query.goalPassed === "false"
+              ? false
+              : undefined,
       });
 
       sendSuccess(res, data);
@@ -118,7 +129,8 @@ export class AdminCallController {
         res,
         await this.getCallStatsUseCase.execute({
           tenantId,
-          campaignId: query.campaignId,
+          provider: query.provider as any,
+        campaignId: query.campaignId,
           leadId: query.leadId,
         }),
       );
@@ -217,5 +229,40 @@ export class AdminCallController {
       next(err);
     }
   };
-}
 
+  fetchSarvamRecording = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      if (!this.fetchSarvamRecordingUseCase) {
+        throw new TenantBadRequestError(
+          "Sarvam recording retrieval is not configured.",
+        );
+      }
+
+      const callId = param(req, "id");
+      const attemptId = req.body?.attemptId as string | undefined;
+      const interactionId = req.body?.interactionId as string | undefined;
+      const tenantId =
+        (req.query?.tenantId as string | undefined) ??
+        (req.body?.tenantId as string | undefined);
+      const adminUserId =
+        ((req as AuthRequest).user as any)?.id ?? "platform-admin";
+
+      const result = await this.fetchSarvamRecordingUseCase.execute({
+        callId,
+        tenantId,
+        attemptId,
+        interactionId,
+        source: "MANUAL",
+        adminUserId,
+      });
+
+      sendSuccess(res, result, 200, result.message);
+    } catch (err) {
+      next(err);
+    }
+  };
+}

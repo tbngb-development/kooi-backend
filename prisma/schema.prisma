@@ -39,6 +39,7 @@ model Tenant {
 
   classifierResults ClassifierCallResult[]
   memberships   TenantUser[]
+  voiceProvider VoiceProvider  @default(BOLNA)
   bolnaApiKeyId String?
   bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
   tenantPlan    TenantPlan?
@@ -51,8 +52,15 @@ model Tenant {
   callAnalyses  CallAnalysis[]
   phoneNumbers  PhoneNumber[]
   apiKeys       TenantApiKey[]
+  sarvamApiKey  SarvamApiKey?
+  sarvamAgentOverrides SarvamAgentTenantOverride[]
 
   @@index([email])
+}
+
+enum VoiceProvider {
+  BOLNA
+  SARVAM
 }
 
 enum WorkspaceSwitchStatus {
@@ -176,7 +184,14 @@ model Campaign {
   description        String?
   status             CampaignStatus @default(DRAFT)
   tenantId           String
-  assistantId        String
+  assistantId        String?
+  sarvamAgentId      String?
+  provider           VoiceProvider? @default(BOLNA)
+  sarvamCampaignId   String?
+  sarvamStatus       String?
+  startTimestamp     DateTime?
+  endTimestamp       DateTime?
+  allowedSchedule    Json?
   variables          Json?
   defaultRetryConfig Json?
   createdAt          DateTime       @default(now())
@@ -188,19 +203,27 @@ model Campaign {
   deletedAt   DateTime?
 
 
-  tenant    Tenant      @relation(fields: [tenantId], references: [id])
-  assistant Assistant   @relation(fields: [assistantId], references: [id])
-  leads     Lead[]
-  calls     Call[]
-  batches   LeadBatch[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  assistant   Assistant?   @relation(fields: [assistantId], references: [id])
+  sarvamAgent SarvamAgent? @relation(fields: [sarvamAgentId], references: [id])
+  leads       Lead[]
+  calls       Call[]
+  batches     LeadBatch[]
+  goals       CampaignGoal[]
 
-  @@index([tenantId, isDeleted])   
+  @@index([tenantId, isDeleted])
+  @@index([sarvamCampaignId])
+  @@index([sarvamAgentId])
+  @@index([provider])
 }
 
 enum CampaignStatus {
   DRAFT
+  SCHEDULED
   RUNNING
+  PAUSED
   COMPLETED
+  CANCELLED
   FAILED
 }
 
@@ -211,7 +234,11 @@ enum CampaignStatus {
 model LeadBatch {
   id                String      @id @default(uuid())
   name              String?
+  provider          VoiceProvider? @default(BOLNA)
   bolnaBatchId      String?     @unique
+  sarvamCohortId    String?
+  sarvamStatus      String?
+  cohortResult      Json?
   campaignId        String
   tenantId          String
   status            BatchStatus @default(CREATED)
@@ -247,6 +274,8 @@ model LeadBatch {
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
   @@index([bolnaBatchId])
+  @@index([sarvamCohortId])
+  @@index([provider])
 }
 
 enum BatchStatus {
@@ -332,12 +361,17 @@ enum LeadStopReason {
 
 model Call {
   id                  String      @id @default(uuid())
+  provider            VoiceProvider? @default(BOLNA)
   bolnaCallId         String?     @unique
+  sarvamAttemptId     String?
+  sarvamInteractionId String?
+  sarvamUserIdentifier String?
   tenantId            String
   campaignId          String?
   leadId              String
   batchId             String?
   assistantId         String?
+  sarvamAgentId       String?
   type                CallType    @default(OUTBOUND)
   source              CallSource  @default(CAMPAIGN)
   status              CallStatus  @default(PENDING)
@@ -371,25 +405,34 @@ model Call {
   extractionOverview CallExtractionOverview[]
   extractionInsights CallExtractionInsight[]
   callMetrics        CallMetric[]
+  goalPassed         Boolean                  @default(false)
+  goalResults        CallGoalResult[]
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   campaign    Campaign?    @relation(fields: [campaignId], references: [id])
   lead        Lead         @relation(fields: [leadId], references: [id])
   batch       LeadBatch?   @relation(fields: [batchId], references: [id], onDelete: Cascade)
   assistant   Assistant?   @relation(fields: [assistantId], references: [id])
+  sarvamAgent SarvamAgent? @relation(fields: [sarvamAgentId], references: [id])
   planVersion PlanVersion? @relation(fields: [planVersionId], references: [id])
 
 
   @@index([tenantId, isDeleted])
   @@index([campaignId, isDeleted])
   @@index([campaignId, isDeleted, status])
+  @@index([campaignId, isDeleted, goalPassed])
   @@index([assistantId, isDeleted])
+  @@index([sarvamAgentId])
   @@index([type, source])
   @@index([agentNumber])
   @@index([leadId])
   @@index([batchId, isDeleted])
   @@index([batchId, isDeleted, status])
   @@index([batchId])
+  @@index([sarvamAttemptId])
+  @@index([sarvamInteractionId])
+  @@index([sarvamUserIdentifier])
+  @@index([provider])
 }
 
 enum CallType {
@@ -425,6 +468,7 @@ model CallAnalysis {
 
   dynamicExtractions Json?
   extractionResult   Json?
+  outputVariables    Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -764,6 +808,88 @@ model BolnaApiKey {
 enum BolnaApiKeyType {
   GENERAL
   CUSTOM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SARVAM AI API KEYS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SarvamApiKey {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  apiKeyEncrypted String
+  workspaceId     String
+  organizationId  String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String
+  updatedBy       String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sarvamAgents SarvamAgent[]
+
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+enum SarvamAgentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model SarvamAgent {
+  id                 String            @id @default(uuid())
+  name               String
+  apiKeyId           String
+  appId              String
+  appVersion         Int               @default(1)
+  attemptsPerSecond  Int?
+  gender             AgentGender?
+  type               PlatformAgentType @default(OUTBOUND)
+  audioUrl           String?
+  audioRecordings    Json              @default("[]")
+  agentVariables     Json              @default("[]")
+  welcomeMessage     Json              @default("{\"defaultMessage\":\"\"}")
+  outputVariables    Json              @default("[]")
+  connectionConfigs  Json              @default("[]")
+  retryConfig        Json              @default("{\"max_retries\":0}")
+  allowedSchedule    Json?
+  allowTenantVisible Boolean           @default(false)
+  status             SarvamAgentStatus @default(ACTIVE)
+  createdBy          String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  apiKey    SarvamApiKey                 @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+  overrides SarvamAgentTenantOverride[]
+  campaigns Campaign[]
+  calls     Call[]
+  goals     SarvamAgentGoal[]
+
+  @@unique([apiKeyId, appId])
+  @@index([apiKeyId])
+  @@index([status])
+  @@index([allowTenantVisible])
+  @@index([type])
+  @@index([gender])
+}
+
+model SarvamAgentTenantOverride {
+  id                String   @id @default(uuid())
+  agentId           String
+  tenantId          String
+  variableOverrides Json     @default("{}")
+  welcomeMessage    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  agent  SarvamAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, tenantId])
+  @@index([agentId])
+  @@index([tenantId])
 }
 
 model TenantInvite {
@@ -1229,4 +1355,58 @@ enum PhoneCapability {
   INBOUND
   OUTBOUND
   BOTH
+}
+
+
+// ==========================================
+// CALL GOAL EVALUATION SYSTEM MODELS
+// ==========================================
+
+model SarvamAgentGoal {
+  id                 String            @id @default(uuid())
+  agentId            String
+  outputVariableName String
+  expectedValue      String
+  displayName        String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  agent              SarvamAgent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  campaignSnapshots  CampaignGoal[]
+
+  @@unique([agentId, outputVariableName, expectedValue])
+  @@index([agentId])
+}
+
+model CampaignGoal {
+  id                 String            @id @default(uuid())
+  campaignId         String
+  agentGoalId        String?
+  outputVariableName String
+  expectedValue      String
+  displayName        String
+  createdAt          DateTime          @default(now())
+
+  campaign           Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  agentGoal          SarvamAgentGoal?  @relation(fields: [agentGoalId], references: [id], onDelete: SetNull)
+  callResults        CallGoalResult[]
+
+  @@unique([campaignId, outputVariableName, expectedValue])
+  @@index([campaignId])
+}
+
+model CallGoalResult {
+  id             String       @id @default(uuid())
+  callId         String
+  campaignGoalId String
+  attemptId      String
+  createdAt      DateTime     @default(now())
+
+  call           Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
+  campaignGoal   CampaignGoal @relation(fields: [campaignGoalId], references: [id], onDelete: Restrict)
+
+  @@unique([callId, campaignGoalId])
+  @@index([callId])
+  @@index([campaignGoalId])
+  @@index([attemptId])
 }

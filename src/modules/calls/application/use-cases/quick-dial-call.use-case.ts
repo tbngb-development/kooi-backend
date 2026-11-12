@@ -1,3 +1,6 @@
+import type { VoiceProvider } from "@prisma/client";
+import type { ITenantVoiceProviderService } from "../../../tenants/application/services/tenant-voice-provider.service";
+import { HttpStatus } from "../../../../shared/constants/http-status";
 // modules/calls/application/use-cases/quick-dial-call.use-case.ts
 
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
@@ -44,6 +47,7 @@ export class QuickDialCallUseCase {
     private readonly leadRepo: LeadRepository,
     private readonly callRepo: CallRepository,
     private readonly phoneNumberRepo: IPhoneNumberRepository,
+    private readonly voiceProviderService?: ITenantVoiceProviderService,
     private readonly logger?: Logger,
   ) {}
 
@@ -56,6 +60,21 @@ export class QuickDialCallUseCase {
       assistantId: input.assistantId,
       phone: normalizedPhone,
     });
+
+    // 0. Snapshot active voice provider (fail-fast)
+    let selectedProvider: VoiceProvider = "BOLNA";
+    if (this.voiceProviderService) {
+      const resolved = await this.voiceProviderService.resolveActiveProvider(input.tenantId);
+      selectedProvider = resolved.provider;
+    }
+
+    if (selectedProvider === "SARVAM") {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        "Voice provider SARVAM call execution is not yet supported in Phase 1.",
+        "VOICE_PROVIDER_NOT_SUPPORTED",
+      );
+    }
 
     // 1. Verify assistant ownership and active blueprint
     const assistant = await this.assistantRepo.findByIdWithPlatformAgent(
@@ -151,6 +170,7 @@ export class QuickDialCallUseCase {
       tenantId: input.tenantId,
       assistantId: assistant.id,
       leadId: lead.id,
+      provider: selectedProvider,
       agentNumber: resolvedAgentNumber
         ? normalizePhoneNumber(resolvedAgentNumber)
         : null,

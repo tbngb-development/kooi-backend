@@ -12,7 +12,9 @@ import type { Logger } from "../../../../shared/logging/logger.interface";
 export interface DebitCallInput {
   tenantId: string;
   callId: string;
-  bolnaCallId: string;
+  bolnaCallId?: string;
+  callAttemptId?: string;
+  idempotencyKey?: string;
   durationSec: number;
 }
 
@@ -65,7 +67,9 @@ export class DebitWalletForCallUseCase {
       description: `AI Call ${input.callId} (${billableSeconds}s billable @ ₹${(activePlan.perMinuteRate / 100).toFixed(2)}/min)`,
       sourceType: "CALL",
       sourceId: input.callId,
-      idempotencyKey: `call:${input.callId}:${input.bolnaCallId}`,
+      idempotencyKey:
+        input.idempotencyKey ??
+        `call:${input.callId}:${input.callAttemptId ?? input.bolnaCallId ?? "default"}`,
       createdBy: "SYSTEM",
       allowOverdraft: true,
     });

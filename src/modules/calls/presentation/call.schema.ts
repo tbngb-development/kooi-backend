@@ -23,8 +23,9 @@ export const dynamicFiltersSchema = z
   });
 
 export const listCallsQuerySchema = z.object({
+  provider: z.enum(["BOLNA", "SARVAM"]).optional(),
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
-  assistantId: z.string().uuid("Invalid assistant ID").optional(),
+  agentId: z.string().uuid("Invalid agent ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
   status: z.string().optional(),
   type: z.enum(["OUTBOUND", "INBOUND"]).optional(),
@@ -46,9 +47,28 @@ export const listCallsQuerySchema = z.object({
     .preprocess((val) => val === "true" || val === true, z.boolean())
     .optional()
     .default(false),
+  goalId: z
+    .preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.string().uuid("Invalid goal ID").optional(),
+    ),
+  goalPassed: z
+    .preprocess(
+      (val) => (val === "" ? undefined : val),
+      z.enum(["true", "false"]).optional(),
+    ),
+}).superRefine((data, ctx) => {
+  if (data.goalId && data.goalPassed === "false") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Cannot filter by specific goalId when goalPassed is false",
+      path: ["goalPassed"],
+    });
+  }
 });
 
 export const getCallStatsQuerySchema = z.object({
+  provider: z.enum(["BOLNA", "SARVAM"]).optional(),
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
   leadId: z.string().uuid("Invalid lead ID").optional(),
 });

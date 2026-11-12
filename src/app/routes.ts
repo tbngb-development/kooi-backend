@@ -20,6 +20,7 @@ import { buildAdminBatchRoutes } from "../modules/batches/presentation/admin-bat
 import { buildAdminPlanRoutes } from "../modules/plans/presentation/admin-plan.routes";
 import { buildTenantPlanRoutes } from "../modules/plans/presentation/tenant-plan.routes";
 import { buildAdminBolnaApiKeyRoutes } from "../modules/bolna-api-keys/presentation/admin-bolna-api-key.routes";
+import { buildAdminSarvamApiKeyRoutes } from "../modules/sarvam-api-keys/presentation/admin-sarvam-api-key.routes";
 import { buildTenantPaymentRoutes } from "../modules/payments/presentation/tenant-payment.routes";
 import { buildTenantWalletRoutes } from "../modules/wallet/presentation/tenant-wallet.routes";
 import {
@@ -80,6 +81,8 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/assistants",
     buildTenantAssistantRoutes(c.assistants.tenantController, c.authenticate),
   );
+  router.use("/v1/sarvam-agents", c.sarvamAgents.buildTenantRoutes());
+
   router.use(
     "/v1/campaigns",
     buildTenantCampaignRoutes(
@@ -284,6 +287,17 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/admin/bolna-keys",
     buildAdminBolnaApiKeyRoutes(
       c.bolnaApiKeys.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
+  router.use("/v1/admin/sarvam-agents", c.sarvamAgents.buildAdminRoutes());
+  
+  router.use(
+    "/v1/admin/sarvam-api-keys",
+    buildAdminSarvamApiKeyRoutes(
+      c.sarvamApiKeys.adminController,
       c.authenticate,
       c.authorize,
     ),

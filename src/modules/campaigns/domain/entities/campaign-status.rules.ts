@@ -3,16 +3,18 @@ import type { CampaignStatus } from "@prisma/client";
 /**
  * Valid status transitions for Campaign.
  *
- * DRAFT ──────→ RUNNING      (first batch scheduled)
- * RUNNING ────→ COMPLETED    (all batches terminal)
- * RUNNING ────→ FAILED       (all batches failed)
- * RUNNING ────→ DRAFT        (all batches stopped, no active remain)
- * DRAFT ──────→ FAILED       (batch creation failure propagated)
+ * DRAFT ──────→ SCHEDULED / RUNNING / FAILED / CANCELLED
+ * SCHEDULED ──→ RUNNING / PAUSED / CANCELLED / FAILED
+ * RUNNING ────→ COMPLETED / FAILED / DRAFT / PAUSED / CANCELLED
+ * PAUSED ─────→ RUNNING / CANCELLED / FAILED / COMPLETED
  */
 const VALID_TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
-  DRAFT: ["RUNNING", "FAILED"],
-  RUNNING: ["COMPLETED", "FAILED", "DRAFT"],
+  DRAFT: ["SCHEDULED", "RUNNING", "FAILED", "CANCELLED"],
+  SCHEDULED: ["RUNNING", "PAUSED", "CANCELLED", "FAILED"],
+  RUNNING: ["COMPLETED", "FAILED", "DRAFT", "PAUSED", "CANCELLED"],
+  PAUSED: ["RUNNING", "CANCELLED", "FAILED", "COMPLETED"],
   COMPLETED: [],
+  CANCELLED: [],
   FAILED: [],
 };
 

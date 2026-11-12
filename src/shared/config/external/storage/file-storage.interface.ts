@@ -1,3 +1,7 @@
+export interface UploadOptions {
+  resourceType?: "raw" | "auto" | "video" | "image";
+}
+
 /**
  * Abstraction over file storage providers.
  *
@@ -11,11 +15,13 @@ export interface FileStorageProvider {
    * @param buffer   - File content as a Buffer
    * @param fileName - Original file name (used for public_id generation)
    * @param folder   - Storage folder path (e.g. "kooi/tenant123/campaigns/...")
+   * @param options  - Optional provider-specific settings like resourceType
    * @returns          Public download URL
    */
   uploadBuffer(
     buffer: Buffer,
     fileName: string,
     folder: string,
+    options?: UploadOptions,
   ): Promise<string>;
 }

@@ -16,8 +16,13 @@ import type { ExtractCampaignVariablesUseCase } from "../application/use-cases/e
 import type { GetCampaignExtractionOverviewUseCase } from "../application/use-cases/get-campaign-extraction-overview.use-case";
 import type { GetCampaignExtractionInsightsUseCase } from "../application/use-cases/get-campaign-extraction-insights.use-case";
 import type { GetCampaignCallMetricsUseCase } from "../application/use-cases/get-campaign-call-metrics.use-case";
+import type { GetCampaignGoalMetricsUseCase } from "../application/use-cases/get-campaign-goal-metrics.use-case";
 import type { ArchiveCampaignUseCase } from "../application/use-cases/archive-campaign.use-case";
 import type { ParseManualLeadsUseCase } from "../application/use-cases/parse-manual-leads.use-case";
+import type { ControlSarvamCampaignUseCase } from "../application/use-cases/control-sarvam-campaign.use-case";
+import type { GetActiveSarvamCampaignsUseCase } from "../application/use-cases/get-active-sarvam-campaigns.use-case";
+import { controlSarvamCampaignSchema, campaignGoalMetricsQuerySchema } from "./campaign.schema";
+import { AppError } from "../../../shared/errors/app.error";
 import type { ListCampaignsQuery } from "./campaign.schema";
 
 export class TenantCampaignController {
@@ -33,6 +38,9 @@ export class TenantCampaignController {
     private readonly getCampaignCallMetricsUseCase: GetCampaignCallMetricsUseCase,
     private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
     private readonly parseManualLeadsUseCase: ParseManualLeadsUseCase,
+    private readonly controlSarvamCampaignUseCase?: ControlSarvamCampaignUseCase,
+    private readonly getCampaignGoalMetricsUseCase?: GetCampaignGoalMetricsUseCase,
+    private readonly getActiveSarvamCampaignsUseCase?: GetActiveSarvamCampaignsUseCase,
   ) {}
 
   private getTenant(req: Request): TenantAuthContext {
@@ -253,6 +261,36 @@ export class TenantCampaignController {
     }
   };
 
+  goalMetrics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      const { batchId } = campaignGoalMetricsQuerySchema.parse(req.query);
+
+      if (!this.getCampaignGoalMetricsUseCase) {
+        throw new AppError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Goal metrics use case is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const data = await this.getCampaignGoalMetricsUseCase.execute({
+        tenantId,
+        campaignId,
+        batchId,
+      });
+
+      sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
   callMetrics = async (
     req: Request,
     res: Response,
@@ -270,6 +308,75 @@ export class TenantCampaignController {
       });
 
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+
+  control = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const campaignId = param(req, "id");
+      const { action } = controlSarvamCampaignSchema.parse(req.body);
+
+      if (!this.controlSarvamCampaignUseCase) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          "Campaign control service is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const updated = await this.controlSarvamCampaignUseCase.execute({
+        tenantId,
+        campaignId,
+        action,
+      });
+
+      sendSuccess(
+        res,
+        updated,
+        HttpStatus.OK,
+        `Campaign ${action} action executed successfully`,
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  activeSarvam = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = this.getTenant(req);
+      const sarvamAgentId = req.query.sarvamAgentId as string;
+
+      if (!this.getActiveSarvamCampaignsUseCase) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          "Active Sarvam campaigns service is not configured",
+          "SERVICE_UNAVAILABLE",
+        );
+      }
+
+      const campaigns = await this.getActiveSarvamCampaignsUseCase.execute({
+        tenantId,
+        sarvamAgentId,
+      });
+
+      sendSuccess(
+        res,
+        campaigns,
+        HttpStatus.OK,
+        "Active Sarvam campaigns retrieved successfully",
+      );
     } catch (err) {
       next(err);
     }

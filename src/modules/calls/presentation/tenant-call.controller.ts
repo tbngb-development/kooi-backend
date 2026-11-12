@@ -40,8 +40,9 @@ export class TenantCallController {
 
       const data = await this.listCallsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
-        assistantId: query.assistantId,
+        agentId: query.agentId,
         leadId: query.leadId,
         status: query.status,
         type: query.type,
@@ -56,6 +57,13 @@ export class TenantCallController {
         limit: query.limit,
         dynamicFilters: query.dynamicFilters,
         isDeleted: query.isDeleted,
+        goalId: query.goalId,
+        goalPassed:
+          query.goalPassed === "true"
+            ? true
+            : query.goalPassed === "false"
+              ? false
+              : undefined,
       });
 
       sendSuccess(res, data);
@@ -109,6 +117,7 @@ export class TenantCallController {
 
       const data = await this.getCallStatsUseCase.execute({
         tenantId,
+        provider: query.provider as any,
         campaignId: query.campaignId,
         leadId: query.leadId,
       });

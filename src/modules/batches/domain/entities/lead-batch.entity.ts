@@ -1,6 +1,6 @@
 // modules/batches/domain/entities/lead-batch.entity.ts
 
-import type { BatchStatus } from "@prisma/client";
+import type { BatchStatus, VoiceProvider } from "@prisma/client";
 import { InvalidBatchStatusTransitionError } from "../errors/batch.errors";
 import {
   canTransitionBatchStatus,
@@ -12,7 +12,11 @@ import { type RetryConfig } from "../../../../shared/types/bolna.types";
 export interface LeadBatchEntityData {
   id: string;
   name: string | null;
+  provider?: VoiceProvider | null;
   bolnaBatchId: string | null;
+  sarvamCohortId?: string | null;
+  sarvamStatus?: string | null;
+  cohortResult?: Record<string, unknown> | null;
   tenantId: string;
   campaignId: string;
   status: BatchStatus;
@@ -50,11 +54,23 @@ export class LeadBatchEntity {
   get name(): string | null {
     return this.data.name;
   }
+  get provider(): VoiceProvider {
+    return this.data.provider ?? "BOLNA";
+  }
   get status(): BatchStatus {
     return this.data.status;
   }
   get bolnaBatchId(): string | null {
     return this.data.bolnaBatchId;
+  }
+  get sarvamCohortId(): string | null {
+    return this.data.sarvamCohortId ?? null;
+  }
+  get sarvamStatus(): string | null {
+    return this.data.sarvamStatus ?? null;
+  }
+  get cohortResult(): Record<string, unknown> | null {
+    return this.data.cohortResult ?? null;
   }
   get campaignId(): string {
     return this.data.campaignId;
