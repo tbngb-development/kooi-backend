@@ -249,48 +249,29 @@ export class PrismaAuthRepository implements AuthRepository {
     return result.count;
   }
 
-  async cleanupExpiredRefreshTokens(olderThanDays: number): Promise<number> {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - olderThanDays);
-
-    const result = await prisma.refreshToken.deleteMany({
-      where: {
-        OR: [{ expiresAt: { lt: cutoff } }, { revokedAt: { lt: cutoff } }],
-      },
-    });
-    return result.count;
+  async cleanupExpiredRefreshTokens(olderThanDays = 1): Promise<number> {
+    return this.cleanupOrphanedAndExpiredTokenFamilies(olderThanDays);
   }
 
   /**
-   * Family-aware cleanup:
-   * 1. Finds all distinct familyIds that contain any token revoked or expired older than `olderThanDays`.
-   * 2. Deletes ALL records belonging to those families in a single atomic batch.
+   * Family-aware and rotation-safe cleanup:
+   * 1. Purges all tokens that have passed their expiration date (expiresAt < now).
+   * 2. Purges historical rotated tokens that were revoked older than `olderThanDays` (default 1 day / 24 hours),
+   *    leaving recent rotated tokens within the replay-detection window and active tokens intact.
    */
   async cleanupOrphanedAndExpiredTokenFamilies(
-    olderThanDays = 14,
+    olderThanDays = 1,
   ): Promise<number> {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - olderThanDays);
+    const revokedCutoff = new Date(
+      Date.now() - olderThanDays * 24 * 60 * 60 * 1000,
+    );
 
-    // Step 1: Identify all dead / compromised family IDs
-    const expiredFamilies = await prisma.refreshToken.findMany({
-      where: {
-        OR: [{ revokedAt: { lt: cutoff } }, { expiresAt: { lt: cutoff } }],
-      },
-      select: { familyId: true },
-      distinct: ["familyId"],
-    });
-
-    if (expiredFamilies.length === 0) {
-      return 0;
-    }
-
-    const familyIds = expiredFamilies.map((f) => f.familyId);
-
-    // Step 2: Cascade delete all tokens in those families
     const result = await prisma.refreshToken.deleteMany({
       where: {
-        familyId: { in: familyIds },
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { revokedAt: { lt: revokedCutoff } },
+        ],
       },
     });
 

@@ -20,11 +20,12 @@ export class LogoutUseCase {
         payload.tokenId,
       );
 
-      if (storedToken && storedToken.revokedAt === null) {
-        await this.authRepository.revokeRefreshToken(storedToken.id);
+      if (storedToken) {
+        await this.authRepository.revokeRefreshTokenFamily(storedToken.familyId);
         this.logger.info("User logged out", {
           action: "auth.logout",
           userId: storedToken.userId,
+          familyId: storedToken.familyId,
         });
       }
     } catch {
