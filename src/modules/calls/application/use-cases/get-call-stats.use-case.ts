@@ -8,6 +8,7 @@ export interface GetCallStatsInput {
   tenantId: string;
   provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   leadId?: string;
 }
 
@@ -18,6 +19,7 @@ export class GetCallStatsUseCase {
     return this.callRepo.getStats(input.tenantId, {
       provider: input.provider,
       campaignId: input.campaignId,
+      batchId: input.batchId,
       leadId: input.leadId,
     });
   }

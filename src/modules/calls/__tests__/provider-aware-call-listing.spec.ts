@@ -249,6 +249,24 @@ describe("Provider-Aware Call Listing - Agent Resolution & Repository", () => {
         }),
       );
     });
+
+    it("applies batchId filter correctly when provided", async () => {
+      vi.mocked(prisma.call.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.call.count).mockResolvedValue(0);
+
+      await repo.list(tenantId, {
+        batchId: "batch-uuid-1",
+      });
+
+      expect(prisma.call.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId,
+            batchId: "batch-uuid-1",
+          }),
+        }),
+      );
+    });
   });
 
   describe("PrismaCallRepository.findById with unified agent", () => {

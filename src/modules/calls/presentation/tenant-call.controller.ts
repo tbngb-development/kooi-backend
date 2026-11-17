@@ -42,6 +42,7 @@ export class TenantCallController {
         tenantId,
         provider: query.provider as any,
         campaignId: query.campaignId,
+        batchId: query.batchId,
         agentId: query.agentId,
         leadId: query.leadId,
         status: query.status,
@@ -119,6 +120,7 @@ export class TenantCallController {
         tenantId,
         provider: query.provider as any,
         campaignId: query.campaignId,
+        batchId: query.batchId,
         leadId: query.leadId,
       });
 

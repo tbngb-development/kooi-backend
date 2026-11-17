@@ -28,6 +28,7 @@ describe("Refresh Token Cleanup & Family Lifecycle", () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
+      child: vi.fn().mockReturnThis() as any,
     };
   });
 

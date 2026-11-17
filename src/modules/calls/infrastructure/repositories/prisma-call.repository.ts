@@ -68,6 +68,7 @@ export class PrismaCallRepository implements CallRepository {
 
     if (filters.provider) where.provider = filters.provider;
     if (campaignId) where.campaignId = campaignId;
+    if (filters.batchId) where.batchId = filters.batchId;
     if (filters.agentId) {
       if (filters.provider === "BOLNA") {
         where.assistantId = filters.agentId;
@@ -207,6 +208,7 @@ export class PrismaCallRepository implements CallRepository {
           },
           assistant: { select: { id: true, name: true } },
           sarvamAgent: { select: { id: true, name: true } },
+          batch: { select: { id: true, name: true, fileName: true } },
           _count: {
             select: { goalResults: true },
           },
@@ -239,7 +241,7 @@ export class PrismaCallRepository implements CallRepository {
         take: limitNum,
       }),
       prisma.call.count({ where }),
-      this.getTenantCallOverview(tenantId, campaignId),
+      this.getTenantCallOverview(tenantId, campaignId, filters.batchId),
     ]);
 
     return {
@@ -286,6 +288,13 @@ export class PrismaCallRepository implements CallRepository {
         lead: c.lead,
         campaign: c.campaign ? { id: c.campaign.id, name: c.campaign.name } : null,
         agent: resolveCallAgent(c),
+        batch: c.batch
+          ? {
+              id: c.batch.id,
+              name: c.batch.name,
+              fileName: c.batch.fileName,
+            }
+          : null,
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
@@ -301,10 +310,12 @@ export class PrismaCallRepository implements CallRepository {
   async getTenantCallOverview(
     tenantId: string,
     campaignId?: string,
+    batchId?: string,
   ): Promise<CallListOverview> {
     const where: Prisma.CallWhereInput = { tenantId, isDeleted: false };
 
     if (campaignId) where.campaignId = campaignId;
+    if (batchId) where.batchId = batchId;
 
     const [
       totalCalls,
@@ -468,6 +479,13 @@ export class PrismaCallRepository implements CallRepository {
             name: true,
           },
         },
+        batch: {
+          select: {
+            id: true,
+            name: true,
+            fileName: true,
+          },
+        },
         callAnalysis: {
           select: {
             id: true,
@@ -542,6 +560,13 @@ export class PrismaCallRepository implements CallRepository {
           }
         : null,
       agent: resolveCallAgent(call),
+      batch: call.batch
+        ? {
+            id: call.batch.id,
+            name: call.batch.name,
+            fileName: call.batch.fileName,
+          }
+        : null,
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,
@@ -597,13 +622,14 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult> {
-    const { campaignId, leadId, provider } = filters;
+    const { campaignId, leadId, provider, batchId } = filters;
 
     const where: Prisma.CallWhereInput = {
       tenantId,
       isDeleted: false,
       ...(provider && { provider }),
       ...(campaignId && { campaignId }),
+      ...(batchId && { batchId }),
       ...(leadId && { leadId }),
     };
 
