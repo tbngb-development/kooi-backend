@@ -9,6 +9,7 @@ import type { CallListOverview } from "../../../campaigns/application/dto/campai
 export interface ListCallsFilters {
   provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   agentId?: string;
   leadId?: string;
   status?: string;
@@ -44,6 +45,11 @@ export interface PaginatedCallsResult {
       agent: {
         id: string;
         name: string;
+      } | null;
+      batch?: {
+        id: string;
+        name: string | null;
+        fileName?: string | null;
       } | null;
       extractionOverview: {
         dispositionSlug: string;
@@ -87,6 +93,11 @@ export interface DetailedCallResult extends CallEntityData {
     id: string;
     name: string;
   } | null;
+  batch?: {
+    id: string;
+    name: string | null;
+    fileName?: string | null;
+  } | null;
   callAnalysis: {
     id: string;
     dynamicExtractions: string | null;
@@ -120,6 +131,7 @@ export interface CallTranscriptResult {
 export interface CallStatsFilters {
   provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   leadId?: string;
 }
 
@@ -162,7 +174,11 @@ export interface CallRepository {
 
   getCallCenterStats(tenantId: string): Promise<CallCenterStatsResult>;
 
-  getTenantCallOverview(tenantId: string): Promise<CallListOverview>;
+  getTenantCallOverview(
+    tenantId: string,
+    campaignId?: string,
+    batchId?: string,
+  ): Promise<CallListOverview>;
 
   getAvailableFilters(
     tenantId: string,

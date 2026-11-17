@@ -7,6 +7,7 @@ export interface ListCallsInput {
   tenantId: string;
   provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   agentId?: string;
   leadId?: string;
   status?: string;

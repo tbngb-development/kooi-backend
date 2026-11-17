@@ -1,6 +1,6 @@
 import { type RequiredVariable } from "../../../../shared/types/bolna.types";
 import { type AssistantEntityData } from "../../domain/entities/assistant.entity";
-import type { PlatformAgentType } from "@prisma/client";
+import type { PlatformAgentType, AgentGender } from "@prisma/client";
 import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
 
 export interface RegisterAssistantData {
@@ -25,6 +25,7 @@ export interface AssistantWithPlatformAgent {
     name: string;
     slug: string;
     type: PlatformAgentType;
+    gender?: AgentGender | null;
     systemPrompt: string | null;
     welcomeMessage: string | null;
     requiredVariables: RequiredVariable[] | null;

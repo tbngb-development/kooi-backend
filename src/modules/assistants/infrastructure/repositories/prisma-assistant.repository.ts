@@ -60,6 +60,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
               slug: true,
               category: true,
               type: true,
+              gender: true,
               isActive: true,
               updatedAt: true,
               industryPack: {
@@ -208,6 +209,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
         name: assistant.platformAgent.name,
         slug: assistant.platformAgent.slug,
         type: assistant.platformAgent.type,
+        gender: assistant.platformAgent.gender,
         systemPrompt: assistant.platformAgent.systemPrompt,
         welcomeMessage: assistant.platformAgent.welcomeMessage,
         requiredVariables: assistant.platformAgent.requiredVariables as
