@@ -62,6 +62,20 @@ export const env = {
     webhookSecret: process.env.WEBHOOK_SECRET || "",
   },
 
+  // Backend -> Discord notification service (separate from provider webhooks).
+  discordNotifications: {
+    serviceUrl:
+      process.env.DISCORD_NOTIFICATION_SERVICE_URL || "http://localhost:3005",
+    // Must equal the notification service's KOOI_WEBHOOK_SECRET.
+    webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || "",
+    timeoutMs: Number(process.env.DISCORD_NOTIFICATION_TIMEOUT_MS) || 3000,
+    enabled: process.env.DISCORD_NOTIFICATIONS_ENABLED === "true",
+    // Durable publication: envelopes are written to the outbox and relayed.
+    outboxEnabled: process.env.DISCORD_OUTBOX_ENABLED !== "false",
+    outboxPollMs: Number(process.env.DISCORD_OUTBOX_POLL_MS) || 5000,
+    outboxBatchSize: Number(process.env.DISCORD_OUTBOX_BATCH_SIZE) || 50,
+  },
+
   resend: {
     apiKey: process.env.RESEND_API_KEY || "",
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",

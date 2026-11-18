@@ -4,6 +4,7 @@ import type { PlanRepository } from "../plans/application/interfaces/plan-reposi
 import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
 import type { Logger } from "../../shared/logging/logger.interface";
+import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
 
 import { TenantWalletController } from "./presentation/tenant-wallet.controller";
 import { AdminWalletController } from "./presentation/admin-wallet.controller";
@@ -30,6 +31,7 @@ export interface WalletModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
   email: IEmailService;
   logger: Logger;
+  eventPublisher: IDiscordEventsPublisher;
 }
 
 export interface WalletModule {
@@ -68,6 +70,7 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
     deps.planRepository,
     deps.email,
     log,
+    deps.eventPublisher,
   );
   const stopBatches = new StopBatchesOnInsufficientBalanceUseCase(
     repository,

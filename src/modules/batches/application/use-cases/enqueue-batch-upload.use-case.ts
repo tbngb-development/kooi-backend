@@ -4,6 +4,12 @@ import type { PlanRepository } from "../../../plans/application/interfaces/plan-
 import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { CreateBatchInput } from "../dto/batch.dto";
+import type { TenantNameRepository } from "../interfaces/tenant-name-repository.interface";
+import type {
+  IDiscordEventsPublisher,
+  DiscordEvent,
+} from "../../../../shared/config/external/notifications/discordevents-publisher";
+import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
 import {
   CampaignNotFoundError,
   CampaignFailedError,
@@ -38,6 +44,8 @@ export class EnqueueBatchUploadUseCase {
     private readonly planRepo: PlanRepository,
     private readonly storage: FileStorageProvider,
     logger?: Logger,
+    private readonly tenantNameRepo?: TenantNameRepository,
+    private readonly notifications: IDiscordEventsPublisher = noopDiscordEventsPublisher,
   ) {
     this.log = logger?.child({ component: "EnqueueBatchUpload" });
   }
@@ -251,6 +259,10 @@ export class EnqueueBatchUploadUseCase {
       },
     );
 
+    // Notify internal ops channel (non-fatal — Discord is a notification
+    // surface only and must never block a batch upload).
+    await this.publishBatchUploaded(batch, resolvedName, campaign);
+
     this.log?.info("Batch enqueued for processing", {
       action: "batch.enqueue",
       batchId: batch.id,
@@ -266,5 +278,56 @@ export class EnqueueBatchUploadUseCase {
       message:
         "Your file is being processed. You'll see the leads appear shortly.",
     };
+  }
+
+  /**
+   * Emits the v1 `batch.uploaded` event. Only operational allow-listed fields
+   * are included — no phone numbers, CSV contents, or raw file URLs. The
+   * deterministic eventId lets the notification service dedupe replays.
+   */
+  private async publishBatchUploaded(
+    batch: { id: string; createdAt?: Date },
+    batchName: string,
+    campaign: {
+      id: string;
+      tenantId: string;
+      name?: string | null;
+      provider?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const tenantName =
+        (await this.tenantNameRepo?.getNameById(campaign.tenantId)) ??
+        campaign.tenantId;
+
+      const event: DiscordEvent = {
+        eventId: `batch.uploaded:${batch.id}:created`,
+        eventType: "batch.uploaded",
+        eventVersion: 1,
+        occurredAt: (batch.createdAt ?? new Date()).toISOString(),
+        tenantId: campaign.tenantId,
+        source: "kooi-backend",
+        data: {
+          tenantName,
+          tenantId: campaign.tenantId,
+          campaignId: campaign.id,
+          campaignName: campaign.name || campaign.id,
+          batchId: batch.id,
+          batchName,
+          status: "PROCESSING",
+          provider: campaign.provider === "SARVAM" ? "SARVAM" : "BOLNA",
+          dashboardPath: `/campaigns/${campaign.id}/batches`,
+        },
+      };
+
+      await this.notifications.publish(event);
+    } catch (error) {
+      this.log?.error("failed to publish batch.uploaded event", error, {
+        action: "notification.publish_failed",
+        tenantId: campaign.tenantId,
+        campaignId: campaign.id,
+        batchId: batch.id,
+      });
+    }
   }
 }

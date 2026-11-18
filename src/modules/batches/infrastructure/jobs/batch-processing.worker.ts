@@ -38,6 +38,12 @@ import { toUserFriendlyError } from "../../domain/rules/batch-error-messages";
 import axios from "axios";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 import type { IPhoneNumberRepository } from "../../../phone-numbers/application/interfaces/phone-number-repository.interface";
+import type { TenantNameRepository } from "../../application/interfaces/tenant-name-repository.interface";
+import type {
+  IDiscordEventsPublisher,
+  DiscordEvent,
+} from "../../../../shared/config/external/notifications/discordevents-publisher";
+import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
 
 export interface BatchJobData {
   batchId: string;
@@ -68,6 +74,8 @@ export class BatchProcessingWorker {
     private readonly sarvamEncryptionService?: ISarvamApiKeyEncryptionService,
     private readonly storage?: FileStorageProvider,
     logger?: Logger,
+    private readonly tenantNameRepo?: TenantNameRepository,
+    private readonly notifications: IDiscordEventsPublisher = noopDiscordEventsPublisher,
   ) {
     this.log = logger?.child({ component: "BatchProcessingWorker" });
     this.sarvamCohortTransformer = new SarvamCohortTransformer();
@@ -114,8 +122,10 @@ export class BatchProcessingWorker {
       await this.batchRepo.updateProgress(batchId, "PARSING", 10);
 
       const { rows } = parseLeadBuffer(fileBuffer, fileName);
+      const totalUploadedRows = rows.length;
       if (rows.length === 0) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "Uploaded file contains no data rows.",
@@ -134,6 +144,7 @@ export class BatchProcessingWorker {
 
       if (validRows.length === 0) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "No valid contact numbers found in the uploaded file.",
@@ -168,6 +179,7 @@ export class BatchProcessingWorker {
       // ── EARLY EXIT ON 100% DUPLICATES ─────────────────────────
       if (newLeads.length === 0) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           `All ${uniqueRows.length} lead(s) are duplicates of existing leads in this campaign.`,
@@ -178,6 +190,7 @@ export class BatchProcessingWorker {
       const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
       if (activePlan?.status === "EXPIRED") {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "Your free trial has expired. Historical data remains accessible, but uploading new leads requires an active plan.",
@@ -192,6 +205,7 @@ export class BatchProcessingWorker {
         newLeads.length > activePlan.maxLeadsPerBatch
       ) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           `Batch exceeds plan limit of ${activePlan.maxLeadsPerBatch} leads per batch (${newLeads.length} found).`,
@@ -209,6 +223,7 @@ export class BatchProcessingWorker {
         const remaining = Math.max(0, activePlan.contactLimit - currentUsed);
         if (newLeads.length > remaining) {
           await this.failBatch(
+            tenantId,
             batchId,
             campaignId,
             `Trial contact limit exceeded: Batch contains ${newLeads.length} valid lead(s), but your trial has only ${remaining} remaining contact allowance (${currentUsed} of ${activePlan.contactLimit} used). Upload rejected.`,
@@ -262,6 +277,7 @@ export class BatchProcessingWorker {
 
       if (totalAvailable === 0) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "No valid leads available to process in this batch.",
@@ -280,6 +296,7 @@ export class BatchProcessingWorker {
       );
       if (!campaign) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "Campaign was deleted during processing.",
@@ -298,12 +315,14 @@ export class BatchProcessingWorker {
           runImmediately,
           pendingLeads,
           existingBatch,
+          uploadStats: { totalRows: totalUploadedRows },
         });
         return;
       }
 
       if (!campaign.assistant) {
         await this.failBatch(
+          tenantId,
           batchId,
           campaignId,
           "Campaign assistant is not configured or missing.",
@@ -441,6 +460,18 @@ export class BatchProcessingWorker {
         bolnaBatchId,
         finalStatus,
       });
+
+      await this.publishBatchCompleted({
+        tenantId,
+        campaignId,
+        batchId,
+        batchName: finalCheck.name || bolnaFileName.replace(/\.csv$/, ""),
+        campaignName: campaign.name || campaign.id,
+        provider: "BOLNA",
+        totalLeads: totalUploadedRows,
+        validLeads: totalAvailable,
+        finalStatus,
+      });
     } catch (err) {
       const technicalMessage = err instanceof Error ? err.message : String(err);
       const maxAttempts = job.opts.attempts ?? 3;
@@ -459,7 +490,12 @@ export class BatchProcessingWorker {
 
       // Mark FAILED on the final attempt before Bull gives up
       if (isFinalAttempt) {
-        await this.failBatch(batchId, campaignId, technicalMessage);
+        await this.failBatch(
+          tenantId,
+          batchId,
+          campaignId,
+          technicalMessage,
+        );
       }
 
       throw err;
@@ -478,6 +514,7 @@ export class BatchProcessingWorker {
     runImmediately: boolean;
     pendingLeads: PendingLeadRow[];
     existingBatch: LeadBatchEntityData;
+    uploadStats: { totalRows: number };
   }): Promise<void> {
     const {
       campaign,
@@ -489,10 +526,12 @@ export class BatchProcessingWorker {
       runImmediately,
       pendingLeads,
       existingBatch,
+      uploadStats,
     } = params;
 
     if (!campaign.sarvamAgentId) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Campaign Sarvam agent is not configured or missing.",
@@ -502,6 +541,7 @@ export class BatchProcessingWorker {
 
     if (!campaign.sarvamCampaignId) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Campaign does not have an external Sarvam campaign ID.",
@@ -511,6 +551,7 @@ export class BatchProcessingWorker {
 
     if (!this.sarvamCohortClient || !this.sarvamEncryptionService) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Sarvam cohort client or encryption service is not configured.",
@@ -524,6 +565,7 @@ export class BatchProcessingWorker {
     );
     if (!sarvamAgent) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Sarvam agent could not be found or is not accessible.",
@@ -571,12 +613,18 @@ export class BatchProcessingWorker {
         ? `Missing required variable '${firstDetail.variable}' for contact '${firstDetail.contactPhone}'. Variable is not set in campaign configuration or contact data.`
         : `Missing required Sarvam agent variable(s): ${transformResult.missingRequiredVariables.join(", ")}. Variable is not set in campaign configuration or contact data.`;
 
-      await this.failBatch(batchId, campaignId, failureReason);
+      await this.failBatch(
+        tenantId,
+        batchId,
+        campaignId,
+        failureReason,
+      );
       return;
     }
 
     if (transformResult.totalLeads === 0) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "No valid Indian contact numbers found for Sarvam cohort upload.",
@@ -615,6 +663,7 @@ export class BatchProcessingWorker {
     );
     if (!campaignBeforeUpload || campaignBeforeUpload.isDeleted) {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Campaign was deleted before cohort upload.",
@@ -722,6 +771,7 @@ export class BatchProcessingWorker {
 
     if (cohortStatus === "failed") {
       await this.failBatch(
+        tenantId,
         batchId,
         campaignId,
         "Sarvam cohort processing failed at voice provider.",
@@ -730,8 +780,7 @@ export class BatchProcessingWorker {
     }
 
     // Determine batch status and execution time accurately
-    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING" =
-      "CREATED";
+    let finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING";
 
     const freshCampaign = await this.campaignRepo.findByIdWithRelations(
       tenantId,
@@ -831,9 +880,22 @@ export class BatchProcessingWorker {
       finalStatus,
       cohortStatus,
     });
+
+    await this.publishBatchCompleted({
+      tenantId,
+      campaignId,
+      batchId,
+      batchName: finalCheck.name || resolvedBatchName,
+      campaignName: freshCampaign?.name || campaign.name || campaignId,
+      provider: "SARVAM",
+      totalLeads: uploadStats.totalRows,
+      validLeads: transformResult.totalLeads,
+      finalStatus,
+    });
   }
 
   private async failBatch(
+    tenantId: string,
     batchId: string,
     campaignId: string,
     technicalError: string,
@@ -851,8 +913,119 @@ export class BatchProcessingWorker {
         campaignId,
         userMessage,
       });
+
+      await this.publishBatchFailed({
+        tenantId,
+        batchId,
+        campaignId,
+        failureReason: userMessage,
+      });
     } catch (err) {
       this.log?.error("Failed to mark batch as failed", err, { batchId });
+    }
+  }
+
+  private async publishBatchCompleted(input: {
+    tenantId: string;
+    campaignId: string;
+    batchId: string;
+    batchName: string;
+    campaignName: string;
+    provider: "BOLNA" | "SARVAM";
+    totalLeads: number;
+    validLeads: number;
+    finalStatus: "CREATED" | "RUNNING" | "SCHEDULED" | "PROCESSING";
+  }): Promise<void> {
+    try {
+      const tenantName =
+        (await this.tenantNameRepo?.getNameById(input.tenantId)) ??
+        input.tenantId;
+      const event: DiscordEvent = {
+        eventId: `batch.completed:${input.batchId}:processed`,
+        eventType: "batch.completed",
+        eventVersion: 1,
+        occurredAt: new Date().toISOString(),
+        tenantId: input.tenantId,
+        source: "kooi-backend",
+        data: {
+          tenantName,
+          tenantId: input.tenantId,
+          campaignId: input.campaignId,
+          campaignName: input.campaignName,
+          batchId: input.batchId,
+          batchName: input.batchName,
+          provider: input.provider,
+          totalLeads: input.totalLeads,
+          validLeads: input.validLeads,
+          invalidLeads: Math.max(0, input.totalLeads - input.validLeads),
+          finalStatus: input.finalStatus,
+          dashboardPath: `/campaigns/${input.campaignId}/batches`,
+        },
+      };
+
+      await this.notifications.publish(event);
+    } catch (error) {
+      this.log?.error("failed to publish batch.completed event", error, {
+        action: "notification.publish_failed",
+        tenantId: input.tenantId,
+        campaignId: input.campaignId,
+        batchId: input.batchId,
+      });
+    }
+  }
+
+  private async publishBatchFailed(input: {
+    tenantId: string;
+    batchId: string;
+    campaignId: string;
+    failureReason: string;
+  }): Promise<void> {
+    try {
+      const [tenantNameResult, campaign, batch] = await Promise.all([
+        this.tenantNameRepo
+          ? this.tenantNameRepo
+              .getNameById(input.tenantId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        this.campaignRepo
+          .findByIdWithRelations(input.tenantId, input.campaignId)
+          .catch(() => null),
+        this.batchRepo
+          .findById(input.tenantId, input.campaignId, input.batchId)
+          .catch(() => null),
+      ]);
+
+      const event: DiscordEvent = {
+        eventId: `batch.failed:${input.batchId}:processing`,
+        eventType: "batch.failed",
+        eventVersion: 1,
+        occurredAt: new Date().toISOString(),
+        tenantId: input.tenantId,
+        source: "kooi-backend",
+        data: {
+          tenantName: tenantNameResult ?? input.tenantId,
+          tenantId: input.tenantId,
+          campaignId: input.campaignId,
+          campaignName: campaign?.name || input.campaignId,
+          batchId: input.batchId,
+          batchName: batch?.name || input.batchId,
+          provider:
+            campaign?.provider === "SARVAM" || batch?.provider === "SARVAM"
+              ? "SARVAM"
+              : "BOLNA",
+          failureReason: input.failureReason,
+          dashboardPath: `/campaigns/${input.campaignId}/batches`,
+        },
+      };
+
+      await this.notifications.publish(event);
+    } catch (error) {
+      this.log?.error("failed to publish batch.failed event", error, {
+        action: "notification.publish_failed",
+        tenantId: input.tenantId,
+        campaignId: input.campaignId,
+        batchId: input.batchId,
+      });
     }
   }
 }

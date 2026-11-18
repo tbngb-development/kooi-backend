@@ -31,6 +31,8 @@ import { SyncSarvamCohortLifecycleUseCase } from "./application/use-cases/sync-s
 import type { SyncSarvamCampaignLifecycleUseCase } from "../campaigns/application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
 import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort-client.interface";
 import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import { PrismaTenantNameRepository } from "./infrastructure/repositories/prisma-tenant-name.repository";
+import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -39,6 +41,7 @@ export interface BatchModuleDeps {
   sarvamCohortClient?: ISarvamCohortClient;
   sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
   syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+  eventPublisher?: IDiscordEventsPublisher;
 }
 
 export interface BatchModule {
@@ -57,6 +60,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const bolnaProvider = new BolnaBatchProviderImpl(deps.bolnaClientFactory);
   const planRepo = new PrismaPlanRepository();
   const phoneNumberRepo = new PrismaPhoneNumberRepository();
+  const tenantNameRepo = new PrismaTenantNameRepository();
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
   const getBatch = new GetBatchUseCase(
     batchRepo,
@@ -96,6 +100,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     planRepo,
     storage,
     log,
+    tenantNameRepo,
+    deps.eventPublisher,
   );
 
   const enqueueManualBatchUpload = new EnqueueManualBatchUploadUseCase(
@@ -113,6 +119,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     deps.sarvamEncryptionService,
     storage,
     log,
+    tenantNameRepo,
+    deps.eventPublisher,
   );
 
   const syncCohortLifecycle =

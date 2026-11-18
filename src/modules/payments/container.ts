@@ -5,6 +5,7 @@ import type { WalletRepository } from "../wallet/application/interfaces/wallet-r
 import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
 import type { AutoAssignKeyUseCase } from "../bolna-api-keys/application/use-cases/auto-assign-key.use-case";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
 import type { Logger } from "../../shared/logging/logger.interface";
 
 // Repositories
@@ -41,6 +42,7 @@ export interface PaymentModuleDeps {
   email: IEmailService;
   paymentProvider?: IPaymentProvider;
   logger: Logger;
+  paymentEventPublisher: IDiscordEventsPublisher;
 }
 
 export interface PaymentModule {
@@ -76,6 +78,7 @@ export function buildPaymentModule(deps: PaymentModuleDeps): PaymentModule {
     deps.email,
     tenantEmailRepo,
     log,
+    deps.paymentEventPublisher,
   );
 
   const createTopupOrder = new CreateOrderUseCase(

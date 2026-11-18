@@ -13,6 +13,13 @@ import {
   type IBolnaClientFactory,
 } from "../shared/config/external/bolna/bolna-client.factory";
 import { ResendEmailService } from "../shared/config/external/email/resend.email";
+import {
+  HttpDiscordEventsPublisher,
+  type IDiscordEventsPublisher,
+} from "../shared/config/external/notifications/discordevents-publisher";
+import { OutboxDiscordEventsPublisher } from "../shared/config/external/notifications/outbox-publisher";
+import { DiscordOutboxRelay } from "../shared/config/external/notifications/outbox-relay";
+import { PrismaDiscordOutboxRepository } from "../shared/config/external/notifications/outbox-repository";
 import { RedisOtpService } from "../modules/auth/infrastructure/services/redis-otp.service";
 
 // Module container builders
@@ -142,6 +149,7 @@ export interface AppContainer {
   sarvamApiKeys: SarvamApiKeyModule;
   sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
+  discordOutboxRelay: DiscordOutboxRelay;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -158,6 +166,31 @@ export interface AppContainer {
 
 export function buildContainer(): AppContainer {
   const logger = createLogger();
+
+  // Discord notification plumbing is shared by every emitting module.
+  const discordHttpPublisher = new HttpDiscordEventsPublisher(
+    env.discordNotifications,
+    logger,
+  );
+  const discordOutboxRepository = new PrismaDiscordOutboxRepository();
+  const discordEventsPublisher: IDiscordEventsPublisher =
+    env.discordNotifications.outboxEnabled
+      ? new OutboxDiscordEventsPublisher(
+          discordOutboxRepository,
+          logger,
+          env.discordNotifications.enabled,
+        )
+      : discordHttpPublisher;
+  const discordOutboxRelay = new DiscordOutboxRelay({
+    outbox: discordOutboxRepository,
+    sender: discordHttpPublisher,
+    logger,
+    enabled:
+      env.discordNotifications.enabled &&
+      env.discordNotifications.outboxEnabled,
+    pollMs: env.discordNotifications.outboxPollMs,
+    batchSize: env.discordNotifications.outboxBatchSize,
+  });
 
   // ── Infrastructure & Shared Drivers ──────────────────────────────────
   const authRepository = new PrismaAuthRepository();
@@ -221,6 +254,7 @@ export function buildContainer(): AppContainer {
     bolnaClientFactory,
     email,
     logger,
+    eventPublisher: discordEventsPublisher,
   });
 
   // 5. Plans Module (with wallet and Bolna key auto-assignment for free trial onboarding)
@@ -231,13 +265,14 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // 6. Payments Module
+  // 6. Payments Module — durable outbox for Discord notifications
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
     planRepository: planRepo,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
     logger,
+    paymentEventPublisher: discordEventsPublisher,
   });
 
   // 7. Invites Module
@@ -331,6 +366,7 @@ export function buildContainer(): AppContainer {
     sarvamCohortClient,
     sarvamEncryptionService: sarvamApiKeys.encryptionService,
     syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+    eventPublisher: discordEventsPublisher,
   });
 
   return {
@@ -362,6 +398,7 @@ export function buildContainer(): AppContainer {
     sarvamApiKeys,
     sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
+    discordOutboxRelay,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
