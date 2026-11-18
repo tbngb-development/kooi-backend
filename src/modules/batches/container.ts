@@ -119,6 +119,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     deps.sarvamEncryptionService,
     storage,
     log,
+    tenantNameRepo,
+    deps.eventPublisher,
   );
 
   const syncCohortLifecycle =

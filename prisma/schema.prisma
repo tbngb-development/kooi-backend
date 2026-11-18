@@ -1410,3 +1410,20 @@ model CallGoalResult {
   @@index([campaignGoalId])
   @@index([attemptId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DISCORD EVENT OUTBOX
+// Pending envelopes only. No delivery attempts, statuses, or message IDs —
+// the notification service owns transient delivery state.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DiscordEventOutbox {
+  id          String    @id @default(uuid())
+  eventId     String    @unique
+  eventType   String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  @@index([publishedAt, createdAt])
+}

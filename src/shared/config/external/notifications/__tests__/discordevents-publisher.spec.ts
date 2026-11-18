@@ -20,7 +20,9 @@ const event: DiscordEvent = {
 describe("HttpDiscordEventsPublisher", () => {
   let post: ReturnType<typeof vi.fn>;
   let logger: Logger;
-  let makePublisher: (overrides?: Record<string, unknown>) => IDiscordEventsPublisher;
+  let makePublisher: (
+    overrides?: Record<string, unknown>,
+  ) => HttpDiscordEventsPublisher;
 
   beforeEach(() => {
     post = vi.fn().mockResolvedValue({ status: 202 });
@@ -84,10 +86,26 @@ describe("HttpDiscordEventsPublisher", () => {
     );
   });
 
+  it("publishOrThrow surfaces transport failures to the outbox relay", async () => {
+    post.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+
+    await expect(makePublisher().publishOrThrow(event)).rejects.toThrow(
+      "ECONNREFUSED",
+    );
+  });
+
   it("does not throw and logs on a non-2xx response", async () => {
     post.mockRejectedValueOnce(new Error("Request failed with status code 500"));
 
     await expect(makePublisher().publish(event)).resolves.toBeUndefined();
+  });
+
+  it("surfaces a 429 response to the outbox relay for retry", async () => {
+    post.mockResolvedValueOnce({ status: 429 });
+
+    await expect(makePublisher().publishOrThrow(event)).rejects.toThrow(
+      "notification service returned 429",
+    );
   });
 
   it("is a no-op when disabled", async () => {

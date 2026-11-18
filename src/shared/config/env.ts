@@ -70,6 +70,10 @@ export const env = {
     webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || "",
     timeoutMs: Number(process.env.DISCORD_NOTIFICATION_TIMEOUT_MS) || 3000,
     enabled: process.env.DISCORD_NOTIFICATIONS_ENABLED === "true",
+    // Durable publication: envelopes are written to the outbox and relayed.
+    outboxEnabled: process.env.DISCORD_OUTBOX_ENABLED !== "false",
+    outboxPollMs: Number(process.env.DISCORD_OUTBOX_POLL_MS) || 5000,
+    outboxBatchSize: Number(process.env.DISCORD_OUTBOX_BATCH_SIZE) || 50,
   },
 
   resend: {

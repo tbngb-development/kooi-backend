@@ -56,49 +56,8 @@ export class HttpDiscordEventsPublisher implements IDiscordEventsPublisher {
   ) {}
 
   async publish(event: DiscordEvent): Promise<void> {
-    if (!this.options.enabled || !this.options.webhookSecret) {
-      this.logger.debug("KOOI event publishing disabled", {
-        action: "notification.publish_skipped",
-        eventId: event.eventId,
-      });
-      return;
-    }
-
     try {
-      const timestamp = String(Date.now());
-      const raw = JSON.stringify(event);
-      const signature = createHmac("sha256", this.options.webhookSecret)
-        .update(`${timestamp}.`)
-        .update(Buffer.from(raw, "utf8"))
-        .digest("hex");
-
-      const url = `${this.options.serviceUrl.replace(/\/$/, "")}/api/v1/events`;
-      const response = await this.http.post(url, raw, {
-        headers: {
-          "content-type": "application/json",
-          "x-kooi-timestamp": timestamp,
-          "x-kooi-signature": signature,
-        },
-        timeout: this.options.timeoutMs,
-      });
-
-      if (
-        response &&
-        typeof response === "object" &&
-        "status" in response &&
-        ((response as { status: number }).status < 200 ||
-          (response as { status: number }).status >= 300)
-      ) {
-        throw new Error(
-          `notification service returned ${(response as { status: number }).status}`,
-        );
-      }
-
-      this.logger.debug("KOOI event published", {
-        action: "notification.published",
-        eventId: event.eventId,
-        eventType: event.eventType,
-      });
+      await this.publishOrThrow(event);
     } catch (error) {
       // Never propagate: Discord is an internal notification surface only.
       // Log context deliberately excludes the secret and the raw payload.
@@ -108,5 +67,51 @@ export class HttpDiscordEventsPublisher implements IDiscordEventsPublisher {
         eventType: event.eventType,
       });
     }
+  }
+
+  /** Same signing contract as publish(), but surfaces transport failures. */
+  async publishOrThrow(event: DiscordEvent): Promise<void> {
+    if (!this.options.enabled || !this.options.webhookSecret) {
+      this.logger.debug("KOOI event publishing disabled", {
+        action: "notification.publish_skipped",
+        eventId: event.eventId,
+      });
+      return;
+    }
+
+    const timestamp = String(Date.now());
+    const raw = JSON.stringify(event);
+    const signature = createHmac("sha256", this.options.webhookSecret)
+      .update(`${timestamp}.`)
+      .update(Buffer.from(raw, "utf8"))
+      .digest("hex");
+
+    const url = `${this.options.serviceUrl.replace(/\/$/, "")}/api/v1/events`;
+    const response = await this.http.post(url, raw, {
+      headers: {
+        "content-type": "application/json",
+        "x-kooi-timestamp": timestamp,
+        "x-kooi-signature": signature,
+      },
+      timeout: this.options.timeoutMs,
+    });
+
+    if (
+      response &&
+      typeof response === "object" &&
+      "status" in response &&
+      ((response as { status: number }).status < 200 ||
+        (response as { status: number }).status >= 300)
+    ) {
+      throw new Error(
+        `notification service returned ${(response as { status: number }).status}`,
+      );
+    }
+
+    this.logger.debug("KOOI event published", {
+      action: "notification.published",
+      eventId: event.eventId,
+      eventType: event.eventType,
+    });
   }
 }
