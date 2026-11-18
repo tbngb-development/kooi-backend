@@ -13,6 +13,7 @@ import {
   type IBolnaClientFactory,
 } from "../shared/config/external/bolna/bolna-client.factory";
 import { ResendEmailService } from "../shared/config/external/email/resend.email";
+import { HttpDiscordEventsPublisher } from "../shared/config/external/notifications/discordevents-publisher";
 import { RedisOtpService } from "../modules/auth/infrastructure/services/redis-otp.service";
 
 // Module container builders
@@ -232,12 +233,17 @@ export function buildContainer(): AppContainer {
   });
 
   // 6. Payments Module
+  const discordEventsPublisher = new HttpDiscordEventsPublisher(
+    env.discordNotifications,
+    logger,
+  );
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
     planRepository: planRepo,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
     logger,
+    paymentEventPublisher: discordEventsPublisher,
   });
 
   // 7. Invites Module
@@ -331,6 +337,7 @@ export function buildContainer(): AppContainer {
     sarvamCohortClient,
     sarvamEncryptionService: sarvamApiKeys.encryptionService,
     syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+    eventPublisher: discordEventsPublisher,
   });
 
   return {

@@ -12,6 +12,7 @@ import type { FileStorageProvider } from "../../../shared/config/external/storag
 vi.mock("../../../../shared/config/external/queue/queue.factory", () => ({
   getQueue: vi.fn().mockReturnValue({
     add: vi.fn().mockResolvedValue({ id: "job-1" }),
+    getJobs: vi.fn().mockResolvedValue([]),
     getActiveCount: vi.fn().mockResolvedValue(0),
     getWaitingCount: vi.fn().mockResolvedValue(0),
   }),
