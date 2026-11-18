@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import axios from "axios";
 import type { Logger } from "../../../logging/logger.interface";
+import type { AppEnvironment } from "./discord-environment";
 
 /**
  * Backend -> Discord notification service envelope. Kept transport-agnostic so
@@ -14,6 +15,8 @@ export interface DiscordEvent {
   tenantId: string;
   source: string;
   actorId?: string;
+  /** Deployment label; stamped by the publisher when omitted. */
+  environment?: AppEnvironment;
   data: Record<string, unknown>;
 }
 
@@ -32,6 +35,8 @@ export interface DiscordEventsPublisherOptions {
   webhookSecret: string;
   timeoutMs: number;
   enabled: boolean;
+  /** Stamped on events that do not already carry an environment. */
+  environment: AppEnvironment;
 }
 
 /** Small seam so tests can replace the HTTP client without network calls. */
@@ -80,7 +85,11 @@ export class HttpDiscordEventsPublisher implements IDiscordEventsPublisher {
     }
 
     const timestamp = String(Date.now());
-    const raw = JSON.stringify(event);
+    const envelope: DiscordEvent = {
+      ...event,
+      environment: event.environment ?? this.options.environment,
+    };
+    const raw = JSON.stringify(envelope);
     const signature = createHmac("sha256", this.options.webhookSecret)
       .update(`${timestamp}.`)
       .update(Buffer.from(raw, "utf8"))

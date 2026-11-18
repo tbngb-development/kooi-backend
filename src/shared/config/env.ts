@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { resolveAppEnvironment } from "./external/notifications/discord-environment";
 
 dotenv.config();
 
@@ -70,6 +71,12 @@ export const env = {
     webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || "",
     timeoutMs: Number(process.env.DISCORD_NOTIFICATION_TIMEOUT_MS) || 3000,
     enabled: process.env.DISCORD_NOTIFICATIONS_ENABLED === "true",
+    // Deployment label stamped on every event (local-dev | development |
+    // staging | production). Derived from APP_ENV, then NODE_ENV.
+    environment: resolveAppEnvironment(
+      process.env.APP_ENV,
+      process.env.NODE_ENV,
+    ),
     // Durable publication: envelopes are written to the outbox and relayed.
     outboxEnabled: process.env.DISCORD_OUTBOX_ENABLED !== "false",
     outboxPollMs: Number(process.env.DISCORD_OUTBOX_POLL_MS) || 5000,

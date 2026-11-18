@@ -37,20 +37,44 @@ function makeOutbox(): IDiscordOutboxRepository {
 }
 
 describe("OutboxDiscordEventsPublisher", () => {
-  it("appends the envelope when enabled", async () => {
+  it("appends the envelope stamped with the environment when enabled", async () => {
     const outbox = makeOutbox();
-    await new OutboxDiscordEventsPublisher(outbox, makeLogger(), true).publish(
-      event,
-    );
+    await new OutboxDiscordEventsPublisher(
+      outbox,
+      makeLogger(),
+      true,
+      "staging",
+    ).publish(event);
 
-    expect(outbox.append).toHaveBeenCalledWith(event);
+    expect(outbox.append).toHaveBeenCalledWith({
+      ...event,
+      environment: "staging",
+    });
+  });
+
+  it("keeps an environment already carried by the event", async () => {
+    const outbox = makeOutbox();
+    await new OutboxDiscordEventsPublisher(
+      outbox,
+      makeLogger(),
+      true,
+      "staging",
+    ).publish({ ...event, environment: "local-dev" });
+
+    expect(outbox.append).toHaveBeenCalledWith({
+      ...event,
+      environment: "local-dev",
+    });
   });
 
   it("does nothing when disabled", async () => {
     const outbox = makeOutbox();
-    await new OutboxDiscordEventsPublisher(outbox, makeLogger(), false).publish(
-      event,
-    );
+    await new OutboxDiscordEventsPublisher(
+      outbox,
+      makeLogger(),
+      false,
+      "staging",
+    ).publish(event);
 
     expect(outbox.append).not.toHaveBeenCalled();
   });
@@ -61,7 +85,12 @@ describe("OutboxDiscordEventsPublisher", () => {
     const logger = makeLogger();
 
     await expect(
-      new OutboxDiscordEventsPublisher(outbox, logger, true).publish(event),
+      new OutboxDiscordEventsPublisher(
+        outbox,
+        logger,
+        true,
+        "staging",
+      ).publish(event),
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalled();
   });

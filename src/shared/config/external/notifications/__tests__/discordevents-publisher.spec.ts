@@ -41,6 +41,7 @@ describe("HttpDiscordEventsPublisher", () => {
           webhookSecret: "shared-secret",
           timeoutMs: 3000,
           enabled: true,
+          environment: "staging",
           ...overrides,
         },
         logger,
@@ -59,7 +60,7 @@ describe("HttpDiscordEventsPublisher", () => {
     ];
 
     expect(url).toBe("http://localhost:3005/api/v1/events");
-    expect(raw).toBe(JSON.stringify(event));
+    expect(JSON.parse(raw)).toEqual({ ...event, environment: "staging" });
     expect(config.headers["content-type"]).toBe("application/json");
     expect(config.timeout).toBe(3000);
 
@@ -70,6 +71,13 @@ describe("HttpDiscordEventsPublisher", () => {
       .update(Buffer.from(raw, "utf8"))
       .digest("hex");
     expect(config.headers["x-kooi-signature"]).toBe(expected);
+  });
+
+  it("lets an event override the publisher environment", async () => {
+    await makePublisher().publish({ ...event, environment: "production" });
+
+    const [, raw] = post.mock.calls[0] as [string, string];
+    expect(JSON.parse(raw).environment).toBe("production");
   });
 
   it("does not throw and logs when the notification service is unavailable", async () => {

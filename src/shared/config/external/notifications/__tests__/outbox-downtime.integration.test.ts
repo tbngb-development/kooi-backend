@@ -75,10 +75,14 @@ describe("Discord outbox downtime recovery", () => {
       .mockResolvedValue(undefined);
     const relay = makeRelay(outbox, sender);
 
-    await new OutboxDiscordEventsPublisher(outbox, makeLogger(), true).publish(
-      event,
-    );
+    await new OutboxDiscordEventsPublisher(
+      outbox,
+      makeLogger(),
+      true,
+      "staging",
+    ).publish(event);
     expect(pending).toHaveLength(1);
+    expect(pending[0].event.environment).toBe("staging");
 
     await relay.tick();
     expect(pending).toHaveLength(1);
@@ -87,7 +91,10 @@ describe("Discord outbox downtime recovery", () => {
     await relay.tick();
     expect(pending).toHaveLength(0);
     expect(sender).toHaveBeenCalledTimes(2);
-    expect(sender).toHaveBeenLastCalledWith(event);
+    expect(sender).toHaveBeenLastCalledWith({
+      ...event,
+      environment: "staging",
+    });
   });
 
   it("continues with later pending events after one delivery fails", async () => {
@@ -98,6 +105,7 @@ describe("Discord outbox downtime recovery", () => {
       outbox,
       makeLogger(),
       true,
+      "production",
     );
     await publisher.publish(first);
     await publisher.publish(second);
@@ -109,8 +117,14 @@ describe("Discord outbox downtime recovery", () => {
     await makeRelay(outbox, sender).tick();
 
     expect(sender).toHaveBeenCalledTimes(2);
-    expect(sender).toHaveBeenNthCalledWith(1, first);
-    expect(sender).toHaveBeenNthCalledWith(2, second);
+    expect(sender).toHaveBeenNthCalledWith(1, {
+      ...first,
+      environment: "production",
+    });
+    expect(sender).toHaveBeenNthCalledWith(2, {
+      ...second,
+      environment: "production",
+    });
     expect(pending.map((item) => item.event.eventId)).toEqual([first.eventId]);
   });
 });
