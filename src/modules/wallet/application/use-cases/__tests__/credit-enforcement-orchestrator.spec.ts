@@ -103,6 +103,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.incidents.markBlocked).toHaveBeenCalledWith(
       incidentId,
       expect.arrayContaining([expect.objectContaining({ success: true })]),
+      expect.any(Date),
     );
     expect(deps.emailOutbox.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: `enforce:${incidentId}` }),
@@ -118,7 +119,10 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     const result = await orchestrator.enforce({ tenantId });
 
     expect(result.action).toBe("RESOLVED");
-    expect(deps.incidents.resolve).toHaveBeenCalledWith(incidentId);
+    expect(deps.incidents.resolve).toHaveBeenCalledWith(
+      incidentId,
+      expect.any(Date),
+    );
     expect(deps.providers.stop).not.toHaveBeenCalled();
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
@@ -283,6 +287,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       expect.arrayContaining([
         expect.objectContaining({ success: false, error: "provider 500" }),
       ]),
+      expect.any(Date),
     );
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
@@ -310,6 +315,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
       incidentId,
       [stillFailing],
+      expect.any(Date),
     );
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
@@ -331,6 +337,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
       incidentId,
       [failedStopResult],
+      expect.any(Date),
     );
   });
 
@@ -352,9 +359,11 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     const result = await orchestrator.enforce({ tenantId });
 
     expect(result.action).toBe("BLOCKED");
-    expect(deps.incidents.markBlocked).toHaveBeenCalledWith(incidentId, [
-      confirmed,
-    ]);
+    expect(deps.incidents.markBlocked).toHaveBeenCalledWith(
+      incidentId,
+      [confirmed],
+      expect.any(Date),
+    );
     expect(deps.incidents.recordEnforcementFailure).not.toHaveBeenCalled();
   });
 
@@ -384,6 +393,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       expect.arrayContaining([
         expect.objectContaining({ success: false, error: "adapter down" }),
       ]),
+      expect.any(Date),
     );
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });

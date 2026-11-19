@@ -167,6 +167,58 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     expect(result.enforcementStartedAt).toBeNull();
   });
 
+  it("resolves only while still holding the enforcement lease", async () => {
+    const leaseToken = new Date("2026-01-01T00:00:00Z");
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      ...openIncident,
+      state: "RESOLVED",
+      enforcementStartedAt: null,
+    } as any);
+
+    await repository.resolve(openIncident.id, leaseToken);
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: openIncident.id,
+          state: { not: "RESOLVED" },
+          enforcementStartedAt: leaseToken,
+        },
+      }),
+    );
+  });
+
+  it("does not resolve an incident when a stale lease holder tries to resolve it", async () => {
+    const staleToken = new Date("2026-01-01T00:00:00Z");
+    const newerState = {
+      ...openIncident,
+      state: "OPEN",
+      enforcementStartedAt: new Date("2026-01-01T00:01:00Z"),
+    };
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 0,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
+      newerState as any,
+    );
+
+    const result = await repository.resolve(openIncident.id, staleToken);
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: openIncident.id,
+          state: { not: "RESOLVED" },
+          enforcementStartedAt: staleToken,
+        },
+      }),
+    );
+    expect(result).toMatchObject(newerState);
+  });
+
   it("re-resolving an already RESOLVED incident is a no-op with no new status", async () => {
     vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
       count: 0,
@@ -260,6 +312,170 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
         providerActions: results,
       },
     });
+  });
+
+  it("marks BLOCKED only while still holding the enforcement lease", async () => {
+    const leaseToken = new Date("2026-01-01T00:00:00Z");
+    const results = [
+      { target: { provider: "BOLNA", targetId: "b-1" }, success: true },
+    ];
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      ...openIncident,
+      state: "BLOCKED",
+      enforcementStartedAt: null,
+      providerActions: results,
+    } as any);
+
+    const result = await repository.markBlocked(
+      openIncident.id,
+      results,
+      leaseToken,
+    );
+
+    expect(prisma.walletIncidentState.update).not.toHaveBeenCalled();
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: openIncident.id,
+        state: "OPEN",
+        enforcementStartedAt: leaseToken,
+      },
+      data: {
+        state: "BLOCKED",
+        enforcementStartedAt: null,
+        providerActions: results,
+      },
+    });
+    expect(result).toMatchObject({
+      state: "BLOCKED",
+      enforcementStartedAt: null,
+      providerActions: results,
+    });
+  });
+
+  it("does not overwrite newer state when a stale lease holder marks BLOCKED", async () => {
+    const staleToken = new Date("2026-01-01T00:00:00Z");
+    const results = [
+      { target: { provider: "BOLNA", targetId: "b-1" }, success: true },
+    ];
+    const newerState = {
+      ...openIncident,
+      state: "OPEN",
+      enforcementStartedAt: new Date("2026-01-01T00:01:00Z"),
+      providerActions: [],
+    };
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 0,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
+      newerState as any,
+    );
+
+    const result = await repository.markBlocked(
+      openIncident.id,
+      results,
+      staleToken,
+    );
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: openIncident.id,
+          state: "OPEN",
+          enforcementStartedAt: staleToken,
+        },
+      }),
+    );
+    // The write is a no-op; the authoritative current row is returned, not
+    // the stale writer's intended state.
+    expect(result).toMatchObject(newerState);
+  });
+
+  it("records enforcement failure only while still holding the enforcement lease", async () => {
+    const leaseToken = new Date("2026-01-01T00:00:00Z");
+    const results = [
+      {
+        target: { provider: "BOLNA", targetId: "b-1" },
+        success: false,
+        error: "boom",
+      },
+    ];
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      ...openIncident,
+      state: "OPEN",
+      enforcementStartedAt: null,
+      providerActions: results,
+    } as any);
+
+    const result = await repository.recordEnforcementFailure(
+      openIncident.id,
+      results,
+      leaseToken,
+    );
+
+    expect(prisma.walletIncidentState.update).not.toHaveBeenCalled();
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: openIncident.id,
+        state: "OPEN",
+        enforcementStartedAt: leaseToken,
+      },
+      data: {
+        state: "OPEN",
+        enforcementStartedAt: null,
+        providerActions: results,
+      },
+    });
+    expect(result).toMatchObject({
+      state: "OPEN",
+      enforcementStartedAt: null,
+      providerActions: results,
+    });
+  });
+
+  it("does not clear a newer lease when a stale holder records enforcement failure", async () => {
+    const staleToken = new Date("2026-01-01T00:00:00Z");
+    const results = [
+      {
+        target: { provider: "BOLNA", targetId: "b-1" },
+        success: false,
+        error: "boom",
+      },
+    ];
+    const newerState = {
+      ...openIncident,
+      state: "OPEN",
+      enforcementStartedAt: new Date("2026-01-01T00:01:00Z"),
+      providerActions: [],
+    };
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 0,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
+      newerState as any,
+    );
+
+    const result = await repository.recordEnforcementFailure(
+      openIncident.id,
+      results,
+      staleToken,
+    );
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: openIncident.id,
+          state: "OPEN",
+          enforcementStartedAt: staleToken,
+        },
+      }),
+    );
+    expect(result).toMatchObject(newerState);
   });
 
   it("claims the warning on a newly created singleton and returns the crossing time", async () => {

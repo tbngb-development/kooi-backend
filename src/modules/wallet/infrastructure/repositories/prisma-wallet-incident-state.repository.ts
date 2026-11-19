@@ -127,9 +127,18 @@ export class PrismaWalletIncidentStateRepository
     });
   }
 
-  async resolve(incidentId: string): Promise<WalletIncidentState> {
+  async resolve(
+    incidentId: string,
+    leaseToken?: Date,
+  ): Promise<WalletIncidentState> {
     await prisma.walletIncidentState.updateMany({
-      where: { id: incidentId, state: { not: "RESOLVED" } },
+      where: {
+        id: incidentId,
+        state: { not: "RESOLVED" },
+        // A lease holder must not resolve an incident that another instance has
+        // already taken over. Recharge-driven resolution carries no lease.
+        ...(leaseToken ? { enforcementStartedAt: leaseToken } : {}),
+      },
       data: {
         state: "RESOLVED",
         resolvedAt: new Date(),
@@ -166,34 +175,82 @@ export class PrismaWalletIncidentStateRepository
     return result.count === 1;
   }
 
-  /** U-04: persist honest per-target outcomes and release the lease. */
+  /**
+   * U-04: persist honest per-target outcomes and release the lease. When a
+   * lease token is supplied, the write is conditional on still owning that
+   * lease; a late write from a superseded instance is a no-op.
+   */
   async markBlocked(
     incidentId: string,
     providerActions: unknown[],
+    leaseToken?: Date,
   ): Promise<WalletIncidentState> {
-    return prisma.walletIncidentState.update({
-      where: { id: incidentId },
+    if (!leaseToken) {
+      return prisma.walletIncidentState.update({
+        where: { id: incidentId },
+        data: {
+          state: "BLOCKED",
+          enforcementStartedAt: null,
+          providerActions: providerActions as never,
+        },
+      });
+    }
+
+    await prisma.walletIncidentState.updateMany({
+      where: {
+        id: incidentId,
+        state: "OPEN",
+        enforcementStartedAt: leaseToken,
+      },
       data: {
         state: "BLOCKED",
         enforcementStartedAt: null,
         providerActions: providerActions as never,
       },
     });
+    return this.getById(incidentId);
   }
 
   /** U-05: keep OPEN and clear lease so stale reconciliation retries after failure. */
   async recordEnforcementFailure(
     incidentId: string,
     providerActions: unknown[],
+    leaseToken?: Date,
   ): Promise<WalletIncidentState> {
-    return prisma.walletIncidentState.update({
-      where: { id: incidentId },
+    if (!leaseToken) {
+      return prisma.walletIncidentState.update({
+        where: { id: incidentId },
+        data: {
+          state: "OPEN",
+          enforcementStartedAt: null,
+          providerActions: providerActions as never,
+        },
+      });
+    }
+
+    await prisma.walletIncidentState.updateMany({
+      where: {
+        id: incidentId,
+        state: "OPEN",
+        enforcementStartedAt: leaseToken,
+      },
       data: {
         state: "OPEN",
         enforcementStartedAt: null,
         providerActions: providerActions as never,
       },
     });
+    return this.getById(incidentId);
+  }
+
+  private async getById(incidentId: string): Promise<WalletIncidentState> {
+    const current = await prisma.walletIncidentState.findUnique({
+      where: { id: incidentId },
+    });
+    if (!current) {
+      throw new Error(`Wallet incident ${incidentId} not found`);
+    }
+    return current;
   }
 
   /** U-04: OPEN incidents whose enforcement lease is missing or expired. */

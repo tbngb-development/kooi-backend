@@ -102,7 +102,7 @@ export class CreditEnforcementOrchestrator {
     // between the first read and lease acquisition resolves instead of stops.
     const leasedWallet = await this.deps.wallets.findByTenantId(input.tenantId);
     if (leasedWallet && hasExecutableBalance(leasedWallet)) {
-      await this.deps.incidents.resolve(incident.id);
+      await this.deps.incidents.resolve(incident.id, now);
       return { action: "RESOLVED", incidentId: incident.id };
     }
 
@@ -161,6 +161,7 @@ export class CreditEnforcementOrchestrator {
       await this.deps.incidents.recordEnforcementFailure(
         incident.id,
         recordedActions,
+        now,
       );
 
       this.deps.logger.warn("Wallet enforcement recorded failure and queued retry", {
@@ -174,7 +175,7 @@ export class CreditEnforcementOrchestrator {
       return { action: "RETRY_QUEUED", incidentId: incident.id };
     }
 
-    await this.deps.incidents.markBlocked(incident.id, recordedActions);
+    await this.deps.incidents.markBlocked(incident.id, recordedActions, now);
 
     this.deps.logger.warn("Wallet incident enforced and blocked", {
       action: "wallet.enforcement.blocked",

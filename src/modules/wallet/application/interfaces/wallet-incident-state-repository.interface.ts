@@ -39,8 +39,11 @@ export interface WalletIncidentStateRepository {
    */
   clearWarning(tenantId: string): Promise<void>;
 
-  /** Idempotently mark the incident resolved. Never mutates campaigns/batches. */
-  resolve(incidentId: string): Promise<WalletIncidentState>;
+  /**
+   * Idempotently mark the incident resolved. Never mutates campaigns/batches.
+   * `leaseToken` restricts the write to the instance that still owns the lease.
+   */
+  resolve(incidentId: string, leaseToken?: Date): Promise<WalletIncidentState>;
 
   /**
    * U-04: atomically take the enforcement lease. Only succeeds while the
@@ -56,6 +59,7 @@ export interface WalletIncidentStateRepository {
   markBlocked(
     incidentId: string,
     providerActions: unknown[],
+    leaseToken?: Date,
   ): Promise<WalletIncidentState>;
 
   /**
@@ -67,6 +71,7 @@ export interface WalletIncidentStateRepository {
   recordEnforcementFailure(
     incidentId: string,
     providerActions: unknown[],
+    leaseToken?: Date,
   ): Promise<WalletIncidentState>;
 
   /** OPEN incidents with no lease, or a lease older than `leaseMs`. */
