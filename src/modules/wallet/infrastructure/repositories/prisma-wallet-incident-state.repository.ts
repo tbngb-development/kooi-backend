@@ -3,6 +3,7 @@ import type { WalletIncidentState } from "@prisma/client";
 import type {
   WalletIncidentStateRepository,
   ClaimIncidentInput,
+  ClaimWarningInput,
 } from "../../application/interfaces/wallet-incident-state-repository.interface";
 
 /**
@@ -45,6 +46,9 @@ export class PrismaWalletIncidentStateRepository
 
       // Reopen the resolved singleton in place. The state='RESOLVED' predicate
       // makes concurrent reopens idempotent: exactly one caller wins.
+      // Warning state is intentionally left untouched: re-arming belongs to
+      // clearWarning when the balance actually recovers above the threshold.
+      // Clearing it here would re-notify on every later positive-balance debit.
       await prisma.walletIncidentState.updateMany({
         where: { id: existing.id, state: "RESOLVED" },
         data: {
@@ -52,7 +56,6 @@ export class PrismaWalletIncidentStateRepository
           triggerBalancePaisa: input.triggerBalancePaisa,
           detectedAt: now,
           resolvedAt: null,
-          warningSentAt: null,
           enforcementSentAt: null,
           enforcementStartedAt: null,
           providerActions: [],
@@ -69,6 +72,59 @@ export class PrismaWalletIncidentStateRepository
       }
       return reopened;
     }
+  }
+
+  /**
+   * Claim the positive-balance warning for the current crossing. The unique
+   * tenant key keeps a single row even under concurrent inserts; the conditional
+   * update sets warningSentAt only once per crossing. The returned timestamp is
+   * stable for the whole crossing so every caller derives the same idempotency
+   * keys, making duplicate webhooks and retries replay-safe.
+   */
+  async claimWarning(
+    input: ClaimWarningInput,
+    now: Date = new Date(),
+  ): Promise<Date> {
+    const idempotencyKey = `wallet-incident:${input.tenantId}`;
+
+    try {
+      await prisma.walletIncidentState.create({
+        data: {
+          tenantId: input.tenantId,
+          idempotencyKey,
+          state: "OPEN",
+          triggerBalancePaisa: input.balancePaisa,
+          detectedAt: now,
+          warningSentAt: now,
+        },
+      });
+      return now;
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "P2002") throw err;
+    }
+
+    // Row already exists: atomically take the crossing if none is claimed yet.
+    const claimed = await prisma.walletIncidentState.updateMany({
+      where: { tenantId: input.tenantId, warningSentAt: null },
+      data: { warningSentAt: now },
+    });
+    if (claimed.count === 1) return now;
+
+    // Another debit/instance owns this crossing. Reuse its timestamp so all
+    // callers converge on the same email/event idempotency key.
+    const existing = await prisma.walletIncidentState.findUnique({
+      where: { tenantId: input.tenantId },
+      select: { warningSentAt: true },
+    });
+    return existing?.warningSentAt ?? now;
+  }
+
+  /** Re-arm warnings when the balance recovers above the threshold. */
+  async clearWarning(tenantId: string): Promise<void> {
+    await prisma.walletIncidentState.updateMany({
+      where: { tenantId, warningSentAt: { not: null } },
+      data: { warningSentAt: null },
+    });
   }
 
   async resolve(incidentId: string): Promise<WalletIncidentState> {

@@ -82,7 +82,8 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
   const checkLowBalance = new CheckLowBalanceUseCase(
     repository,
     deps.planRepository,
-    deps.email,
+    incidentRepository,
+    deps.emailOutboxRepository,
     log,
     deps.eventPublisher,
   );

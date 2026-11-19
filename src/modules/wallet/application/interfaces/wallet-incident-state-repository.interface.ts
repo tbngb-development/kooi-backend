@@ -5,6 +5,11 @@ export interface ClaimIncidentInput {
   triggerBalancePaisa: number;
 }
 
+export interface ClaimWarningInput {
+  tenantId: string;
+  balancePaisa: number;
+}
+
 /**
  * U-03/U-04: durable, singleton incident state. All methods are safe under
  * concurrent webhooks, retries and multiple app instances.
@@ -17,6 +22,22 @@ export interface WalletIncidentStateRepository {
    * - A RESOLVED singleton is reopened in place; a second row is never created.
    */
   claim(input: ClaimIncidentInput): Promise<WalletIncidentState>;
+
+  /**
+   * Atomically claim the positive-balance warning for the current low-balance
+   * crossing. Returns the stable crossing timestamp: the winner's `now`, or the
+   * existing timestamp when a concurrent debit/retry already owns the crossing.
+   * Callers build all idempotency keys from this value so duplicates converge.
+   * Never mutates campaigns/batches or enforcement state.
+   */
+  claimWarning(input: ClaimWarningInput, now?: Date): Promise<Date>;
+
+  /**
+   * Re-arm the warning once the balance recovers above the threshold. Clearing
+   * `warningSentAt` is the only thing that permits a future crossing to warn
+   * again; enforcement claim/resolve never touches warning state.
+   */
+  clearWarning(tenantId: string): Promise<void>;
 
   /** Idempotently mark the incident resolved. Never mutates campaigns/batches. */
   resolve(incidentId: string): Promise<WalletIncidentState>;

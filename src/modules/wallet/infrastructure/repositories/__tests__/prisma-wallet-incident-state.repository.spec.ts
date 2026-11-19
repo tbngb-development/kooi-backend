@@ -105,18 +105,19 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     });
 
     expect(result.state).toBe("OPEN");
-    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: openIncident.id, state: "RESOLVED" },
-        data: expect.objectContaining({
-          state: "OPEN",
-          triggerBalancePaisa: -500,
-          resolvedAt: null,
-          warningSentAt: null,
-          enforcementSentAt: null,
-        }),
-      }),
-    );
+    const reopenCall = vi.mocked(prisma.walletIncidentState.updateMany).mock
+      .calls[0][0];
+    expect(reopenCall.where).toEqual({ id: openIncident.id, state: "RESOLVED" });
+    expect(reopenCall.data).toMatchObject({
+      state: "OPEN",
+      triggerBalancePaisa: -500,
+      resolvedAt: null,
+      enforcementSentAt: null,
+    });
+    // Re-arming is owned by clearWarning; reopening an enforcement incident
+    // must not silently clear warning state (that would re-notify on every
+    // later positive-balance debit).
+    expect(reopenCall.data).not.toHaveProperty("warningSentAt");
   });
 
   it("resolves an active incident without touching campaigns or batches", async () => {
@@ -212,6 +213,86 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
         enforcementStartedAt: null,
         providerActions: results,
       },
+    });
+  });
+
+  it("claims the warning on a newly created singleton and returns the crossing time", async () => {
+    const now = new Date("2026-03-01T00:00:00Z");
+    vi.mocked(prisma.walletIncidentState.create).mockResolvedValue({
+      ...openIncident,
+      warningSentAt: now,
+    } as any);
+
+    const result = await repository.claimWarning(
+      { tenantId, balancePaisa: 40000 },
+      now,
+    );
+
+    expect(result).toBe(now);
+    expect(prisma.walletIncidentState.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId,
+        idempotencyKey,
+        state: "OPEN",
+        triggerBalancePaisa: 40000,
+        warningSentAt: now,
+      }),
+    });
+    expect(prisma.walletIncidentState.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("atomically claims the warning once when the singleton already exists", async () => {
+    const now = new Date("2026-03-01T00:00:00Z");
+    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
+      uniqueViolation(),
+    );
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+
+    const result = await repository.claimWarning(
+      { tenantId, balancePaisa: 40000 },
+      now,
+    );
+
+    expect(result).toBe(now);
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith({
+      where: { tenantId, warningSentAt: null },
+      data: { warningSentAt: now },
+    });
+  });
+
+  it("reuses the existing crossing time when a concurrent debit already claimed the warning", async () => {
+    const attempted = new Date("2026-03-01T00:00:05Z");
+    const winner = new Date("2026-03-01T00:00:00Z");
+    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
+      uniqueViolation(),
+    );
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 0,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      warningSentAt: winner,
+    } as any);
+
+    const result = await repository.claimWarning(
+      { tenantId, balancePaisa: 40000 },
+      attempted,
+    );
+
+    expect(result).toBe(winner);
+  });
+
+  it("re-arms the warning by clearing warningSentAt on recovery", async () => {
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+
+    await repository.clearWarning(tenantId);
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith({
+      where: { tenantId, warningSentAt: { not: null } },
+      data: { warningSentAt: null },
     });
   });
 
