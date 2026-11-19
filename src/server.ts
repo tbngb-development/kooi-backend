@@ -26,6 +26,7 @@ const server = app.listen(env.port, () => {
     container.payments.schedulers.paymentReconciliation.start();
     container.calls.schedulers.sarvamRecording?.start();
     container.discordOutboxRelay.start();
+    container.emailOutboxRelay.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -44,6 +45,7 @@ function gracefulShutdown(signal: string): void {
   container.payments.schedulers.paymentReconciliation.stop();
   container.calls.schedulers.sarvamRecording?.stop();
   container.discordOutboxRelay.stop();
+  container.emailOutboxRelay.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);

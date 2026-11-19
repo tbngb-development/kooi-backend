@@ -88,6 +88,15 @@ export const env = {
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",
   },
 
+  // U-08: durable email delivery. Empty outboxes make enabling harmless.
+  emailOutbox: {
+    enabled: process.env.EMAIL_OUTBOX_ENABLED !== "false",
+    pollMs: Number(process.env.EMAIL_OUTBOX_POLL_MS) || 5000,
+    batchSize: Number(process.env.EMAIL_OUTBOX_BATCH_SIZE) || 20,
+    maxAttempts: Number(process.env.EMAIL_OUTBOX_MAX_ATTEMPTS) || 3,
+    baseBackoffMs: Number(process.env.EMAIL_OUTBOX_BASE_BACKOFF_MS) || 1000,
+  },
+
   contact: {
     salesEmail: process.env.CONTACT_SALES_EMAIL || "sales@kooi.io",
     supportEmail: process.env.CONTACT_SUPPORT_EMAIL || "support@kooi.io",

@@ -13,6 +13,9 @@ import {
   type IBolnaClientFactory,
 } from "../shared/config/external/bolna/bolna-client.factory";
 import { ResendEmailService } from "../shared/config/external/email/resend.email";
+import { ResendIdempotentEmailSender } from "../shared/config/external/email/resend-outbox-email.sender";
+import { EmailOutboxRelay } from "../shared/config/external/email/outbox-relay";
+import { PrismaEmailOutboxRepository } from "../shared/config/external/email/outbox-repository";
 import {
   HttpDiscordEventsPublisher,
   type IDiscordEventsPublisher,
@@ -150,6 +153,7 @@ export interface AppContainer {
   sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
   discordOutboxRelay: DiscordOutboxRelay;
+  emailOutboxRelay: EmailOutboxRelay;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -198,6 +202,18 @@ export function buildContainer(): AppContainer {
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
   const email = new ResendEmailService(logger.child({ module: "email" }));
+  const emailOutboxRelay = new EmailOutboxRelay({
+    outbox: new PrismaEmailOutboxRepository(),
+    sender: new ResendIdempotentEmailSender(
+      logger.child({ module: "email-outbox" }),
+    ),
+    logger,
+    enabled: env.emailOutbox.enabled,
+    pollMs: env.emailOutbox.pollMs,
+    batchSize: env.emailOutbox.batchSize,
+    maxAttempts: env.emailOutbox.maxAttempts,
+    baseBackoffMs: env.emailOutbox.baseBackoffMs,
+  });
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
   const emailVerificationTokenService = new JwtEmailVerificationTokenService(redis);
@@ -400,6 +416,7 @@ export function buildContainer(): AppContainer {
     sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
     discordOutboxRelay,
+    emailOutboxRelay,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,

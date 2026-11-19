@@ -1459,3 +1459,31 @@ model DiscordEventOutbox {
 
   @@index([publishedAt, createdAt])
 }
+
+/// U-08: durable email delivery with retries, backoff and a DLQ.
+enum EmailOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  RETRYING
+  DEAD
+}
+
+model EmailOutbox {
+  id                String            @id @default(uuid())
+  idempotencyKey    String            @unique
+  toEmail           String
+  subject           String
+  html              String
+  status            EmailOutboxStatus @default(PENDING)
+  attempts          Int               @default(0)
+  providerMessageId String?
+  lastError         String?
+  lastErrorName     String?
+  nextAttemptAt     DateTime          @default(now())
+  sentAt            DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
