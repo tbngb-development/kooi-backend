@@ -179,6 +179,7 @@ export function buildContainer(): AppContainer {
           discordOutboxRepository,
           logger,
           env.discordNotifications.enabled,
+          env.discordNotifications.environment,
         )
       : discordHttpPublisher;
   const discordOutboxRelay = new DiscordOutboxRelay({
