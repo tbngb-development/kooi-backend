@@ -37,7 +37,7 @@ export class CheckLowBalanceUseCase {
 
     const availableBalance = getEffectiveAvailableBalance(wallet);
     const isLow =
-      availableBalance <= plan.lowBalanceThreshold;
+      availableBalance <= plan.warningThreshold;
 
     if (!isLow) {
       this.lowBalanceNotifiedTenants.delete(input.tenantId);
@@ -62,7 +62,7 @@ export class CheckLowBalanceUseCase {
         html: lowBalanceEmailHtml({
           tenantName: tenant.name,
           balancePaisa: availableBalance,
-          thresholdPaisa: plan.lowBalanceThreshold,
+          thresholdPaisa: plan.warningThreshold,
         }),
       });
 
@@ -70,7 +70,7 @@ export class CheckLowBalanceUseCase {
         action: "wallet.low_balance",
         tenantId: input.tenantId,
         balancePaisa: availableBalance,
-        thresholdPaisa: plan.lowBalanceThreshold,
+        thresholdPaisa: plan.warningThreshold,
       });
     }
 
@@ -79,7 +79,7 @@ export class CheckLowBalanceUseCase {
         tenantId: input.tenantId,
         tenantName: tenant?.name || input.tenantId,
         balancePaisa: availableBalance,
-        thresholdPaisa: plan.lowBalanceThreshold,
+        thresholdPaisa: plan.warningThreshold,
       });
     }
   }

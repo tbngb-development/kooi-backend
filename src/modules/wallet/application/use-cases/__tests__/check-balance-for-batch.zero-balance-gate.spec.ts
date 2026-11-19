@@ -35,7 +35,7 @@ describe("CheckBalanceForBatchUseCase — zero-balance execution gate", () => {
     const planRepo = {
       getActivePlanForTenant: vi.fn().mockResolvedValue({
         status: "ACTIVE",
-        lowBalanceThreshold: creditLimit,
+        creditLimit: creditLimit,
         perMinuteRate: 100,
         billingMinimumSec: 30,
         billingIncrementSec: 15,

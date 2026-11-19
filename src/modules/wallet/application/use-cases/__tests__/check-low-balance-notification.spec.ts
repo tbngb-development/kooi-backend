@@ -46,7 +46,7 @@ describe("CheckLowBalanceUseCase — wallet.low_balance notification", () => {
     planRepo = {
       getActivePlanForTenant: vi.fn().mockResolvedValue({
         status: "ACTIVE",
-        lowBalanceThreshold: 50000,
+        warningThreshold: 50000,
       }),
     } as unknown as PlanRepository;
     email = { send: vi.fn().mockResolvedValue(undefined) };
@@ -103,13 +103,28 @@ describe("CheckLowBalanceUseCase — wallet.low_balance notification", () => {
   it("uses the active plan threshold rather than a fixed default", async () => {
     vi.mocked(planRepo.getActivePlanForTenant).mockResolvedValue({
       status: "ACTIVE",
-      lowBalanceThreshold: 75000,
+      warningThreshold: 75000,
     } as any);
 
     await useCase.execute({ tenantId });
 
     expect(publishedEvent().data.thresholdPaisa).toBe(75000);
     expect(publishedEvent().data.balancePaisa).toBe(40000);
+  });
+
+  it("uses warningThreshold, never the credit limit, for the low-balance warning", async () => {
+    vi.mocked(planRepo.getActivePlanForTenant).mockResolvedValue({
+      status: "ACTIVE",
+      creditLimit: 10000,
+      warningThreshold: 50000,
+    } as any);
+
+    await useCase.execute({ tenantId });
+
+    // Balance 40,000 is above the credit limit (10,000) but below the
+    // warning threshold (50,000): the warning must still fire.
+    expect(email.send).toHaveBeenCalledTimes(1);
+    expect(publishedEvent().data.thresholdPaisa).toBe(50000);
   });
 
   it("does not publish again while the balance stays below the threshold", async () => {

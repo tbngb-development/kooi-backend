@@ -75,7 +75,8 @@ export class PrismaPlanRepository implements PlanRepository {
           integrations: input.integrations ?? "NONE",
           supportTier: input.supportTier ?? "STANDARD",
 
-          lowBalanceThreshold: input.lowBalanceThreshold ?? 10000,
+          creditLimit: input.creditLimit ?? 10000,
+          warningThreshold: input.warningThreshold ?? 50000,
           includedBalance: input.includedBalance ?? 0,
           bonusValidityDays: input.bonusValidityDays ?? null,
 
@@ -223,7 +224,8 @@ export class PrismaPlanRepository implements PlanRepository {
           integrations: input.integrations ?? "NONE",
           supportTier: input.supportTier ?? "STANDARD",
 
-          lowBalanceThreshold: input.lowBalanceThreshold ?? 10000,
+          creditLimit: input.creditLimit ?? 10000,
+          warningThreshold: input.warningThreshold ?? 50000,
           includedBalance: input.includedBalance ?? 0,
           bonusValidityDays: input.bonusValidityDays ?? null,
 

@@ -53,7 +53,7 @@ describe("StopBatchesOnInsufficientBalanceUseCase (Multi-Provider & Sarvam)", ()
     mockPlanRepo = {
       getActivePlanForTenant: vi.fn().mockResolvedValue({
         status: "ACTIVE",
-        lowBalanceThreshold: 100, // ₹1.00
+        creditLimit: 100, // ₹1.00
         perMinuteRate: 150,
       }),
     } as unknown as PlanRepository;

@@ -5,7 +5,7 @@ const ESTIMATED_AVG_CALL_SEC = 90;
 
 export interface CreditLimitCheckInput {
   wallet: WalletBalances;
-  creditLimitPaisa: number; // planVersion.lowBalanceThreshold
+  creditLimitPaisa: number; // planVersion.creditLimit
   perMinuteRatePaisa: number; // planVersion.perMinuteRate
   inFlightCallCount: number; // calls with status = CALLING
 }

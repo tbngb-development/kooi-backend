@@ -49,7 +49,8 @@ const planVersionBaseSchema = {
   integrations: integrationTierEnum.optional(),
   supportTier: supportTierEnum.optional(),
 
-  lowBalanceThreshold: z.number().int().min(0).optional(),
+  creditLimit: z.number().int().min(0).optional(),
+  warningThreshold: z.number().int().min(0).optional(),
   includedBalance: z.number().int().min(0).optional(),
   bonusValidityDays: z.number().int().min(1).nullable().optional(),
 

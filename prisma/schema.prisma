@@ -579,7 +579,10 @@ model PlanVersion {
   contactLimit          Int?
   validityDays          Int?
 
+  /// Deprecated since U-01: use creditLimit. Kept for one release (D-06).
   lowBalanceThreshold Int  @default(10000)
+  creditLimit         Int  @default(10000)
+  warningThreshold    Int  @default(50000)
   includedBalance     Int  @default(0)
   bonusValidityDays   Int?
 

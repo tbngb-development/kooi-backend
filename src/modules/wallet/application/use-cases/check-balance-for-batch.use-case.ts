@@ -59,7 +59,7 @@ export class CheckBalanceForBatchUseCase {
     const estimatedCost = perCall.costPaisa * Math.max(input.leadCount, 0);
 
     // Credit limit only feeds sizing/warning estimates — never the hard gate.
-    const creditLimitPaisa = plan.lowBalanceThreshold ?? 0;
+    const creditLimitPaisa = plan.creditLimit ?? 0;
     const effectivePurchasingPower = availableBalance + creditLimitPaisa;
 
     const minRequiredPaisa = Math.floor(estimatedCost * 0.5);

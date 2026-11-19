@@ -33,7 +33,7 @@ export class StopBatchesOnInsufficientBalanceUseCase {
         bonusBalance: wallet.bonusBalance,
         bonusExpiresAt: wallet.bonusExpiresAt,
       },
-      creditLimitPaisa: plan.lowBalanceThreshold,
+      creditLimitPaisa: plan.creditLimit,
       perMinuteRatePaisa: plan.perMinuteRate,
       inFlightCallCount,
     });

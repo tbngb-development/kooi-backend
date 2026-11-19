@@ -45,7 +45,8 @@ export interface PlanTiers {
 }
 
 export interface PlanWalletConfig {
-  lowBalanceThreshold: number;
+  creditLimit: number;
+  warningThreshold: number;
   includedBalance: number;
   bonusValidityDays: number | null;
 }
@@ -171,7 +172,8 @@ export function resolveEffectiveTerms(
     integrations: version.integrations,
     supportTier: version.supportTier,
 
-    lowBalanceThreshold: version.lowBalanceThreshold,
+    creditLimit: version.creditLimit,
+    warningThreshold: version.warningThreshold,
     includedBalance: version.includedBalance,
     bonusValidityDays: version.bonusValidityDays,
 

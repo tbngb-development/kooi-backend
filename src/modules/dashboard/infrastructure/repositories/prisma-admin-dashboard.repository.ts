@@ -486,7 +486,7 @@ export class PrismaAdminDashboardRepository implements AdminDashboardRepository 
         lastCallAt: Date | null;
         activeCampaigns: number;
         walletBalance: number;
-        lowBalanceThreshold: number;
+        creditLimit: number;
       }[]
     >`
       SELECT
@@ -497,7 +497,7 @@ export class PrismaAdminDashboardRepository implements AdminDashboardRepository 
         (SELECT MAX(c."createdAt") FROM "Call" c WHERE c."tenantId" = t.id) as "lastCallAt",
         (SELECT COUNT(*)::int FROM "Campaign" cmp WHERE cmp."tenantId" = t.id AND cmp.status = 'RUNNING') as "activeCampaigns",
         COALESCE(w."cashBalance", 0) + COALESCE(w."bonusBalance", 0) as "walletBalance",
-        COALESCE(pv."lowBalanceThreshold", 10000) as "lowBalanceThreshold"
+        COALESCE(pv."creditLimit", 10000) as "creditLimit"
       FROM "Tenant" t
       LEFT JOIN "TenantPlan" tp ON tp."tenantId" = t.id
       LEFT JOIN "Plan" p ON p.id = tp."planId"
@@ -520,7 +520,7 @@ export class PrismaAdminDashboardRepository implements AdminDashboardRepository 
         if (daysSince === null || daysSince >= 14) {
           reasons.push("NO_CALLS_14_DAYS");
         }
-        if (r.walletBalance < r.lowBalanceThreshold) {
+        if (r.walletBalance < r.creditLimit) {
           reasons.push("LOW_WALLET_BALANCE");
         }
         if (r.activeCampaigns === 0) {
