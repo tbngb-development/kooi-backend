@@ -266,6 +266,16 @@ export function buildContainer(): AppContainer {
 
   const enforcePlan = new EnforcePlanMiddleware(planRepo);
 
+  const sarvamApiKeys = buildSarvamApiKeyModule({
+    encryptionSecret: env.sarvam.encryptionSecret,
+    logger,
+  });
+
+  const sarvamCampaignClient = new SarvamCampaignClient(
+    env.sarvam.apiUrl,
+    logger,
+  );
+
   // 4. Wallet Module
   const wallet = buildWalletModule({
     planRepository: planRepo,
@@ -273,6 +283,9 @@ export function buildContainer(): AppContainer {
     emailOutboxRepository,
     logger,
     eventPublisher: discordEventsPublisher,
+    bolnaClientFactory,
+    sarvamCampaignClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
   });
 
   // 5. Plans Module (with wallet and Bolna key auto-assignment for free trial onboarding)
@@ -321,11 +334,6 @@ export function buildContainer(): AppContainer {
 
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
-  const sarvamApiKeys = buildSarvamApiKeyModule({
-    encryptionSecret: env.sarvam.encryptionSecret,
-    logger,
-  });
-
   const tenants = buildTenantModule({
     otpService,
     emailService: email,
@@ -366,10 +374,6 @@ export function buildContainer(): AppContainer {
   });
 
   const sarvamCohortClient = new SarvamCohortClient(env.sarvam.apiUrl, logger?.child({ component: "SarvamCohortClient" }));
-  const sarvamCampaignClient = new SarvamCampaignClient(
-    env.sarvam.apiUrl,
-    logger,
-  );
 
   const campaigns = buildCampaignModule({
     logger,

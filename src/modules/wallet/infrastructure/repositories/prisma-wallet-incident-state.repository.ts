@@ -125,6 +125,21 @@ export class PrismaWalletIncidentStateRepository
     });
   }
 
+  /** U-05: keep OPEN and clear lease so stale reconciliation retries after failure. */
+  async recordEnforcementFailure(
+    incidentId: string,
+    providerActions: unknown[],
+  ): Promise<WalletIncidentState> {
+    return prisma.walletIncidentState.update({
+      where: { id: incidentId },
+      data: {
+        state: "OPEN",
+        enforcementStartedAt: null,
+        providerActions: providerActions as never,
+      },
+    });
+  }
+
   /** U-04: OPEN incidents whose enforcement lease is missing or expired. */
   async findStale(
     limit: number,

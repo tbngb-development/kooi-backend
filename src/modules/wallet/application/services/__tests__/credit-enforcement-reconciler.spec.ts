@@ -27,6 +27,7 @@ describe("CreditEnforcementReconciler — crash recovery for OPEN incidents", ()
       resolve: vi.fn(),
       beginEnforcement: vi.fn(),
       markBlocked: vi.fn(),
+      recordEnforcementFailure: vi.fn(),
       findStale: vi.fn().mockResolvedValue(stale),
     } as unknown as WalletIncidentStateRepository;
     orchestrator = {

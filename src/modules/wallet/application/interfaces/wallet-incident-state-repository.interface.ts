@@ -37,6 +37,17 @@ export interface WalletIncidentStateRepository {
     providerActions: unknown[],
   ): Promise<WalletIncidentState>;
 
+  /**
+   * U-05: persist honest provider outcomes for a failed enforcement attempt and
+   * clear the lease while keeping the incident OPEN so the reconciler retries.
+   * Local execution remains blocked by the balance gate and any DB stops the
+   * adapter already applied; this never records provider success.
+   */
+  recordEnforcementFailure(
+    incidentId: string,
+    providerActions: unknown[],
+  ): Promise<WalletIncidentState>;
+
   /** OPEN incidents with no lease, or a lease older than `leaseMs`. */
   findStale(
     limit: number,

@@ -193,6 +193,28 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     });
   });
 
+  it("records provider failure, keeps incident OPEN, and clears the lease for retry", async () => {
+    const results = [
+      { target: { provider: "BOLNA", targetId: "b-1" }, success: false, error: "boom" },
+    ];
+    vi.mocked(prisma.walletIncidentState.update).mockResolvedValue({
+      ...openIncident,
+      state: "OPEN",
+      providerActions: results,
+    } as any);
+
+    await repository.recordEnforcementFailure(openIncident.id, results);
+
+    expect(prisma.walletIncidentState.update).toHaveBeenCalledWith({
+      where: { id: openIncident.id },
+      data: {
+        state: "OPEN",
+        enforcementStartedAt: null,
+        providerActions: results,
+      },
+    });
+  });
+
   it("finds stale OPEN incidents whose lease is missing or expired", async () => {
     vi.mocked(prisma.walletIncidentState.findMany).mockResolvedValue([
       openIncident as any,

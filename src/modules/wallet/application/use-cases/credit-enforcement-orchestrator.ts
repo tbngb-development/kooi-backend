@@ -14,7 +14,8 @@ export type EnforcementAction =
   | "BLOCKED"
   | "RESOLVED"
   | "ALREADY_BLOCKED"
-  | "IN_PROGRESS";
+  | "IN_PROGRESS"
+  | "RETRY_QUEUED";
 
 export interface CreditEnforcementResult {
   action: EnforcementAction;
@@ -97,14 +98,17 @@ export class CreditEnforcementOrchestrator {
       );
       providerActions = [
         {
-          target: { provider: "ADAPTER", targetId: "ALL" },
+          target: { provider: "ADAPTER", kind: "STOP", targetId: "ALL" },
           success: false,
           error: message,
         },
       ];
     }
 
+    const hasProviderFailure = providerActions.some((r) => !r.success);
+
     // Email must never block enforcement. U-07 will refine copy/admin copy.
+    // Idempotency key makes duplicate enqueue on retry safe.
     try {
       const to = await this.deps.tenantEmail(input.tenantId);
       if (to) {
@@ -128,6 +132,23 @@ export class CreditEnforcementOrchestrator {
       );
     }
 
+    if (hasProviderFailure) {
+      await this.deps.incidents.recordEnforcementFailure(
+        incident.id,
+        providerActions,
+      );
+
+      this.deps.logger.warn("Wallet enforcement recorded failure and queued retry", {
+        action: "wallet.enforcement.retry_queued",
+        tenantId: input.tenantId,
+        incidentId: incident.id,
+        reason: input.reason,
+        providerFailures: providerActions.filter((r) => !r.success).length,
+      });
+
+      return { action: "RETRY_QUEUED", incidentId: incident.id };
+    }
+
     await this.deps.incidents.markBlocked(incident.id, providerActions);
 
     this.deps.logger.warn("Wallet incident enforced and blocked", {
@@ -135,7 +156,7 @@ export class CreditEnforcementOrchestrator {
       tenantId: input.tenantId,
       incidentId: incident.id,
       reason: input.reason,
-      providerFailures: providerActions.filter((r) => !r.success).length,
+      providerFailures: 0,
     });
 
     return { action: "BLOCKED", incidentId: incident.id };

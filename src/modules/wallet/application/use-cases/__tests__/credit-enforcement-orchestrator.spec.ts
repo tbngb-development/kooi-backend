@@ -53,6 +53,7 @@ function makeIncidents(overrides: Partial<WalletIncidentStateRepository> = {}) {
     resolve: vi.fn().mockResolvedValue(openIncident),
     beginEnforcement: vi.fn().mockResolvedValue(true),
     markBlocked: vi.fn().mockResolvedValue(undefined),
+    recordEnforcementFailure: vi.fn().mockResolvedValue(openIncident),
     findStale: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as WalletIncidentStateRepository;
@@ -148,7 +149,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.providers.stop).toHaveBeenCalledTimes(1);
   });
 
-  it("records provider failure honestly but still blocks locally", async () => {
+  it("records provider failure honestly, keeps local block, and queues retry", async () => {
     const failed: ProviderStopResult = {
       target: { provider: "SARVAM", kind: "CAMPAIGN", targetId: "camp-1" },
       success: false,
@@ -161,11 +162,14 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
 
     const result = await orchestrator.enforce({ tenantId });
 
-    expect(result.action).toBe("BLOCKED");
-    expect(deps.incidents.markBlocked).toHaveBeenCalledWith(
+    expect(result.action).toBe("RETRY_QUEUED");
+    expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
       incidentId,
-      expect.arrayContaining([expect.objectContaining({ success: false, error: "provider 500" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ success: false, error: "provider 500" }),
+      ]),
     );
+    expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
 
   it("still blocks when the email enqueue throws", async () => {
@@ -180,7 +184,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.incidents.markBlocked).toHaveBeenCalled();
   });
 
-  it("does not throw when the provider adapter throws; records the failure", async () => {
+  it("does not throw when the provider adapter throws; records failure and queues retry", async () => {
     const deps = makeDeps({
       providers: { stop: vi.fn().mockRejectedValue(new Error("adapter down")) },
     });
@@ -188,10 +192,13 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
 
     const result = await orchestrator.enforce({ tenantId });
 
-    expect(result.action).toBe("BLOCKED");
-    expect(deps.incidents.markBlocked).toHaveBeenCalledWith(
+    expect(result.action).toBe("RETRY_QUEUED");
+    expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
       incidentId,
-      expect.arrayContaining([expect.objectContaining({ success: false })]),
+      expect.arrayContaining([
+        expect.objectContaining({ success: false, error: "adapter down" }),
+      ]),
     );
+    expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
 });
