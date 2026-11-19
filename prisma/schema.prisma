@@ -54,6 +54,7 @@ model Tenant {
   apiKeys       TenantApiKey[]
   sarvamApiKey  SarvamApiKey?
   sarvamAgentOverrides SarvamAgentTenantOverride[]
+  walletIncidentState WalletIncidentState?
 
   @@index([email])
 }
@@ -735,6 +736,34 @@ model WalletTransaction {
   @@index([tenantId, createdAt])
   @@index([walletId, createdAt])
   @@index([sourceType, sourceId])
+}
+
+/// U-03: durable, singleton low-balance incident per tenant.
+/// OPEN = detected, RESOLVED = balance recovered, BLOCKED = enforcement applied.
+enum WalletIncidentStatus {
+  OPEN
+  BLOCKED
+  RESOLVED
+}
+
+model WalletIncidentState {
+  id                  String                @id @default(uuid())
+  tenantId            String                @unique
+  state               WalletIncidentStatus  @default(OPEN)
+  triggerBalancePaisa Int
+  detectedAt          DateTime              @default(now())
+  warningSentAt       DateTime?
+  enforcementSentAt   DateTime?
+  providerActions     Json                  @default("[]")
+  /// Derived singleton key: wallet-incident:${tenantId}
+  idempotencyKey      String                @unique
+  resolvedAt          DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, state])
 }
 
 enum RechargeStatus {
