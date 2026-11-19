@@ -201,4 +201,148 @@ describe("PrismaCampaignStopAdapter — Sarvam enforcement stops", () => {
       }),
     ]);
   });
+
+  it("cancels a scheduled Sarvam campaign with the terminal cancel action and never resumes", async () => {
+    vi.mocked(prisma.leadBatch.findMany)
+      .mockResolvedValueOnce([
+        {
+          id: "batch-sarvam-scheduled",
+          tenantId,
+          campaignId: "campaign-scheduled",
+          status: "SCHEDULED",
+          provider: "SARVAM",
+          bolnaBatchId: null,
+          campaign: {
+            id: "campaign-scheduled",
+            provider: "SARVAM",
+            sarvamCampaignId: "sarvam-campaign-scheduled",
+            sarvamAgentId: "sarvam-agent-shared",
+            sarvamAgent: {
+              apiKey: {
+                organizationId: "org-scheduled",
+                workspaceId: "ws-scheduled",
+                apiKeyEncrypted: "enc-key-scheduled",
+              },
+            },
+          },
+        } as any,
+      ])
+      .mockResolvedValueOnce([{ status: "STOPPED" } as any]);
+
+    vi.mocked(prisma.call.findMany).mockResolvedValue([]);
+    vi.mocked(sarvamCampaignClient.updateStatus).mockResolvedValue({
+      status: "cancelled",
+    } as any);
+
+    const adapter = new PrismaCampaignStopAdapter({
+      bolnaClientFactory,
+      sarvamCampaignClient,
+      sarvamEncryptionService,
+      logger,
+    });
+
+    const results = await adapter.stop(tenantId);
+
+    // Local halt applied to the scheduled batch.
+    expect(prisma.leadBatch.update).toHaveBeenCalledWith({
+      where: { id: "batch-sarvam-scheduled" },
+      data: { status: "STOPPED" },
+    });
+
+    // Terminal provider action is `cancel`, never `resume`/`pause`.
+    expect(sarvamEncryptionService.decrypt).toHaveBeenCalledWith(
+      "enc-key-scheduled",
+    );
+    expect(sarvamCampaignClient.updateStatus).toHaveBeenCalledTimes(1);
+    expect(sarvamCampaignClient.updateStatus).toHaveBeenCalledWith(
+      "org-scheduled",
+      "ws-scheduled",
+      "sarvam-campaign-scheduled",
+      "plain-api-key",
+      "cancel",
+    );
+    for (const call of vi.mocked(sarvamCampaignClient.updateStatus).mock.calls) {
+      expect(call[4]).toBe("cancel");
+      expect(call[4]).not.toBe("resume");
+    }
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({
+          provider: "SARVAM",
+          kind: "CAMPAIGN",
+          targetId: "campaign-scheduled",
+        }),
+        success: true,
+        error: null,
+      }),
+    ]);
+    expect(bolnaClientFactory.forTenant).not.toHaveBeenCalled();
+  });
+
+  it("issues only a batch stop on Bolna — never an agent-level or individual-call stop", async () => {
+    vi.mocked(prisma.leadBatch.findMany)
+      .mockResolvedValueOnce([
+        {
+          id: "batch-bolna-only",
+          tenantId,
+          campaignId: "campaign-bolna-only",
+          status: "RUNNING",
+          provider: "BOLNA",
+          bolnaBatchId: "bolna-batch-only",
+          campaign: {
+            id: "campaign-bolna-only",
+            provider: "BOLNA",
+            sarvamCampaignId: null,
+            sarvamAgentId: "shared-agent-id",
+            sarvamAgent: null,
+          },
+        } as any,
+      ])
+      .mockResolvedValueOnce([{ status: "STOPPED" } as any]);
+
+    vi.mocked(prisma.call.findMany).mockResolvedValue([
+      { id: "active-call-1", leadId: "lead-1" } as any,
+    ]);
+
+    const batchStop = vi.fn().mockResolvedValue({ state: "stopped" });
+    const agentSpies = {
+      verify: vi.fn(),
+      list: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    };
+    const callStop = vi.fn();
+    vi.mocked(bolnaClientFactory.forTenant).mockResolvedValue({
+      batches: { stop: batchStop },
+      agents: agentSpies,
+      calls: { stop: callStop },
+    } as any);
+
+    const adapter = new PrismaCampaignStopAdapter({
+      bolnaClientFactory,
+      sarvamCampaignClient,
+      sarvamEncryptionService,
+      logger,
+    });
+
+    const results = await adapter.stop(tenantId);
+
+    expect(batchStop).toHaveBeenCalledTimes(1);
+    expect(batchStop).toHaveBeenCalledWith("bolna-batch-only");
+    // No agent-level stop, no shared-agent mutation, no individual call stop.
+    expect(Object.values(agentSpies).every((spy) => spy.mock.calls.length === 0)).toBe(
+      true,
+    );
+    expect(callStop).not.toHaveBeenCalled();
+    // Sarvam client is untouched for a Bolna-only tenant.
+    expect(sarvamCampaignClient.updateStatus).not.toHaveBeenCalled();
+    expect(results).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({ provider: "BOLNA", kind: "BATCH" }),
+        success: true,
+        error: null,
+      }),
+    ]);
+  });
 });
