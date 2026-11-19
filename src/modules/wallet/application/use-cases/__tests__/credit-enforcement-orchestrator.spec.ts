@@ -72,6 +72,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       enqueue: vi.fn().mockResolvedValue(openIncident),
     } as unknown as IEmailOutboxRepository,
     tenantEmail: vi.fn().mockResolvedValue("owner@example.com"),
+    adminEmails: vi.fn().mockResolvedValue(["admin@example.com"]),
     logger,
     ...overrides,
   };
@@ -200,5 +201,88 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       ]),
     );
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
+  });
+
+  it("enqueues a distinct internal admin copy alongside the tenant notice", async () => {
+    const deps = makeDeps({
+      adminEmails: vi
+        .fn()
+        .mockResolvedValue(["admin1@example.com", "admin2@example.com"]),
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    await orchestrator.enforce({ tenantId, reason: "zero balance" });
+
+    const calls = vi.mocked(deps.emailOutbox.enqueue).mock.calls.map((c) => c[0]);
+    expect(calls).toHaveLength(3);
+    expect(calls.map((c) => c.idempotencyKey)).toEqual([
+      "enforce:incident-1",
+      "enforce:incident-1:admin:admin1@example.com",
+      "enforce:incident-1:admin:admin2@example.com",
+    ]);
+    expect(calls[0].to).toBe("owner@example.com");
+    expect(calls[0].subject).toContain("wallet");
+    expect(calls[1].to).toBe("admin1@example.com");
+    expect(calls[1].subject).toContain("internal");
+    expect(calls[1].html).toContain("incident-1");
+    expect(calls[1].html).toContain("Internal operational notification");
+    expect(calls[1].html).toContain("zero balance");
+  });
+
+  it("does not enqueue any email when neither tenant nor admins have an address", async () => {
+    const deps = makeDeps({
+      tenantEmail: vi.fn().mockResolvedValue(null),
+      adminEmails: vi.fn().mockResolvedValue([]),
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("BLOCKED");
+    expect(deps.emailOutbox.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("isolates each email enqueue failure and still blocks", async () => {
+    const enqueue = vi
+      .fn()
+      .mockResolvedValueOnce(openIncident)
+      .mockRejectedValueOnce(new Error("admin1 down"))
+      .mockResolvedValueOnce(openIncident);
+    const deps = makeDeps({
+      adminEmails: vi
+        .fn()
+        .mockResolvedValue(["admin1@example.com", "admin2@example.com"]),
+      emailOutbox: { enqueue } as unknown as IEmailOutboxRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("BLOCKED");
+    expect(enqueue).toHaveBeenCalledTimes(3);
+    expect(logger.error).toHaveBeenCalledWith(
+      "Enforcement email enqueue failed",
+      expect.any(Error),
+      expect.objectContaining({
+        idempotencyKey: "enforce:incident-1:admin:admin1@example.com",
+      }),
+    );
+  });
+
+  it("does not block enforcement when recipient lookup fails", async () => {
+    const deps = makeDeps({
+      tenantEmail: vi.fn().mockRejectedValue(new Error("db down")),
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("BLOCKED");
+    expect(deps.emailOutbox.enqueue).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      "Enforcement email recipient lookup failed",
+      expect.any(Error),
+      expect.anything(),
+    );
   });
 });

@@ -5,7 +5,14 @@ import type {
   ICampaignStopAdapter,
   ProviderStopResult,
 } from "../interfaces/campaign-stop-adapter.interface";
-import type { IEmailOutboxRepository } from "../../../../shared/config/external/email/outbox-repository.types";
+import type {
+  EnqueueEmailInput,
+  IEmailOutboxRepository,
+} from "../../../../shared/config/external/email/outbox-repository.types";
+import {
+  walletBlockedAdminEmailHtml,
+  walletBlockedEmailHtml,
+} from "../../../../shared/config/external/email/templates/wallet-blocked.template";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 const DEFAULT_LEASE_MS = 60_000;
@@ -28,6 +35,8 @@ export interface CreditEnforcementOrchestratorDeps {
   providers: ICampaignStopAdapter;
   emailOutbox: IEmailOutboxRepository;
   tenantEmail: (tenantId: string) => Promise<string | null>;
+  /** Active platform admin addresses that receive the internal enforcement copy. */
+  adminEmails: () => Promise<string[]>;
   logger: Logger;
   /** Enforcement lease window in ms. Defaults to 60s. */
   leaseMs?: number;
@@ -107,30 +116,13 @@ export class CreditEnforcementOrchestrator {
 
     const hasProviderFailure = providerActions.some((r) => !r.success);
 
-    // Email must never block enforcement. U-07 will refine copy/admin copy.
-    // Idempotency key makes duplicate enqueue on retry safe.
-    try {
-      const to = await this.deps.tenantEmail(input.tenantId);
-      if (to) {
-        await this.deps.emailOutbox.enqueue({
-          idempotencyKey: `enforce:${incident.id}`,
-          to,
-          subject: "KOOI — wallet blocked",
-          html:
-            "<p>Your KOOI workspace has been blocked because the available wallet balance reached zero. Recharge to resume.</p>",
-        });
-      }
-    } catch (err) {
-      this.deps.logger.error(
-        "Credit enforcement email enqueue failed",
-        err,
-        {
-          action: "wallet.enforcement.email_enqueue_failed",
-          tenantId: input.tenantId,
-          incidentId: incident.id,
-        },
-      );
-    }
+    await this.enqueueEnforcementEmails({
+      incidentId: incident.id,
+      tenantId: input.tenantId,
+      reason: input.reason,
+      triggerBalancePaisa,
+      providerFailures: providerActions.filter((r) => !r.success).length,
+    });
 
     if (hasProviderFailure) {
       await this.deps.incidents.recordEnforcementFailure(
@@ -160,5 +152,84 @@ export class CreditEnforcementOrchestrator {
     });
 
     return { action: "BLOCKED", incidentId: incident.id };
+  }
+
+  /**
+   * Enqueue the tenant notice and the internal admin copy. Enqueue is a durable
+   * DB write, not a delivery — the relay owns retries/backoff/DLQ. Any failure
+   * here is logged and swallowed so email can never block the block decision.
+   * Keys are derived from the incident id so retries and duplicate webhooks
+   * cannot create a second envelope.
+   */
+  private async enqueueEnforcementEmails(input: {
+    incidentId: string;
+    tenantId: string;
+    reason?: string;
+    triggerBalancePaisa: number;
+    providerFailures: number;
+  }): Promise<void> {
+    try {
+      const [tenantTo, adminEmails] = await Promise.all([
+        this.deps.tenantEmail(input.tenantId),
+        this.deps.adminEmails(),
+      ]);
+
+      const templateInput = {
+        tenantId: input.tenantId,
+        balancePaisa: input.triggerBalancePaisa,
+        incidentId: input.incidentId,
+        reason: input.reason,
+        providerFailures: input.providerFailures,
+      };
+
+      if (tenantTo) {
+        await this.enqueueSafely(
+          {
+            idempotencyKey: `enforce:${input.incidentId}`,
+            to: tenantTo,
+            subject: "KOOI — wallet balance exhausted",
+            html: walletBlockedEmailHtml(templateInput),
+          },
+          input,
+        );
+      }
+
+      const adminHtml = walletBlockedAdminEmailHtml(templateInput);
+      for (const adminEmail of adminEmails) {
+        if (!adminEmail) continue;
+        await this.enqueueSafely(
+          {
+            idempotencyKey: `enforce:${input.incidentId}:admin:${adminEmail}`,
+            to: adminEmail,
+            subject: "KOOI — credit enforcement (internal)",
+            html: adminHtml,
+          },
+          input,
+        );
+      }
+    } catch (err) {
+      // Recipient lookup failure (e.g. DB unavailable) must not block enforcement.
+      this.deps.logger.error("Enforcement email recipient lookup failed", err, {
+        action: "wallet.enforcement.email_recipient_lookup_failed",
+        tenantId: input.tenantId,
+        incidentId: input.incidentId,
+      });
+    }
+  }
+
+  private async enqueueSafely(
+    envelope: EnqueueEmailInput,
+    context: { tenantId: string; incidentId: string },
+  ): Promise<void> {
+    try {
+      await this.deps.emailOutbox.enqueue(envelope);
+    } catch (err) {
+      this.deps.logger.error("Enforcement email enqueue failed", err, {
+        action: "wallet.enforcement.email_enqueue_failed",
+        tenantId: context.tenantId,
+        incidentId: context.incidentId,
+        idempotencyKey: envelope.idempotencyKey,
+      });
+    }
   }
 }

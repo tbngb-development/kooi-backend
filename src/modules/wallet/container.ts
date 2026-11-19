@@ -105,6 +105,13 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
       });
       return tenant?.email ?? null;
     },
+    adminEmails: async () => {
+      const admins = await prisma.platformAdmin.findMany({
+        where: { user: { is: { isActive: true } } },
+        select: { user: { select: { email: true } } },
+      });
+      return admins.map((admin) => admin.user.email);
+    },
     logger: log,
   });
 
