@@ -6,7 +6,7 @@ import type {
 } from "../../application/interfaces/wallet-incident-state-repository.interface";
 
 /**
- * U-03: singleton incident per tenant, guarded by a derived unique key.
+ * U-03/U-04: singleton incident per tenant, guarded by a derived unique key.
  * `tenantId` is also unique in the schema so no second row can ever be made.
  */
 export class PrismaWalletIncidentStateRepository
@@ -54,6 +54,7 @@ export class PrismaWalletIncidentStateRepository
           resolvedAt: null,
           warningSentAt: null,
           enforcementSentAt: null,
+          enforcementStartedAt: null,
           providerActions: [],
         },
       });
@@ -73,7 +74,11 @@ export class PrismaWalletIncidentStateRepository
   async resolve(incidentId: string): Promise<WalletIncidentState> {
     await prisma.walletIncidentState.updateMany({
       where: { id: incidentId, state: { not: "RESOLVED" } },
-      data: { state: "RESOLVED", resolvedAt: new Date() },
+      data: {
+        state: "RESOLVED",
+        resolvedAt: new Date(),
+        enforcementStartedAt: null,
+      },
     });
 
     const resolved = await prisma.walletIncidentState.findUnique({
@@ -83,5 +88,59 @@ export class PrismaWalletIncidentStateRepository
       throw new Error(`Wallet incident ${incidentId} not found`);
     }
     return resolved;
+  }
+
+  /** U-04: atomic lease — only one caller can transition OPEN → in-progress. */
+  async beginEnforcement(
+    incidentId: string,
+    now: Date,
+    leaseMs: number,
+  ): Promise<boolean> {
+    const result = await prisma.walletIncidentState.updateMany({
+      where: {
+        id: incidentId,
+        state: "OPEN",
+        OR: [
+          { enforcementStartedAt: null },
+          { enforcementStartedAt: { lt: new Date(now.getTime() - leaseMs) } },
+        ],
+      },
+      data: { enforcementStartedAt: now },
+    });
+    return result.count === 1;
+  }
+
+  /** U-04: persist honest per-target outcomes and release the lease. */
+  async markBlocked(
+    incidentId: string,
+    providerActions: unknown[],
+  ): Promise<WalletIncidentState> {
+    return prisma.walletIncidentState.update({
+      where: { id: incidentId },
+      data: {
+        state: "BLOCKED",
+        enforcementStartedAt: null,
+        providerActions: providerActions as never,
+      },
+    });
+  }
+
+  /** U-04: OPEN incidents whose enforcement lease is missing or expired. */
+  async findStale(
+    limit: number,
+    leaseMs: number,
+    now: Date = new Date(),
+  ): Promise<WalletIncidentState[]> {
+    return prisma.walletIncidentState.findMany({
+      where: {
+        state: "OPEN",
+        OR: [
+          { enforcementStartedAt: null },
+          { enforcementStartedAt: { lt: new Date(now.getTime() - leaseMs) } },
+        ],
+      },
+      orderBy: { detectedAt: "asc" },
+      take: limit,
+    });
   }
 }

@@ -202,8 +202,9 @@ export function buildContainer(): AppContainer {
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
   const email = new ResendEmailService(logger.child({ module: "email" }));
+  const emailOutboxRepository = new PrismaEmailOutboxRepository();
   const emailOutboxRelay = new EmailOutboxRelay({
-    outbox: new PrismaEmailOutboxRepository(),
+    outbox: emailOutboxRepository,
     sender: new ResendIdempotentEmailSender(
       logger.child({ module: "email-outbox" }),
     ),
@@ -268,8 +269,8 @@ export function buildContainer(): AppContainer {
   // 4. Wallet Module
   const wallet = buildWalletModule({
     planRepository: planRepo,
-    bolnaClientFactory,
     email,
+    emailOutboxRepository,
     logger,
     eventPublisher: discordEventsPublisher,
   });
@@ -312,6 +313,7 @@ export function buildContainer(): AppContainer {
 
   const webhooks = buildWebhookModule({
     debitWalletForCall: wallet.useCases.debitWalletForCall,
+    creditEnforcement: wallet.useCases.creditEnforcement,
     classifierQueue: classifier.queue,
     materializeCallExtractions: extractions.useCases.materializeCallExtractions,
     logger,

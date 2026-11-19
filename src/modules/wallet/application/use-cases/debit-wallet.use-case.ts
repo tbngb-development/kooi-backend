@@ -5,7 +5,7 @@ import {
   TenantPlanNotFoundError,
   PlanNotActiveError,
 } from "../../../plans/domain/errors/plan.errors";
-import type { StopBatchesOnInsufficientBalanceUseCase } from "./stop-batches-on-insufficient-balance.use-case";
+import type { CreditEnforcementOrchestrator } from "./credit-enforcement-orchestrator";
 import type { CheckLowBalanceUseCase } from "./check-low-balance.use-case";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
@@ -32,7 +32,7 @@ export class DebitWalletForCallUseCase {
     private readonly walletRepo: WalletRepository,
     private readonly planRepo: PlanRepository,
     private readonly checkLowBalance: CheckLowBalanceUseCase,
-    private readonly stopBatches: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly enforcement: CreditEnforcementOrchestrator,
     private readonly logger: Logger,
   ) {}
 
@@ -82,18 +82,21 @@ export class DebitWalletForCallUseCase {
       billableSeconds,
     });
 
-    // 4. Threshold & Batch Invariant Checks (halt batches immediately if limit breached)
-    this.checkLowBalance.execute({ tenantId: input.tenantId }).catch((err) =>
+    // 4. Threshold & enforcement checks (single awaited path). Email/enforcement
+    // failures must not invalidate a successful settlement debit.
+    try {
+      await this.checkLowBalance.execute({ tenantId: input.tenantId });
+    } catch (err) {
       this.logger.error("Low balance check failed", err, {
         action: "wallet.low_balance_check",
         tenantId: input.tenantId,
-      }),
-    );
+      });
+    }
     try {
-      await this.stopBatches.execute({ tenantId: input.tenantId });
+      await this.enforcement.enforce({ tenantId: input.tenantId });
     } catch (err) {
-      this.logger.error("Stop batches check failed", err, {
-        action: "wallet.stop_batches_check",
+      this.logger.error("Credit enforcement failed", err, {
+        action: "wallet.enforcement_check",
         tenantId: input.tenantId,
       });
     }

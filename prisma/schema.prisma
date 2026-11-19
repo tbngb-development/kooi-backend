@@ -754,6 +754,8 @@ model WalletIncidentState {
   detectedAt          DateTime              @default(now())
   warningSentAt       DateTime?
   enforcementSentAt   DateTime?
+  /// U-04: lease timestamp so concurrent/retried enforcements cannot double-stop.
+  enforcementStartedAt DateTime?
   providerActions     Json                  @default("[]")
   /// Derived singleton key: wallet-incident:${tenantId}
   idempotencyKey      String                @unique

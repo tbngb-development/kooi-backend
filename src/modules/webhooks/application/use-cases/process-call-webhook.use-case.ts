@@ -2,7 +2,7 @@ import type { WebhookRepository } from "../interfaces/webhook-repository.interfa
 import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
-import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
+import type { CreditEnforcementOrchestrator } from "../../../wallet/application/use-cases/credit-enforcement-orchestrator";
 import type { CallResolverService } from "../services/call-resolver.service";
 import type { CallCompletionService } from "../services/call-completion.service";
 import type { CallTerminalService } from "../services/call-terminal.service";
@@ -19,7 +19,7 @@ export class ProcessCallWebhookUseCase {
     private readonly callResolver: CallResolverService,
     private readonly callCompletion: CallCompletionService,
     private readonly callTerminal: CallTerminalService,
-    private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly enforcement?: CreditEnforcementOrchestrator,
     private readonly logger?: Logger,
   ) {}
 
@@ -187,20 +187,21 @@ export class ProcessCallWebhookUseCase {
           );
         }
 
-        if (this.stopBatchesOnInsufficientBalance) {
-          this.stopBatchesOnInsufficientBalance
-            .execute({ tenantId: resolved.tenantId })
-            .catch((err) =>
-              this.logger?.error(
-                "Credit limit check failed during call webhook",
-                err,
-                {
-                  action: "webhook.call.credit_check",
-                  tenantId: resolved.tenantId,
-                  callId: resolved.id,
-                },
-              ),
+        // U-04: enforcement runs on the single awaited path before ACK.
+        if (this.enforcement) {
+          try {
+            await this.enforcement.enforce({ tenantId: resolved.tenantId });
+          } catch (err) {
+            this.logger?.error(
+              "Credit enforcement failed during call webhook",
+              err,
+              {
+                action: "webhook.call.credit_enforcement",
+                tenantId: resolved.tenantId,
+                callId: resolved.id,
+              },
             );
+          }
         }
         break;
       }

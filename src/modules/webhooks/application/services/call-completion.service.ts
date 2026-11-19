@@ -6,7 +6,7 @@ import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import type { MaterializeCallExtractionsUseCase } from "../../../extractions/application/use-cases/materialize-call-extractions.use-case";
 import type { DebitWalletForCallUseCase } from "../../../wallet/application/use-cases/debit-wallet.use-case";
-import type { StopBatchesOnInsufficientBalanceUseCase } from "../../../wallet/application/use-cases/stop-batches-on-insufficient-balance.use-case";
+import type { CreditEnforcementOrchestrator } from "../../../wallet/application/use-cases/credit-enforcement-orchestrator";
 import type { CallLifecycleService } from "./call-lifecycle.service";
 import type { Queue } from "bull";
 import type { Logger } from "../../../../shared/logging/logger.interface";
@@ -16,7 +16,7 @@ export class CallCompletionService {
     private readonly webhookRepo: WebhookRepository,
     private readonly materializeCallExtractions?: MaterializeCallExtractionsUseCase,
     private readonly debitWalletForCall?: DebitWalletForCallUseCase,
-    private readonly stopBatchesOnInsufficientBalance?: StopBatchesOnInsufficientBalanceUseCase,
+    private readonly enforcement?: CreditEnforcementOrchestrator,
     private readonly classifierQueue?: Queue,
     private readonly callLifecycle?: CallLifecycleService,
     private readonly logger?: Logger,
@@ -163,21 +163,21 @@ export class CallCompletionService {
       }
     }
 
-    // 6. Check tenant credit limits and trigger circuit breaker if depleted
-    if (this.stopBatchesOnInsufficientBalance) {
-      this.stopBatchesOnInsufficientBalance
-        .execute({ tenantId: call.tenantId })
-        .catch((err) =>
-          this.logger?.error(
-            "Credit limit check failed during call completed webhook",
-            err,
-            {
-              action: "webhook.call.credit_check_completed",
-              tenantId: call.tenantId,
-              callId: call.id,
-            },
-          ),
+    // 6. U-04: enforcement on the single awaited path before ACK.
+    if (this.enforcement) {
+      try {
+        await this.enforcement.enforce({ tenantId: call.tenantId });
+      } catch (err) {
+        this.logger?.error(
+          "Credit enforcement failed during call completed webhook",
+          err,
+          {
+            action: "webhook.call.credit_enforcement_completed",
+            tenantId: call.tenantId,
+            callId: call.id,
+          },
         );
+      }
     }
 
     // 7. Enqueue classifier extraction (async, non-blocking)
