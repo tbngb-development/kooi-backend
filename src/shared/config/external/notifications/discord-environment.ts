@@ -1,6 +1,5 @@
 /** Deployment labels accepted by the Discord notification service. */
 export const APP_ENVIRONMENTS = [
-  "local-dev",
   "development",
   "staging",
   "production",
@@ -20,9 +19,7 @@ export function isAppEnvironment(value: unknown): value is AppEnvironment {
  *
  * `APP_ENV` wins when set. Otherwise `NODE_ENV` seeds the value so existing
  * deployments (`.env.staging`, `.env.production`) work without changes, and
- * anything else — including local development — becomes `development`.
- * Set `APP_ENV=local-dev` on a developer machine to distinguish it from a
- * shared development deployment.
+ * anything else becomes `development`.
  */
 export function resolveAppEnvironment(
   appEnv: string | undefined,

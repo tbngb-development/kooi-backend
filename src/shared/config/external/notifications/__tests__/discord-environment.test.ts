@@ -6,9 +6,8 @@ import {
 } from "../discord-environment";
 
 describe("resolveAppEnvironment", () => {
-  it("exposes the four labels accepted by the notification service", () => {
+  it("exposes the three labels accepted by the notification service", () => {
     expect(APP_ENVIRONMENTS).toEqual([
-      "local-dev",
       "development",
       "staging",
       "production",
@@ -16,7 +15,7 @@ describe("resolveAppEnvironment", () => {
   });
 
   it("prefers an explicit APP_ENV over NODE_ENV", () => {
-    expect(resolveAppEnvironment("local-dev", "production")).toBe("local-dev");
+    expect(resolveAppEnvironment("development", "production")).toBe("development");
   });
 
   it("falls back to NODE_ENV when APP_ENV is unset", () => {

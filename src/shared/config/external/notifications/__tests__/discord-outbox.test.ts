@@ -59,11 +59,11 @@ describe("OutboxDiscordEventsPublisher", () => {
       makeLogger(),
       true,
       "staging",
-    ).publish({ ...event, environment: "local-dev" });
+    ).publish({ ...event, environment: "development" });
 
     expect(outbox.append).toHaveBeenCalledWith({
       ...event,
-      environment: "local-dev",
+      environment: "development",
     });
   });
 

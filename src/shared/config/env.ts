@@ -71,7 +71,7 @@ export const env = {
     webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || "",
     timeoutMs: Number(process.env.DISCORD_NOTIFICATION_TIMEOUT_MS) || 3000,
     enabled: process.env.DISCORD_NOTIFICATIONS_ENABLED === "true",
-    // Deployment label stamped on every event (local-dev | development |
+    // Deployment label stamped on every event ( development |
     // staging | production). Derived from APP_ENV, then NODE_ENV.
     environment: resolveAppEnvironment(
       process.env.APP_ENV,
