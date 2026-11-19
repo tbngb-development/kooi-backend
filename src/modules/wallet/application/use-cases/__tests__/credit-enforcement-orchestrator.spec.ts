@@ -127,6 +127,109 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.emailOutbox.enqueue).not.toHaveBeenCalled();
   });
 
+  it("resolves a BLOCKED incident after recharge without stopping or emailing", async () => {
+    const deps = makeDeps({
+      incidents: makeIncidents({
+        claim: vi.fn().mockResolvedValue(blockedIncident),
+      }),
+      wallets: {
+        findByTenantId: vi.fn().mockResolvedValue(positiveWallet),
+      } as unknown as WalletRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("RESOLVED");
+    expect(deps.incidents.resolve).toHaveBeenCalledWith(incidentId);
+    expect(deps.incidents.beginEnforcement).not.toHaveBeenCalled();
+    expect(deps.providers.stop).not.toHaveBeenCalled();
+    expect(deps.emailOutbox.enqueue).not.toHaveBeenCalled();
+    expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
+    expect(deps.incidents.recordEnforcementFailure).not.toHaveBeenCalled();
+  });
+
+  it("keeps a BLOCKED incident blocked while balance is negative", async () => {
+    const negativeWallet = { ...zeroWallet, cashBalance: -500 } as any;
+    const deps = makeDeps({
+      incidents: makeIncidents({
+        claim: vi.fn().mockResolvedValue(blockedIncident),
+      }),
+      wallets: {
+        findByTenantId: vi.fn().mockResolvedValue(negativeWallet),
+      } as unknown as WalletRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("ALREADY_BLOCKED");
+    expect(deps.incidents.resolve).not.toHaveBeenCalled();
+    expect(deps.providers.stop).not.toHaveBeenCalled();
+  });
+
+  it("resolving the same BLOCKED incident twice is idempotent", async () => {
+    const deps = makeDeps({
+      incidents: makeIncidents({
+        claim: vi.fn().mockResolvedValue(blockedIncident),
+      }),
+      wallets: {
+        findByTenantId: vi.fn().mockResolvedValue(positiveWallet),
+      } as unknown as WalletRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const results = await Promise.all([
+      orchestrator.enforce({ tenantId }),
+      orchestrator.enforce({ tenantId }),
+    ]);
+
+    expect(results.map((r) => r.action)).toEqual(["RESOLVED", "RESOLVED"]);
+    expect(deps.incidents.resolve).toHaveBeenCalledTimes(2);
+    expect(deps.incidents.resolve).toHaveBeenCalledWith(incidentId);
+    expect(deps.providers.stop).not.toHaveBeenCalled();
+    expect(deps.emailOutbox.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("does not resolve a BLOCKED incident when a concurrent debit exhausts a previously positive balance", async () => {
+    const deps = makeDeps({
+      incidents: makeIncidents({
+        claim: vi.fn().mockResolvedValue(blockedIncident),
+      }),
+      wallets: {
+        findByTenantId: vi
+          .fn()
+          .mockResolvedValueOnce(positiveWallet)
+          .mockResolvedValueOnce(zeroWallet),
+      } as unknown as WalletRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("ALREADY_BLOCKED");
+    expect(deps.incidents.resolve).not.toHaveBeenCalled();
+    expect(deps.providers.stop).not.toHaveBeenCalled();
+  });
+
+  it("does not resolve a fresh incident when balance is exhausted before the lease is acquired", async () => {
+    const deps = makeDeps({
+      wallets: {
+        findByTenantId: vi
+          .fn()
+          .mockResolvedValueOnce(positiveWallet)
+          .mockResolvedValueOnce(zeroWallet),
+      } as unknown as WalletRepository,
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("BLOCKED");
+    expect(deps.incidents.resolve).not.toHaveBeenCalled();
+    expect(deps.providers.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("only one of two concurrent enforcements wins the lease", async () => {
     const incidents = makeIncidents({
       claim: vi.fn().mockResolvedValue(openIncident),

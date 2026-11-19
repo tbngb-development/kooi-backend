@@ -60,7 +60,6 @@ export class CreditEnforcementOrchestrator {
   }): Promise<CreditEnforcementResult> {
     const now = new Date();
     const wallet = await this.deps.wallets.findByTenantId(input.tenantId);
-    const executable = wallet ? hasExecutableBalance(wallet, now) : false;
     const triggerBalancePaisa = wallet
       ? wallet.cashBalance + wallet.bonusBalance
       : 0;
@@ -71,6 +70,17 @@ export class CreditEnforcementOrchestrator {
     });
 
     if (incident.state === "BLOCKED") {
+      // A recharge must close the singleton incident to RESOLVED. It must never
+      // resume the campaigns/batches the block stopped. Re-read the wallet at
+      // decision time so a stale positive reading cannot close an incident
+      // that a concurrent settlement has just exhausted again.
+      const blockedWallet = await this.deps.wallets.findByTenantId(
+        input.tenantId,
+      );
+      if (blockedWallet && hasExecutableBalance(blockedWallet)) {
+        await this.deps.incidents.resolve(incident.id);
+        return { action: "RESOLVED", incidentId: incident.id };
+      }
       return { action: "ALREADY_BLOCKED", incidentId: incident.id };
     }
 
@@ -83,9 +93,10 @@ export class CreditEnforcementOrchestrator {
       return { action: "IN_PROGRESS", incidentId: incident.id };
     }
 
-    // Re-evaluate under the lease: balance may have recovered between claim
-    // and lease acquisition (e.g. recharge). Resolve instead of stopping.
-    if (executable) {
+    // Re-evaluate under the lease against the current balance: a recharge
+    // between the first read and lease acquisition resolves instead of stops.
+    const leasedWallet = await this.deps.wallets.findByTenantId(input.tenantId);
+    if (leasedWallet && hasExecutableBalance(leasedWallet)) {
       await this.deps.incidents.resolve(incident.id);
       return { action: "RESOLVED", incidentId: incident.id };
     }

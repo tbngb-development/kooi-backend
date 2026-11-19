@@ -391,7 +391,8 @@ describe("credit enforcement acceptance — warning and enforcement are independ
     h.walletStore.wallet.cashBalance = 200_000;
     const result = await h.enforcement.enforce({ tenantId, reason: "recharge" });
 
-    expect(result.action).toBe("ALREADY_BLOCKED");
+    expect(result.action).toBe("RESOLVED");
+    expect(h.incidentStore.state.state).toBe("RESOLVED");
     expect(h.stop.stop).toHaveBeenCalledTimes(1);
     expect(h.stop.resume).not.toHaveBeenCalled();
     expect(stoppedWork).toEqual({ batch: "STOPPED", campaign: "COMPLETED" });

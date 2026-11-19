@@ -141,6 +141,52 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     expect(result.state).toBe("RESOLVED");
   });
 
+  it("resolves a BLOCKED incident after recharge, clearing the enforcement lease", async () => {
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 1,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      ...openIncident,
+      state: "RESOLVED",
+      enforcementStartedAt: null,
+      resolvedAt: new Date("2026-01-03T00:00:00Z"),
+    } as any);
+
+    const result = await repository.resolve(openIncident.id);
+
+    expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: openIncident.id, state: { not: "RESOLVED" } },
+        data: expect.objectContaining({
+          state: "RESOLVED",
+          enforcementStartedAt: null,
+        }),
+      }),
+    );
+    expect(result.state).toBe("RESOLVED");
+    expect(result.enforcementStartedAt).toBeNull();
+  });
+
+  it("re-resolving an already RESOLVED incident is a no-op with no new status", async () => {
+    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
+      count: 0,
+    });
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
+      resolvedIncident as any,
+    );
+
+    const result = await repository.resolve(openIncident.id);
+
+    expect(result.state).toBe("RESOLVED");
+    const states = vi
+      .mocked(prisma.walletIncidentState.updateMany)
+      .mock.calls.flatMap((call) => {
+        const data = call[0].data as { state?: string };
+        return data.state ? [data.state] : [];
+      });
+    expect(new Set(states)).toEqual(new Set(["RESOLVED"]));
+  });
+
   it("atomically begins enforcement only while the lease is free or expired", async () => {
     vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
       count: 1,
