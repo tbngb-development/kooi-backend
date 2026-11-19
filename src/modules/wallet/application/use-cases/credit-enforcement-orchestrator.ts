@@ -1,4 +1,9 @@
 import { hasExecutableBalance } from "../../domain/rules/wallet-balance.policy";
+import {
+  mergeProviderActions,
+  toProviderStopResults,
+  unresolvedProviderTargets,
+} from "../../domain/rules/provider-stop-actions";
 import type { WalletRepository } from "../interfaces/wallet-repository.interface";
 import type { WalletIncidentStateRepository } from "../interfaces/wallet-incident-state-repository.interface";
 import type {
@@ -101,9 +106,22 @@ export class CreditEnforcementOrchestrator {
       return { action: "RESOLVED", incidentId: incident.id };
     }
 
+    // Retry by durable target identity from the incident: the adapter has
+    // already stopped local batches before any remote call, so a status-based
+    // retry would find nothing and falsely report a clean enforcement.
+    // An ADAPTER failure describes "no results from that attempt"; it goes stale
+    // as soon as any later attempt returns per-target results.
+    const priorActions = toProviderStopResults(incident.providerActions).filter(
+      (action) => action.target.provider !== "ADAPTER",
+    );
+    const retryTargets = unresolvedProviderTargets(priorActions);
+
     let providerActions: ProviderStopResult[];
     try {
-      providerActions = await this.deps.providers.stop(input.tenantId);
+      providerActions =
+        retryTargets.length > 0
+          ? await this.deps.providers.stop(input.tenantId, retryTargets)
+          : await this.deps.providers.stop(input.tenantId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.deps.logger.error(
@@ -125,20 +143,24 @@ export class CreditEnforcementOrchestrator {
       ];
     }
 
-    const hasProviderFailure = providerActions.some((r) => !r.success);
+    // Keep the latest outcome per target. A previously failed target is only
+    // cleared once this attempt actually confirms the remote stop succeeded.
+    const recordedActions = mergeProviderActions(priorActions, providerActions);
+    const hasUnconfirmedStop = recordedActions.some((r) => !r.success);
+    const providerFailures = recordedActions.filter((r) => !r.success).length;
 
     await this.enqueueEnforcementEmails({
       incidentId: incident.id,
       tenantId: input.tenantId,
       reason: input.reason,
       triggerBalancePaisa,
-      providerFailures: providerActions.filter((r) => !r.success).length,
+      providerFailures,
     });
 
-    if (hasProviderFailure) {
+    if (hasUnconfirmedStop) {
       await this.deps.incidents.recordEnforcementFailure(
         incident.id,
-        providerActions,
+        recordedActions,
       );
 
       this.deps.logger.warn("Wallet enforcement recorded failure and queued retry", {
@@ -146,20 +168,20 @@ export class CreditEnforcementOrchestrator {
         tenantId: input.tenantId,
         incidentId: incident.id,
         reason: input.reason,
-        providerFailures: providerActions.filter((r) => !r.success).length,
+        providerFailures,
       });
 
       return { action: "RETRY_QUEUED", incidentId: incident.id };
     }
 
-    await this.deps.incidents.markBlocked(incident.id, providerActions);
+    await this.deps.incidents.markBlocked(incident.id, recordedActions);
 
     this.deps.logger.warn("Wallet incident enforced and blocked", {
       action: "wallet.enforcement.blocked",
       tenantId: input.tenantId,
       incidentId: incident.id,
       reason: input.reason,
-      providerFailures: 0,
+      providerFailures,
     });
 
     return { action: "BLOCKED", incidentId: incident.id };

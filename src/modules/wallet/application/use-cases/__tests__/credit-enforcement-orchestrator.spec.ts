@@ -41,6 +41,17 @@ const zeroWallet = {
 
 const positiveWallet = { ...zeroWallet, cashBalance: 50000 } as any;
 
+const failedStopResult: ProviderStopResult = {
+  target: { provider: "BOLNA", kind: "BATCH", targetId: "batch-1" },
+  success: false,
+  error: "provider 500",
+};
+
+const incidentWithFailedStop = {
+  ...openIncident,
+  providerActions: [failedStopResult],
+} as any;
+
 const okResult: ProviderStopResult = {
   target: { provider: "BOLNA", kind: "BATCH", targetId: "batch-1" },
   success: true,
@@ -274,6 +285,77 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       ]),
     );
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
+  });
+
+  it("retries a previously failed remote target by identity and stays OPEN while it fails", async () => {
+    const stillFailing: ProviderStopResult = {
+      ...failedStopResult,
+      error: "provider 500 again",
+    };
+    const incidents = makeIncidents({
+      claim: vi.fn().mockResolvedValue(incidentWithFailedStop),
+    });
+    const deps = makeDeps({
+      incidents,
+      providers: { stop: vi.fn().mockResolvedValue([stillFailing]) },
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("RETRY_QUEUED");
+    expect(deps.providers.stop).toHaveBeenCalledWith(tenantId, [
+      failedStopResult.target,
+    ]);
+    expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
+      incidentId,
+      [stillFailing],
+    );
+    expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an empty retry result as a clean block while a target is unconfirmed", async () => {
+    const incidents = makeIncidents({
+      claim: vi.fn().mockResolvedValue(incidentWithFailedStop),
+    });
+    const deps = makeDeps({
+      incidents,
+      providers: { stop: vi.fn().mockResolvedValue([]) },
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("RETRY_QUEUED");
+    expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
+    expect(deps.incidents.recordEnforcementFailure).toHaveBeenCalledWith(
+      incidentId,
+      [failedStopResult],
+    );
+  });
+
+  it("marks BLOCKED only after the failed target is confirmed stopped", async () => {
+    const confirmed: ProviderStopResult = {
+      ...failedStopResult,
+      success: true,
+      error: null,
+    };
+    const incidents = makeIncidents({
+      claim: vi.fn().mockResolvedValue(incidentWithFailedStop),
+    });
+    const deps = makeDeps({
+      incidents,
+      providers: { stop: vi.fn().mockResolvedValue([confirmed]) },
+    });
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    const result = await orchestrator.enforce({ tenantId });
+
+    expect(result.action).toBe("BLOCKED");
+    expect(deps.incidents.markBlocked).toHaveBeenCalledWith(incidentId, [
+      confirmed,
+    ]);
+    expect(deps.incidents.recordEnforcementFailure).not.toHaveBeenCalled();
   });
 
   it("still blocks when the email enqueue throws", async () => {

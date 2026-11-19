@@ -16,5 +16,14 @@ export interface ProviderStopResult {
  * a provider failure is reported as success=false, never as a silent success.
  */
 export interface ICampaignStopAdapter {
-  stop(tenantId: string): Promise<ProviderStopResult[]>;
+  /**
+   * Local DB stops run first, then remote provider stops. `retryTargets` are
+   * previously failed remote targets that must be re-attempted even when their
+   * local batch/campaign is already STOPPED; they are passed back from the
+   * persisted incident state on every retry.
+   */
+  stop(
+    tenantId: string,
+    retryTargets?: ProviderStopTarget[],
+  ): Promise<ProviderStopResult[]>;
 }

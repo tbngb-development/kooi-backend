@@ -6,7 +6,9 @@ import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/ap
 import type {
   ICampaignStopAdapter,
   ProviderStopResult,
+  ProviderStopTarget,
 } from "../../application/interfaces/campaign-stop-adapter.interface";
+import { providerStopTargetKey } from "../../domain/rules/provider-stop-actions";
 
 const STOPPABLE_BATCH_STATUSES = ["RUNNING", "SCHEDULED"] as const;
 const STOPPABLE_CALL_STATUSES = ["SCHEDULED", "CALLING", "PENDING"] as const;
@@ -35,11 +37,31 @@ export interface PrismaCampaignStopAdapterDeps {
 export class PrismaCampaignStopAdapter implements ICampaignStopAdapter {
   constructor(private readonly deps: PrismaCampaignStopAdapterDeps) {}
 
-  async stop(tenantId: string): Promise<ProviderStopResult[]> {
+  async stop(
+    tenantId: string,
+    retryTargets: ProviderStopTarget[] = [],
+  ): Promise<ProviderStopResult[]> {
+    // A previous attempt already stopped these rows locally before its remote
+    // call failed. Re-include them by identity so the remote stop is retried.
+    const bolnaRetryIds = retryTargets
+      .filter((t) => t.provider === "BOLNA" && t.kind === "BATCH")
+      .map((t) => t.targetId);
+    const sarvamRetryIds = retryTargets
+      .filter((t) => t.provider === "SARVAM" && t.kind === "CAMPAIGN")
+      .map((t) => t.targetId);
+
     const batches = await prisma.leadBatch.findMany({
       where: {
         tenantId,
-        status: { in: [...STOPPABLE_BATCH_STATUSES] },
+        OR: [
+          { status: { in: [...STOPPABLE_BATCH_STATUSES] } },
+          ...(bolnaRetryIds.length > 0
+            ? [{ id: { in: bolnaRetryIds } }]
+            : []),
+          ...(sarvamRetryIds.length > 0
+            ? [{ campaignId: { in: sarvamRetryIds } }]
+            : []),
+        ],
       },
       include: {
         campaign: {
@@ -51,10 +73,6 @@ export class PrismaCampaignStopAdapter implements ICampaignStopAdapter {
         },
       },
     });
-
-    if (batches.length === 0) {
-      return [];
-    }
 
     const results: ProviderStopResult[] = [];
 
@@ -96,6 +114,18 @@ export class PrismaCampaignStopAdapter implements ICampaignStopAdapter {
       results.push(
         ...(await this.cancelSarvamCampaigns(tenantId, sarvamCollection.targets)),
       );
+    }
+
+    // Never let a vanished/unresolvable retry target look like a confirmed
+    // stop. Keep it failed so the incident stays OPEN for reconciliation.
+    const confirmed = new Set(results.map((r) => providerStopTargetKey(r.target)));
+    for (const target of retryTargets) {
+      if (confirmed.has(providerStopTargetKey(target))) continue;
+      results.push({
+        target,
+        success: false,
+        error: "Provider stop target could not be resolved for retry",
+      });
     }
 
     return results;

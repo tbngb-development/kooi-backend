@@ -82,7 +82,6 @@ describe("Bolna call webhook billing status correctness", () => {
       debit as unknown as DebitWalletForCallUseCase,
       undefined,
       undefined,
-      undefined,
       logger,
     );
     completionSpy = vi.spyOn(completion, "handleCallCompleted");

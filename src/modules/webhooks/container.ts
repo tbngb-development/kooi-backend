@@ -46,7 +46,6 @@ export function buildWebhookModule(
     webhookRepo,
     deps.materializeCallExtractions,
     deps.debitWalletForCall,
-    deps.creditEnforcement,
     deps.classifierQueue,
     callLifecycle,
     log,

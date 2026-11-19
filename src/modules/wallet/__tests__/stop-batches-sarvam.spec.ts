@@ -345,4 +345,100 @@ describe("PrismaCampaignStopAdapter — Sarvam enforcement stops", () => {
       }),
     ]);
   });
+
+  it("retries a previously failed remote target even when its batch is already STOPPED", async () => {
+    vi.mocked(prisma.leadBatch.findMany)
+      .mockResolvedValueOnce([
+        {
+          id: "batch-retry",
+          tenantId,
+          campaignId: "campaign-retry",
+          status: "STOPPED",
+          bolnaBatchId: null,
+          campaign: {
+            id: "campaign-retry",
+            provider: "SARVAM",
+            sarvamCampaignId: "sarvam-campaign-retry",
+            sarvamAgentId: "sarvam-agent-retry",
+            sarvamAgent: {
+              apiKey: {
+                organizationId: "org-1",
+                workspaceId: "ws-1",
+                apiKeyEncrypted: "enc-key",
+              },
+            },
+          },
+        } as any,
+      ])
+      .mockResolvedValueOnce([{ status: "STOPPED" } as any]);
+    vi.mocked(prisma.call.findMany).mockResolvedValue([]);
+    vi.mocked(sarvamCampaignClient.updateStatus).mockResolvedValue(
+      undefined as any,
+    );
+
+    const adapter = new PrismaCampaignStopAdapter({
+      bolnaClientFactory,
+      sarvamCampaignClient,
+      sarvamEncryptionService,
+      logger,
+    });
+
+    const results = await adapter.stop(tenantId, [
+      { provider: "SARVAM", kind: "CAMPAIGN", targetId: "campaign-retry" },
+    ]);
+
+    expect(prisma.leadBatch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            { campaignId: { in: ["campaign-retry"] } },
+          ]),
+        }),
+      }),
+    );
+    expect(sarvamCampaignClient.updateStatus).toHaveBeenCalledWith(
+      "org-1",
+      "ws-1",
+      "sarvam-campaign-retry",
+      "plain-api-key",
+      "cancel",
+    );
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: expect.objectContaining({
+            provider: "SARVAM",
+            kind: "CAMPAIGN",
+            targetId: "campaign-retry",
+          }),
+          success: true,
+          error: null,
+        }),
+      ]),
+    );
+  });
+
+  it("keeps an unresolvable retry target failed instead of reporting a clean stop", async () => {
+    vi.mocked(prisma.leadBatch.findMany).mockResolvedValueOnce([]);
+
+    const adapter = new PrismaCampaignStopAdapter({
+      bolnaClientFactory,
+      sarvamCampaignClient,
+      sarvamEncryptionService,
+      logger,
+    });
+
+    const results = await adapter.stop(tenantId, [
+      { provider: "BOLNA", kind: "BATCH", targetId: "missing-batch" },
+    ]);
+
+    expect(bolnaClientFactory.forTenant).not.toHaveBeenCalled();
+    expect(results).toEqual([
+      {
+        target: { provider: "BOLNA", kind: "BATCH", targetId: "missing-batch" },
+        success: false,
+        error: "Provider stop target could not be resolved for retry",
+      },
+    ]);
+  });
 });

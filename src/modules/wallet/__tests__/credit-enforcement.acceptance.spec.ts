@@ -378,6 +378,34 @@ describe("credit enforcement acceptance — warning and enforcement are independ
     expect(shared.incidentStore.state.state).toBe("BLOCKED");
   });
 
+  it("a failed remote stop is retried by target and never recorded as a clean block", async () => {
+    const h = makeHarness();
+    h.walletStore.wallet.cashBalance = 1_000;
+    const failed = {
+      target: { provider: "BOLNA", kind: "BATCH", targetId: "batch-1" },
+      success: false,
+      error: "provider 500",
+    };
+    h.stop.stop
+      .mockResolvedValueOnce([failed])
+      .mockResolvedValueOnce([{ ...failed, success: true, error: null }]);
+
+    await h.debit.execute(callInput);
+
+    expect(h.incidentStore.state.state).toBe("OPEN");
+    expect(h.stop.stop).toHaveBeenCalledTimes(1);
+
+    // Reconciler/retry re-enters the same single enforcement path.
+    const retry = await h.enforcement.enforce({ tenantId, reason: "retry" });
+
+    expect(retry.action).toBe("BLOCKED");
+    expect(h.stop.stop).toHaveBeenNthCalledWith(2, tenantId, [failed.target]);
+    expect(h.incidentStore.state.state).toBe("BLOCKED");
+    expect(h.incidentStore.state.providerActions).toEqual([
+      expect.objectContaining({ success: true, error: null }),
+    ]);
+  });
+
   it("a recharge after a block never resumes stopped campaigns or batches", async () => {
     const h = makeHarness();
     h.walletStore.wallet.cashBalance = 1_000;
