@@ -100,6 +100,35 @@ describe("PrismaEmailOutboxRepository — U-08 durability", () => {
     expect(await repository.claim(row.id, now)).toBe(false);
   });
 
+  it("requeues stale SENDING envelopes without consuming another attempt now", async () => {
+    const staleBefore = new Date(now.getTime() - 60_000);
+    vi.mocked(prisma.emailOutbox.updateMany).mockResolvedValue({ count: 1 });
+
+    const recovered = await repository.recoverStaleSending(staleBefore, now);
+
+    expect(recovered).toBe(1);
+    expect(prisma.emailOutbox.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: "SENDING",
+        updatedAt: { lt: staleBefore },
+      },
+      data: {
+        status: "RETRYING",
+        nextAttemptAt: now,
+        lastError: "Delivery was interrupted before the result was recorded",
+        lastErrorName: "SENDING_RECOVERY",
+      },
+    });
+  });
+
+  it("reports zero when no SENDING envelope is older than the cutoff", async () => {
+    vi.mocked(prisma.emailOutbox.updateMany).mockResolvedValue({ count: 0 });
+
+    expect(
+      await repository.recoverStaleSending(new Date(now.getTime() - 60_000), now),
+    ).toBe(0);
+  });
+
   it("records successful delivery with the provider message id", async () => {
     vi.mocked(prisma.emailOutbox.update).mockResolvedValue(row as any);
 

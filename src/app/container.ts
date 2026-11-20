@@ -214,6 +214,7 @@ export function buildContainer(): AppContainer {
     batchSize: env.emailOutbox.batchSize,
     maxAttempts: env.emailOutbox.maxAttempts,
     baseBackoffMs: env.emailOutbox.baseBackoffMs,
+    staleAfterMs: env.emailOutbox.staleAfterMs,
   });
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);

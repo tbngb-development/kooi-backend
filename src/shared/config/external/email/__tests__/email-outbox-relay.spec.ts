@@ -34,6 +34,7 @@ function makeOutbox(
     enqueue: vi.fn(),
     findDue: vi.fn().mockResolvedValue([item]),
     claim: vi.fn().mockResolvedValue(true),
+    recoverStaleSending: vi.fn().mockResolvedValue(0),
     markSent: vi.fn().mockResolvedValue(undefined),
     scheduleRetry: vi.fn().mockResolvedValue(undefined),
     moveToDeadLetter: vi.fn().mockResolvedValue(undefined),
@@ -55,6 +56,7 @@ function makeRelay(
     batchSize: 10,
     maxAttempts: 3,
     baseBackoffMs: 1000,
+    staleAfterMs: 60_000,
     ...extra,
   });
 }
@@ -158,6 +160,52 @@ describe("EmailOutboxRelay — U-08 delivery guarantees", () => {
 
     expect(sender.send).not.toHaveBeenCalled();
     expect(outbox.markSent).not.toHaveBeenCalled();
+  });
+
+  it("recovers stale SENDING envelopes before reading due envelopes", async () => {
+    outbox = makeOutbox({ recoverStaleSending: vi.fn().mockResolvedValue(2) });
+    const sender = {
+      send: vi.fn().mockResolvedValue({ messageId: "msg-recovered" }),
+    } as unknown as IIdempotentEmailSender;
+
+    await makeRelay(outbox, sender).tick(now);
+
+    expect(outbox.recoverStaleSending).toHaveBeenCalledWith(
+      new Date(now.getTime() - 60_000),
+      now,
+    );
+    expect(
+      vi.mocked(outbox.recoverStaleSending).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(outbox.findDue).mock.invocationCallOrder[0]);
+    // Requeued rows are due immediately, so they are delivered in this tick.
+    expect(sender.send).toHaveBeenCalledWith(
+      { to: item.toEmail, subject: item.subject, html: item.html },
+      item.idempotencyKey,
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("stale"),
+      expect.objectContaining({ action: "email.outbox.stale_recovered", recovered: 2 }),
+    );
+  });
+
+  it("continues delivering due envelopes when stale recovery fails", async () => {
+    const recoveryError = new Error("outbox unavailable");
+    outbox = makeOutbox({
+      recoverStaleSending: vi.fn().mockRejectedValue(recoveryError),
+    });
+    const sender = {
+      send: vi.fn().mockResolvedValue({ messageId: "msg-ok" }),
+    } as unknown as IIdempotentEmailSender;
+
+    await expect(makeRelay(outbox, sender).tick(now)).resolves.toBeUndefined();
+
+    expect(sender.send).toHaveBeenCalledOnce();
+    expect(outbox.markSent).toHaveBeenCalledWith(item.id, "msg-ok");
+    expect(logger.error).toHaveBeenCalledWith(
+      "Email outbox stale recovery failed",
+      recoveryError,
+      expect.objectContaining({ action: "email.outbox.stale_recovery_failed" }),
+    );
   });
 
   it("passes the persisted error to the outbox on failure", async () => {

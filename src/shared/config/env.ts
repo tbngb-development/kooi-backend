@@ -95,6 +95,7 @@ export const env = {
     batchSize: Number(process.env.EMAIL_OUTBOX_BATCH_SIZE) || 20,
     maxAttempts: Number(process.env.EMAIL_OUTBOX_MAX_ATTEMPTS) || 3,
     baseBackoffMs: Number(process.env.EMAIL_OUTBOX_BASE_BACKOFF_MS) || 1000,
+    staleAfterMs: Number(process.env.EMAIL_OUTBOX_STALE_AFTER_MS) || 60_000,
   },
 
   contact: {

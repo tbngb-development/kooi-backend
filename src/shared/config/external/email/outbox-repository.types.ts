@@ -29,6 +29,12 @@ export interface IEmailOutboxRepository {
   enqueue(input: EnqueueEmailInput): Promise<EmailOutbox>;
   findDue(limit: number, now?: Date): Promise<PendingEmail[]>;
   claim(id: string, now?: Date): Promise<boolean>;
+  /**
+   * Requeue envelopes whose sender died after `claim()` but before the result
+   * was recorded. `updatedAt` is the claim timestamp while status is SENDING.
+   * Returns the number of rows recovered.
+   */
+  recoverStaleSending(staleBefore: Date, now?: Date): Promise<number>;
   markSent(id: string, messageId: string | null): Promise<void>;
   scheduleRetry(id: string, error: EmailFailure, nextAttemptAt: Date): Promise<void>;
   moveToDeadLetter(id: string, error: EmailFailure): Promise<void>;

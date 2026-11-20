@@ -21,6 +21,8 @@ export interface EmailOutboxRelayDeps {
   batchSize: number;
   maxAttempts: number;
   baseBackoffMs: number;
+  /** A SENDING row older than this is assumed to belong to a dead sender. */
+  staleAfterMs: number;
 }
 
 function classify(error: unknown): EmailFailure {
@@ -68,6 +70,30 @@ export class EmailOutboxRelay {
     this.inFlight = true;
 
     try {
+      const cutoff = new Date(now.getTime() - this.deps.staleAfterMs);
+      try {
+        const recovered = await this.deps.outbox.recoverStaleSending(
+          cutoff,
+          now,
+        );
+        if (recovered > 0) {
+          this.deps.logger.warn(
+            "Recovered stale email envelopes left in SENDING by a dead sender",
+            {
+              action: "email.outbox.stale_recovered",
+              recovered,
+              cutoff: cutoff.toISOString(),
+            },
+          );
+        }
+      } catch (error) {
+        // Recovery is best-effort: an unavailable DB must not stop this tick
+        // from delivering envelopes that are already due.
+        this.deps.logger.error("Email outbox stale recovery failed", error, {
+          action: "email.outbox.stale_recovery_failed",
+        });
+      }
+
       const pending = await this.deps.outbox.findDue(this.deps.batchSize, now);
       for (const item of pending) {
         let claimed = false;

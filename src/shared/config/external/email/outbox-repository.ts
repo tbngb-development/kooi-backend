@@ -65,6 +65,31 @@ export class PrismaEmailOutboxRepository implements IEmailOutboxRepository {
     return result.count === 1;
   }
 
+  /**
+   * A crash between `claim()` and the terminal write leaves the row SENDING
+   * forever. While SENDING, `updatedAt` is the claim time, so rows older than
+   * the cutoff are requeued for an immediate retry. The provider idempotency
+   * key prevents a duplicate delivery if the old sender actually succeeded.
+   */
+  async recoverStaleSending(
+    staleBefore: Date,
+    now: Date = new Date(),
+  ): Promise<number> {
+    const result = await prisma.emailOutbox.updateMany({
+      where: {
+        status: "SENDING",
+        updatedAt: { lt: staleBefore },
+      },
+      data: {
+        status: "RETRYING",
+        nextAttemptAt: now,
+        lastError: "Delivery was interrupted before the result was recorded",
+        lastErrorName: "SENDING_RECOVERY",
+      },
+    });
+    return result.count;
+  }
+
   async markSent(id: string, messageId: string | null): Promise<void> {
     await prisma.emailOutbox.update({
       where: { id },
