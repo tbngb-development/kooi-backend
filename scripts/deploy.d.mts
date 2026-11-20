@@ -9,6 +9,15 @@ export interface DeployStep {
   display: string;
 }
 
+export declare function pm2ProcessExistsFromDescribe(
+  name: string,
+  result: {
+    status: number | null;
+    stdout?: string;
+    stderr?: string;
+    error?: Error;
+  },
+): boolean;
 export declare function getEnvConfig(envName: string): {
   releaseDir: string;
   pm2Name: string;

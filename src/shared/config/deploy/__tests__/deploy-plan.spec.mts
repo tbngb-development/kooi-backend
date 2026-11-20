@@ -8,6 +8,7 @@ import {
   findMissingMigrationSql,
   findPendingMigrations,
   parseAppliedMigrations,
+  pm2ProcessExistsFromDescribe,
   stripSqlComments,
 } from "../../../../../scripts/deploy.mjs";
 
@@ -42,6 +43,51 @@ describe("deploy plan ordering", () => {
 
   it("rejects an unknown environment", () => {
     expect(() => buildDeployPlan("nope")).toThrow(/Unknown deploy environment/);
+  });
+
+  it("uses the documented staging health endpoint", () => {
+    expect(DEPLOY_ENVIRONMENTS.staging.healthUrl).toBe(
+      "https://staging-api.kooi.in/api/health",
+    );
+    expect(DEPLOY_ENVIRONMENTS.staging.healthUrl).not.toContain("stagin.");
+    for (const cfg of Object.values(DEPLOY_ENVIRONMENTS)) {
+      expect(cfg.healthUrl).toMatch(/^https?:\/\/[^\s/]+\/api\/health$/);
+    }
+  });
+});
+
+describe("fail-closed PM2 bootstrap detection", () => {
+  it("treats a successful describe as an existing process", () => {
+    expect(pm2ProcessExistsFromDescribe("kooi-api", { status: 0 })).toBe(true);
+  });
+
+  it("treats only PM2's explicit not-found as first-time bootstrap", () => {
+    expect(
+      pm2ProcessExistsFromDescribe("kooi-api", {
+        status: 1,
+        stdout: "",
+        stderr: "[PM2][ERROR] Process or Namespace kooi-api not found",
+      }),
+    ).toBe(false);
+  });
+
+  it("throws when PM2 could not be spawned", () => {
+    expect(() =>
+      pm2ProcessExistsFromDescribe("kooi-api", {
+        status: null,
+        error: new Error("spawn pm2 ENOENT"),
+      }),
+    ).toThrow(/Refusing to skip reload\/verify/);
+  });
+
+  it.each([
+    { status: 1, stdout: "", stderr: "[PM2][ERROR] Daemon not started" },
+    { status: 2, stdout: "usage error", stderr: "" },
+    { status: null, stdout: "", stderr: "" },
+  ])("throws on any non-not-found PM2 failure %#", (result) => {
+    expect(() => pm2ProcessExistsFromDescribe("kooi-api", result)).toThrow(
+      /Refusing to skip reload\/verify/,
+    );
   });
 });
 

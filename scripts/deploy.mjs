@@ -51,7 +51,7 @@ export const DEPLOY_ENVIRONMENTS = Object.freeze({
   staging: Object.freeze({
     releaseDir: "/srv/apps/kooi-staging/current",
     pm2Name: "kooi-api-staging",
-    healthUrl: "http://stagin.api.kooi.in/api/health",
+    healthUrl: "https://staging-api.kooi.in/api/health",
   }),
 });
 
@@ -258,10 +258,37 @@ function runPreflight() {
   );
 }
 
+/**
+ * Interpret `pm2 describe <name>` without treating an infrastructure failure
+ * as "process absent". Only PM2's explicit not-found response is allowed to
+ * trigger the first-time-bootstrap skip; a missing binary, a broken daemon or
+ * any other error must stop the deploy instead of silently skipping reload and
+ * verify while still printing success.
+ */
+export function pm2ProcessExistsFromDescribe(name, result) {
+  if (result.error) {
+    throw new Error(
+      `Cannot inspect PM2 process ${name}: ${result.error.message}. ` +
+        `Refusing to skip reload/verify.`,
+    );
+  }
+  if (result.status === 0) return true;
+
+  const detail = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  if (/\bnot found\b/i.test(detail)) return false;
+
+  throw new Error(
+    `pm2 describe ${name} failed (exit ${result.status}): ${detail || "no output"}. ` +
+      `Refusing to skip reload/verify.`,
+  );
+}
+
 /** First-time bootstrap has no PM2 process yet; reload/verify are skipped. */
 function pm2ProcessExists(name) {
-  const result = spawnSync("pm2", ["describe", name], { encoding: "utf8" });
-  return result.status === 0;
+  return pm2ProcessExistsFromDescribe(
+    name,
+    spawnSync("pm2", ["describe", name], { encoding: "utf8" }),
+  );
 }
 
 function runStep(step) {
@@ -343,6 +370,36 @@ export function selfCheck() {
     "empty migration folder detection",
   );
 
+  assert(pm2ProcessExistsFromDescribe("app", { status: 0 }) === true, "running PM2 process");
+  assert(
+    pm2ProcessExistsFromDescribe("app", {
+      status: 1,
+      stdout: "",
+      stderr: "[PM2][ERROR] Process or Namespace app not found",
+    }) === false,
+    "explicit PM2 not-found is bootstrap",
+  );
+  for (const result of [
+    { status: null, error: new Error("spawn pm2 ENOENT") },
+    { status: 1, stdout: "", stderr: "[PM2][ERROR] Daemon not started" },
+    { status: 2, stdout: "usage error", stderr: "" },
+  ]) {
+    let threw = false;
+    try {
+      pm2ProcessExistsFromDescribe("app", result);
+    } catch {
+      threw = true;
+    }
+    assert(threw, "PM2 errors must never look like a missing process");
+  }
+
+  assert(
+    Object.values(DEPLOY_ENVIRONMENTS).every((cfg) =>
+      /^https?:\/\/[^\s/]+\/api\/health$/.test(cfg.healthUrl),
+    ),
+    "health URLs must be absolute /api/health URLs",
+  );
+
   const read = (name) => (name === "bad" ? 'DROP TABLE "x";' : 'CREATE TABLE "y" (id TEXT);');
   assert(auditPendingMigrations(["good"], read, []).length === 0, "additive migration passes");
   assert(auditPendingMigrations(["bad"], read, []).length === 1, "destructive migration flagged");
@@ -395,7 +452,12 @@ function main() {
     }
     runStep(step);
   }
-  console.log("\nDeploy complete.");
+  console.log(
+    processRunning
+      ? "\nDeploy complete."
+      : `\nDeploy complete (bootstrap): ${cfg.pm2Name} was not found, so reload/verify were skipped. ` +
+          `Start the process and check its health manually.`,
+  );
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
