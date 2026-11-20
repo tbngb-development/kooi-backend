@@ -350,6 +350,27 @@ export class PrismaWebhookRepository implements WebhookRepository {
     });
   }
 
+  async markCampaignRunningIfActive(
+    campaignId: string,
+    startedAt?: Date,
+  ): Promise<boolean> {
+    // Atomic guard: enforcement may have finalized the campaign between the
+    // webhook being accepted and this write. A plain read-then-update would
+    // still resurrect a COMPLETED/FAILED campaign, so filter on status in the
+    // same UPDATE statement.
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        status: { in: ["DRAFT", "SCHEDULED", "RUNNING"] },
+      },
+      data: {
+        status: "RUNNING",
+        ...(startedAt && { startedAt }),
+      },
+    });
+    return result.count > 0;
+  }
+
   async incrementTerminalStats(
     campaignId: string,
     batchId: string | null,

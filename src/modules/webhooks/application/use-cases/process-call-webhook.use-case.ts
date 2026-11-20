@@ -152,10 +152,16 @@ export class ProcessCallWebhookUseCase {
           }
 
           if (resolved.campaignId) {
-            await this.webhookRepo.updateCampaignStatus(
+            const updated = await this.webhookRepo.markCampaignRunningIfActive(
               resolved.campaignId,
-              "RUNNING",
             );
+            if (!updated) {
+              this.logger?.warn("Ignored campaign RUNNING update on finalized campaign", {
+                action: "webhook.campaign.running_ignored",
+                campaignId: resolved.campaignId,
+                incomingState: state,
+              });
+            }
           }
         }
         break;
@@ -208,11 +214,17 @@ export class ProcessCallWebhookUseCase {
         }
 
         if (resolved.campaignId) {
-          await this.webhookRepo.updateCampaignStatus(
+          const updated = await this.webhookRepo.markCampaignRunningIfActive(
             resolved.campaignId,
-            "RUNNING",
             new Date(),
           );
+          if (!updated) {
+            this.logger?.warn("Ignored campaign RUNNING update on finalized campaign", {
+              action: "webhook.campaign.running_ignored",
+              campaignId: resolved.campaignId,
+              incomingState: state,
+            });
+          }
         }
 
         // U-04: enforcement runs on the single awaited path before ACK.

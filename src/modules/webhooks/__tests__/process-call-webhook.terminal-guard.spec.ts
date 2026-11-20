@@ -62,10 +62,12 @@ describe("Bolna call webhook — late completion terminal guard", () => {
     vi.clearAllMocks();
     repo = {
       updateCallTerminalState: vi.fn().mockResolvedValue(undefined),
+      updateCallStatusAndHistory: vi.fn().mockResolvedValue(undefined),
       updateLeadStatus: vi.fn().mockResolvedValue(undefined),
       updateCallCostBreakdown: vi.fn().mockResolvedValue(undefined),
       updateBatchStatus: vi.fn().mockResolvedValue(undefined),
       updateCampaignStatus: vi.fn().mockResolvedValue(undefined),
+      markCampaignRunningIfActive: vi.fn().mockResolvedValue(false),
       findBatchStatusById: vi.fn().mockResolvedValue(null),
     } as unknown as WebhookRepository;
     resolver = { resolveCallRecord: vi.fn() };
@@ -209,5 +211,90 @@ describe("Bolna call webhook — late completion terminal guard", () => {
 
     // The service itself no-ops for STOPPED; the idempotent replay is allowed.
     expect(terminal.handleCallCanceled).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["scheduled", "rescheduled"] as const)(
+    "does not resurrect a finalized campaign on a late %s event",
+    async (incoming) => {
+      vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+        callWithStatus("PENDING"),
+      );
+
+      await useCase.execute(completionPayload(incoming));
+
+      expect(repo.markCampaignRunningIfActive).toHaveBeenCalledWith(
+        "campaign-1",
+      );
+      expect(repo.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Ignored campaign RUNNING update on finalized campaign",
+        expect.objectContaining({
+          action: "webhook.campaign.running_ignored",
+          campaignId: "campaign-1",
+          incomingState: incoming,
+        }),
+      );
+    },
+  );
+
+  it.each(["initiated", "ringing", "in-progress", "answered"] as const)(
+    "does not resurrect a finalized campaign on a late %s event",
+    async (incoming) => {
+      vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+        callWithStatus("CALLING"),
+      );
+
+      await useCase.execute(completionPayload(incoming));
+
+      expect(repo.markCampaignRunningIfActive).toHaveBeenCalledWith(
+        "campaign-1",
+        expect.any(Date),
+      );
+      expect(repo.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Ignored campaign RUNNING update on finalized campaign",
+        expect.objectContaining({
+          action: "webhook.campaign.running_ignored",
+          campaignId: "campaign-1",
+          incomingState: incoming,
+        }),
+      );
+    },
+  );
+
+  it("keeps an active campaign RUNNING on a normal in-progress event", async () => {
+    vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+      callWithStatus("PENDING"),
+    );
+    vi.mocked(repo.markCampaignRunningIfActive).mockResolvedValue(true);
+
+    await useCase.execute(completionPayload("in-progress"));
+
+    expect(repo.markCampaignRunningIfActive).toHaveBeenCalledWith(
+      "campaign-1",
+      expect.any(Date),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      "Ignored campaign RUNNING update on finalized campaign",
+      expect.anything(),
+    );
+  });
+
+  it("keeps an active campaign RUNNING on a scheduled retry event", async () => {
+    vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+      callWithStatus("NO_ANSWER"),
+    );
+    vi.mocked(repo.markCampaignRunningIfActive).mockResolvedValue(true);
+
+    await useCase.execute({
+      ...completionPayload("scheduled"),
+      retry_history: [{ attempt: 2, status: "no-answer" }],
+    });
+
+    expect(repo.markCampaignRunningIfActive).toHaveBeenCalledWith("campaign-1");
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      "Ignored campaign RUNNING update on finalized campaign",
+      expect.anything(),
+    );
   });
 });

@@ -166,6 +166,17 @@ export interface WebhookRepository {
   ): Promise<void>;
 
   /**
+   * Moves a campaign to RUNNING only while it is still active. A campaign
+   * finalized by credit enforcement (COMPLETED/FAILED) must stay terminal
+   * even when a late in-flight webhook arrives.
+   * Returns true when a row was updated.
+   */
+  markCampaignRunningIfActive(
+    campaignId: string,
+    startedAt?: Date,
+  ): Promise<boolean>;
+
+  /**
    * Persists the authoritative historical billing snapshot for auditability.
    */
   updateCallCostBreakdown(
