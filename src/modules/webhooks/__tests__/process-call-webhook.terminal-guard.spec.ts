@@ -146,4 +146,68 @@ describe("Bolna call webhook — late completion terminal guard", () => {
 
     expect(completion.handleCallCompleted).not.toHaveBeenCalled();
   });
+
+  it.each(["no-answer", "busy", "failed", "error", "balance-low"] as const)(
+    "ignores a late %s event after COMPLETED or a credit-enforcement STOPPED",
+    async (incoming) => {
+      for (const current of ["COMPLETED", "STOPPED"] as const) {
+        vi.mocked(resolver.resolveCallRecord).mockResolvedValueOnce(
+          callWithStatus(current),
+        );
+
+        await useCase.execute(completionPayload(incoming));
+
+        expect(terminal.handleCallTerminal).not.toHaveBeenCalled();
+      }
+      expect(terminal.handleCallTerminal).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Ignored out-of-order terminal event",
+        expect.objectContaining({ action: "webhook.call.terminal_ignored" }),
+      );
+    },
+  );
+
+  it.each(["stopped", "canceled"])(
+    "ignores a late %s event after COMPLETED",
+    async (incoming) => {
+      vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+        callWithStatus("COMPLETED"),
+      );
+
+      await useCase.execute(completionPayload(incoming));
+
+      expect(terminal.handleCallCanceled).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows retry dispositions to advance between NO_ANSWER, BUSY and FAILED", async () => {
+    for (const [current, incoming] of [
+      ["CALLING", "no-answer"],
+      ["NO_ANSWER", "no-answer"],
+      ["NO_ANSWER", "busy"],
+      ["BUSY", "failed"],
+      ["FAILED", "no-answer"],
+      ["NO_ANSWER", "stopped"],
+    ] as const) {
+      vi.mocked(resolver.resolveCallRecord).mockResolvedValueOnce(
+        callWithStatus(current),
+      );
+
+      await useCase.execute(completionPayload(incoming));
+    }
+
+    expect(terminal.handleCallTerminal).toHaveBeenCalledTimes(5);
+    expect(terminal.handleCallCanceled).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays a stop event on an already STOPPED call", async () => {
+    vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+      callWithStatus("STOPPED"),
+    );
+
+    await useCase.execute(completionPayload("stopped"));
+
+    // The service itself no-ops for STOPPED; the idempotent replay is allowed.
+    expect(terminal.handleCallCanceled).toHaveBeenCalledTimes(1);
+  });
 });

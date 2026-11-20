@@ -1,4 +1,8 @@
-import type { WebhookRepository } from "../interfaces/webhook-repository.interface";
+import type {
+  WebhookRepository,
+  ResolvedCallContext,
+} from "../interfaces/webhook-repository.interface";
+import type { CallStatus } from "@prisma/client";
 import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
@@ -25,6 +29,27 @@ export class ProcessCallWebhookUseCase {
     private readonly enforcement?: CreditEnforcementOrchestrator,
     private readonly logger?: Logger,
   ) {}
+
+  /**
+   * A terminal/stop webhook may still advance a call through the retry
+   * dispositions (NO_ANSWER/BUSY/FAILED) but must never overwrite a completed
+   * call or a tenant-wide credit-enforcement stop.
+   */
+  private canApplyTerminalEvent(
+    resolved: ResolvedCallContext,
+    target: CallStatus,
+    incomingState: string,
+  ): boolean {
+    if (canTransitionCallStatus(resolved.status, target)) return true;
+    this.logger?.warn("Ignored out-of-order terminal event", {
+      action: "webhook.call.terminal_ignored",
+      callId: resolved.id,
+      currentStatus: resolved.status,
+      targetStatus: target,
+      incomingState,
+    });
+    return false;
+  }
 
   async execute(payload: WebhookCallPayload): Promise<void> {
     const callId = payload.id ?? payload.execution_id ?? payload.run_id;
@@ -235,14 +260,16 @@ export class ProcessCallWebhookUseCase {
 
       case "no-answer": {
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
-        if (!resolved) break;
+        if (!resolved || !this.canApplyTerminalEvent(resolved, "NO_ANSWER", state)) {
+          break;
+        }
         await this.callTerminal.handleCallTerminal(resolved, "NO_ANSWER", payload);
         break;
       }
 
       case "busy": {
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
-        if (!resolved) break;
+        if (!resolved || !this.canApplyTerminalEvent(resolved, "BUSY", state)) break;
         await this.callTerminal.handleCallTerminal(resolved, "BUSY", payload);
         break;
       }
@@ -251,7 +278,9 @@ export class ProcessCallWebhookUseCase {
       case "error":
       case "balance-low": {
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
-        if (!resolved) break;
+        if (!resolved || !this.canApplyTerminalEvent(resolved, "FAILED", state)) {
+          break;
+        }
         await this.callTerminal.handleCallTerminal(resolved, "FAILED", payload);
         break;
       }
@@ -259,7 +288,9 @@ export class ProcessCallWebhookUseCase {
       case "stopped":
       case "canceled": {
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
-        if (!resolved) break;
+        if (!resolved || !this.canApplyTerminalEvent(resolved, "STOPPED", state)) {
+          break;
+        }
         await this.callTerminal.handleCallCanceled(resolved);
         break;
       }
