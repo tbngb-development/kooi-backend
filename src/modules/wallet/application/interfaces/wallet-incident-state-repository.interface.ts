@@ -80,4 +80,11 @@ export interface WalletIncidentStateRepository {
     leaseMs: number,
     now?: Date,
   ): Promise<WalletIncidentState[]>;
+
+  /**
+   * BLOCKED incidents that need a balance re-check. Re-entering the
+   * orchestrator resolves them after a recharge; a still-empty wallet stays
+   * blocked with no side effects.
+   */
+  findBlocked(limit: number): Promise<WalletIncidentState[]>;
 }

@@ -17,8 +17,10 @@ export interface CreditEnforcementReconcilerDeps {
 }
 
 /**
- * U-04: crash recovery. Any OPEN incident whose enforcement lease is missing
- * or expired is re-driven through the single orchestrator path.
+ * Crash recovery. Any OPEN incident whose enforcement lease is missing or
+ * expired is re-driven through the single orchestrator path, and BLOCKED
+ * incidents are re-checked so a recharge closes them without waiting for a
+ * new call webhook.
  */
 export class CreditEnforcementReconciler {
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -56,8 +58,19 @@ export class CreditEnforcementReconciler {
       const batchSize = this.deps.batchSize || DEFAULT_BATCH_SIZE;
       const leaseMs = this.deps.leaseMs || DEFAULT_LEASE_MS;
       const stale = await this.deps.incidents.findStale(batchSize, leaseMs, now);
+      // Share one bounded budget with the stale-OPEN sweep. A BLOCKED row is
+      // cheap to re-check and only resolves when the wallet has funds again.
+      const blocked = stale.length < batchSize
+        ? await this.deps.incidents.findBlocked(batchSize - stale.length)
+        : [];
+      const seenTenants = new Set<string>();
+      const due = [...stale, ...blocked].filter((incident) => {
+        if (seenTenants.has(incident.tenantId)) return false;
+        seenTenants.add(incident.tenantId);
+        return true;
+      });
 
-      for (const incident of stale) {
+      for (const incident of due) {
         try {
           await this.deps.orchestrator.enforce({
             tenantId: incident.tenantId,
@@ -76,7 +89,7 @@ export class CreditEnforcementReconciler {
         }
       }
 
-      return stale.length;
+      return due.length;
     } finally {
       this.inFlight = false;
     }

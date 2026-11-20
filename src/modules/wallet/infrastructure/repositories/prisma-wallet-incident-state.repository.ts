@@ -253,6 +253,15 @@ export class PrismaWalletIncidentStateRepository
     return current;
   }
 
+  /** BLOCKED incidents to re-check for a recharge on every reconcile tick. */
+  async findBlocked(limit: number): Promise<WalletIncidentState[]> {
+    return prisma.walletIncidentState.findMany({
+      where: { state: "BLOCKED" },
+      orderBy: { detectedAt: "asc" },
+      take: limit,
+    });
+  }
+
   /** U-04: OPEN incidents whose enforcement lease is missing or expired. */
   async findStale(
     limit: number,

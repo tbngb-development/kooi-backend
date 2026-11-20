@@ -558,6 +558,21 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     });
   });
 
+  it("finds BLOCKED incidents for recharge re-checks", async () => {
+    vi.mocked(prisma.walletIncidentState.findMany).mockResolvedValue([
+      { ...openIncident, state: "BLOCKED" } as any,
+    ]);
+
+    const result = await repository.findBlocked(5);
+
+    expect(result).toHaveLength(1);
+    expect(prisma.walletIncidentState.findMany).toHaveBeenCalledWith({
+      where: { state: "BLOCKED" },
+      orderBy: { detectedAt: "asc" },
+      take: 5,
+    });
+  });
+
   it("finds stale OPEN incidents whose lease is missing or expired", async () => {
     vi.mocked(prisma.walletIncidentState.findMany).mockResolvedValue([
       openIncident as any,

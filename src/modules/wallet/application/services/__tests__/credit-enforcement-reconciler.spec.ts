@@ -29,6 +29,7 @@ describe("CreditEnforcementReconciler — crash recovery for OPEN incidents", ()
       markBlocked: vi.fn(),
       recordEnforcementFailure: vi.fn(),
       findStale: vi.fn().mockResolvedValue(stale),
+      findBlocked: vi.fn().mockResolvedValue([]),
     } as unknown as WalletIncidentStateRepository;
     orchestrator = {
       enforce: vi.fn().mockResolvedValue({ action: "BLOCKED" }),
@@ -71,6 +72,62 @@ describe("CreditEnforcementReconciler — crash recovery for OPEN incidents", ()
 
     expect(await makeReconciler().tick()).toBe(0);
     expect(orchestrator.enforce).not.toHaveBeenCalled();
+  });
+
+  it("re-checks BLOCKED incidents so a recharge can resolve them", async () => {
+    const blocked = [{ id: "i-3", tenantId: "tenant-3" }] as any[];
+    vi.mocked(incidents.findStale).mockResolvedValue([]);
+    vi.mocked(incidents.findBlocked).mockResolvedValue(blocked);
+
+    const count = await makeReconciler().tick();
+
+    expect(count).toBe(1);
+    expect(incidents.findBlocked).toHaveBeenCalledWith(10);
+    expect(orchestrator.enforce).toHaveBeenCalledWith({
+      tenantId: "tenant-3",
+      reason: "reconciler",
+    });
+  });
+
+  it("shares the batch budget between stale and blocked incidents", async () => {
+    vi.mocked(incidents.findBlocked).mockResolvedValue([
+      { id: "i-3", tenantId: "tenant-3" },
+    ] as any[]);
+
+    const count = await makeReconciler().tick();
+
+    expect(incidents.findBlocked).toHaveBeenCalledWith(8);
+    expect(count).toBe(3);
+    expect(orchestrator.enforce).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not re-enforce a tenant that appears in both scans", async () => {
+    vi.mocked(incidents.findBlocked).mockResolvedValue([
+      { id: "i-1", tenantId: "tenant-1" },
+    ] as any[]);
+
+    const count = await makeReconciler().tick();
+
+    expect(count).toBe(2);
+    expect(orchestrator.enforce).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(orchestrator.enforce).mock.calls.filter(
+        ([input]) => input.tenantId === "tenant-1",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("skips the blocked query when the stale sweep already used the budget", async () => {
+    vi.mocked(incidents.findStale).mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => ({
+        id: `i-${i}`,
+        tenantId: `tenant-${i}`,
+      })) as any[],
+    );
+
+    await makeReconciler().tick();
+
+    expect(incidents.findBlocked).not.toHaveBeenCalled();
   });
 
   it("never throws out of a tick when one incident fails", async () => {

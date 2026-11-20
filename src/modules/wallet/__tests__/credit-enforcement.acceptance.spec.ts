@@ -3,6 +3,7 @@ import prisma from "../../../shared/config/database/prisma";
 import { DebitWalletForCallUseCase } from "../application/use-cases/debit-wallet.use-case";
 import { CheckLowBalanceUseCase } from "../application/use-cases/check-low-balance.use-case";
 import { CreditEnforcementOrchestrator } from "../application/use-cases/credit-enforcement-orchestrator";
+import { CreditEnforcementReconciler } from "../application/services/credit-enforcement-reconciler";
 import { computeBonusFirstDeduction } from "../domain/rules/bonus-first-deduction.rules";
 import { hasExecutableBalance } from "../domain/rules/wallet-balance.policy";
 import type { WalletRepository } from "../application/interfaces/wallet-repository.interface";
@@ -131,6 +132,9 @@ function makeIncidentRepo(store: SharedIncidentStore) {
       return { ...store.state };
     }),
     findStale: vi.fn(async () => []),
+    findBlocked: vi.fn(async () =>
+      store.state.state === "BLOCKED" ? [{ ...store.state }] : [],
+    ),
   } as unknown as WalletIncidentStateRepository;
 }
 
@@ -241,8 +245,17 @@ function makeHarness(shared: SharedDurableState = {
     enforcement,
     logger,
   );
+  const reconciler = new CreditEnforcementReconciler({
+    incidents,
+    orchestrator: enforcement,
+    logger,
+    enabled: true,
+    pollMs: 1000,
+    batchSize: 10,
+    leaseMs: 60_000,
+  });
 
-  return { ...shared, incidents, wallets, warning, enforcement, debit };
+  return { ...shared, incidents, wallets, warning, enforcement, debit, reconciler };
 }
 
 const callInput = { tenantId, callId: "call-acceptance", durationSec: 60 };
@@ -427,6 +440,25 @@ describe("credit enforcement acceptance — warning and enforcement are independ
     expect(
       h.outbox.envelopes.filter((e) => e.idempotencyKey.startsWith("enforce:")),
     ).toHaveLength(2);
+  });
+
+  it("a recharge alone closes a blocked incident via the reconciler without resuming work", async () => {
+    const h = makeHarness();
+    h.walletStore.wallet.cashBalance = 1_000;
+    await h.debit.execute(callInput);
+    expect(h.incidentStore.state.state).toBe("BLOCKED");
+    const stopCallsAfterBlock = vi.mocked(h.stop.stop).mock.calls.length;
+
+    // No new call webhook arrives; the tenant only tops up.
+    h.walletStore.wallet.cashBalance = 200_000;
+    expect(await h.reconciler.tick()).toBe(1);
+
+    expect(h.incidentStore.state.state).toBe("RESOLVED");
+    expect(h.stop.stop).toHaveBeenCalledTimes(stopCallsAfterBlock);
+    expect(h.stop.resume).not.toHaveBeenCalled();
+
+    // The resolved singleton is no longer returned by the blocked scan.
+    expect(await h.reconciler.tick()).toBe(0);
   });
 
   it("an OPEN incident with recovered balance resolves without touching stopped work", async () => {
