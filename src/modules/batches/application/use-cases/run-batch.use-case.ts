@@ -7,10 +7,11 @@ import {
   BatchOperationError,
   BatchNoBolnaIdError,
 } from "../../domain/errors/batch.errors";
+import { MaxActiveCampaignsReachedError } from "../../../campaigns/domain/errors/campaign.errors";
 import {
-  CampaignNotFoundError,
-  MaxActiveCampaignsReachedError,
-} from "../../../campaigns/domain/errors/campaign.errors";
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   toBolnaISO,
   parseBolnaScheduledTime,
@@ -47,9 +48,12 @@ export class RunBatchUseCase {
     }
     if (!batchData.bolnaBatchId) throw new BatchNoBolnaIdError();
 
-    // 2. Validate campaign
-    const campaign = await this.campaignRepo.findById(tenantId, campaignId);
-    if (!campaign) throw new CampaignNotFoundError();
+    // 2. Validate campaign and remember whether a guarded reopen is required.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
+      tenantId,
+      campaignId,
+    );
 
     // 3. Enforce maxActiveCampaigns only against live RUNNING campaigns
     if (campaign.status !== "RUNNING") {
@@ -108,6 +112,14 @@ export class RunBatchUseCase {
       await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
         startedAt: new Date(),
       });
+    } else {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        needsReopen,
+        campaign.startedAt ? null : new Date(),
+      );
     }
 
     this.logger?.info("Batch run started", {

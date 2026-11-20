@@ -44,6 +44,10 @@ import type {
   DiscordEvent,
 } from "../../../../shared/config/external/notifications/discordevents-publisher";
 import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 
 export interface BatchJobData {
   batchId: string;
@@ -320,6 +324,26 @@ export class BatchProcessingWorker {
         return;
       }
 
+      // Explicit work on an existing campaign must not proceed when that
+      // campaign has become permanently terminal (cancelled, ended, or stopped
+      // by credit enforcement) while the upload was queued.
+      try {
+        await assertCampaignAcceptsNewBatch(
+          this.campaignRepo,
+          tenantId,
+          campaignId,
+          campaign,
+        );
+      } catch (err) {
+        await this.failBatch(
+          tenantId,
+          batchId,
+          campaignId,
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+
       if (!campaign.assistant) {
         await this.failBatch(
           tenantId,
@@ -430,6 +454,25 @@ export class BatchProcessingWorker {
         return;
       }
 
+      const campaignForFinalize = await this.campaignRepo.findByIdWithRelations(
+        tenantId,
+        campaignId,
+      );
+      if (!campaignForFinalize) {
+        this.log?.warn("Campaign deleted before finalize update, exiting", {
+          batchId,
+          campaignId,
+        });
+        return;
+      }
+
+      const { needsReopen } = await assertCampaignAcceptsNewBatch(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        campaignForFinalize,
+      );
+
       await this.batchRepo.update(batchId, {
         name: finalCheck.name || bolnaFileName.replace(/\.csv$/, ""),
         fileName: finalCheck.fileName?.startsWith("batch-manual-")
@@ -443,10 +486,18 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.recalculateCampaignStats(campaignId);
 
-      if (runImmediately && campaign.status === "DRAFT") {
+      if (runImmediately && campaignForFinalize.status === "DRAFT") {
         await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
           startedAt: new Date(),
         });
+      } else {
+        await reopenCampaignForNewBatchIfNeeded(
+          this.campaignRepo,
+          tenantId,
+          campaignId,
+          needsReopen,
+          campaignForFinalize.startedAt ? null : new Date(),
+        );
       }
 
       await this.batchRepo.updateProgress(batchId, "FINALIZING", 100);
@@ -678,12 +729,17 @@ export class BatchProcessingWorker {
     const isCampaignEnded =
       isCampaignExpired ||
       campaignBeforeUpload.sarvamStatus?.toLowerCase() === "ended";
-    const isCampaignTerminal =
-      isCampaignEnded || campaignBeforeUpload.status === "CANCELLED";
 
-    if (isCampaignTerminal) {
+    try {
+      await assertCampaignAcceptsNewBatch(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        campaignBeforeUpload,
+      );
+    } catch (err) {
       this.log?.warn(
-        "Aborting Sarvam cohort upload: campaign expired or reached terminal state",
+        "Aborting Sarvam cohort upload: campaign is not eligible for new batch work",
         {
           action: "batch.worker.sarvam_upload_aborted",
           batchId,
@@ -691,6 +747,7 @@ export class BatchProcessingWorker {
           status: campaignBeforeUpload.status,
           isCampaignExpired,
           isCampaignEnded,
+          reason: err instanceof Error ? err.message : String(err),
         },
       );
 
@@ -787,6 +844,28 @@ export class BatchProcessingWorker {
       campaignId,
     );
 
+    let needsCampaignReopen = false;
+    if (freshCampaign) {
+      try {
+        needsCampaignReopen = (
+          await assertCampaignAcceptsNewBatch(
+            this.campaignRepo,
+            tenantId,
+            campaignId,
+            freshCampaign,
+          )
+        ).needsReopen;
+      } catch (err) {
+        await this.failBatch(
+          tenantId,
+          batchId,
+          campaignId,
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+    }
+
     let hasAvailableSlot = true;
     if (freshCampaign?.sarvamAgentId && this.campaignRepo.countActiveCampaignsForAgent) {
       const activeCount = await this.campaignRepo.countActiveCampaignsForAgent(
@@ -816,8 +895,8 @@ export class BatchProcessingWorker {
         !freshCampaign?.startTimestamp ||
         new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
 
-      if (freshCampaign?.status === "RUNNING") {
-        finalStatus = "RUNNING";
+      if (freshCampaign?.status === "RUNNING" || needsCampaignReopen) {
+        finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
       } else if (freshCampaign?.status === "DRAFT" && isStartTimeReached) {
         finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
       } else if (freshCampaign?.status === "DRAFT" && !isStartTimeReached) {
@@ -862,6 +941,14 @@ export class BatchProcessingWorker {
       await this.campaignRepo.updateStatus(campaignId, nextCampaignStatus, {
         ...(nextCampaignStatus === "RUNNING" ? { startedAt: new Date() } : {}),
       });
+    } else if (freshCampaign) {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        needsCampaignReopen,
+        freshCampaign.startedAt ? null : new Date(),
+      );
     }
 
     await this.batchRepo.recalculateCampaignStats(campaignId);

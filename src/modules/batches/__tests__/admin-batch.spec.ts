@@ -38,6 +38,9 @@ describe("Admin Batch Module & Operational Controls", () => {
 
   const mockCampaignRepo = {
     findById: vi.fn(),
+    findByIdWithRelations: vi.fn(),
+    hasLowBalanceStoppedLeads: vi.fn().mockResolvedValue(false),
+    reopenCampaignForNewBatch: vi.fn().mockResolvedValue(true),
   };
 
   const mockStopBatchUseCase = {
@@ -253,7 +256,7 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("throws CampaignNotFoundError when campaign does not exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce(null);
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce(null);
 
       await expect(
         useCase.execute("tenant-1", "camp-missing", "batch-1"),
@@ -261,7 +264,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("throws BatchNotFoundError when batch does not exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce(null);
 
       await expect(
@@ -270,7 +279,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("returns zero retried count when no failed leads exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce({ id: "batch-1", status: "COMPLETED" });
       (prisma.lead.findMany as any).mockResolvedValueOnce([]);
 
@@ -282,7 +297,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("resets failed leads and executes resumeBatchUseCase when failed leads exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce({ id: "batch-1", status: "COMPLETED" });
       (prisma.lead.findMany as any).mockResolvedValueOnce([
         { id: "lead-f1" },

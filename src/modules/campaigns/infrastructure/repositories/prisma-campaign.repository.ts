@@ -33,6 +33,7 @@ import {
   getCampaignExecutionMetricsMap,
   getBatchExecutionMetricsMap,
 } from "../queries/lead-execution-metrics.query";
+import { reopenableCampaignGuard } from "../queries/campaign-lifecycle-guard";
 
 export class PrismaCampaignRepository implements CampaignRepository {
   private async getCampaignMetricsMap(
@@ -555,6 +556,31 @@ export class PrismaCampaignRepository implements CampaignRepository {
       campaign.tenantId,
     );
     return this.toEntityData(campaign, counts);
+  }
+
+  async hasLowBalanceStoppedLeads(campaignId: string): Promise<boolean> {
+    const count = await prisma.lead.count({
+      where: { campaignId, stoppedReason: "LOW_BALANCE" },
+    });
+    return count > 0;
+  }
+
+  async reopenCampaignForNewBatch(
+    campaignId: string,
+    options: { startedAt?: Date | null; now?: Date } = {},
+  ): Promise<boolean> {
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...reopenableCampaignGuard(options.now ?? new Date()),
+      },
+      data: {
+        status: "RUNNING",
+        completedAt: null,
+        ...(options.startedAt ? { startedAt: options.startedAt } : {}),
+      },
+    });
+    return result.count > 0;
   }
 
   async findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]> {

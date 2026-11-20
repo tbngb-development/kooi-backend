@@ -12,10 +12,12 @@ import type {
 import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
 import {
   CampaignNotFoundError,
-  CampaignFailedError,
-  CampaignNotEligibleForUploadError,
   MaxActiveCampaignsReachedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   EmptyFileError,
   BatchOperationError,
@@ -51,34 +53,18 @@ export class EnqueueBatchUploadUseCase {
   }
 
   async execute(input: CreateBatchInput): Promise<EnqueueBatchResult> {
-    // 1. Validate campaign
-    const campaign = await this.campaignRepo.findByIdWithRelations(
+    // 1. Validate campaign and decide whether an explicit reopen is needed.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
       input.tenantId,
       input.campaignId,
     );
-    if (!campaign) throw new CampaignNotFoundError();
     if (campaign.provider === "SARVAM") {
       if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
         throw new CampaignNotFoundError();
       }
-      const isExpired = Boolean(
-        campaign.endTimestamp &&
-          new Date(campaign.endTimestamp).getTime() <= Date.now(),
-      );
-      const isEnded =
-        isExpired || campaign.sarvamStatus?.toLowerCase() === "ended";
-
-      if (isEnded) {
-        throw new CampaignNotEligibleForUploadError("ended");
-      }
-      if (campaign.status === "CANCELLED") {
-        throw new CampaignNotEligibleForUploadError(campaign.status);
-      }
     } else {
       if (!campaign.assistant) throw new CampaignNotFoundError();
-      if (campaign.status === "CANCELLED") {
-        throw new CampaignNotEligibleForUploadError(campaign.status);
-      }
     }
 
     // 2. Validate active plan
@@ -197,20 +183,22 @@ export class EnqueueBatchUploadUseCase {
       termsVersion: input.termsVersion,
     });
 
-    // Reactivate failed campaigns, or completed Sarvam campaigns whose schedule is active
-    if (
-      campaign.status === "FAILED" ||
-      (campaign.provider === "SARVAM" && campaign.status === "COMPLETED")
-    ) {
-      const nextStatus = input.runImmediately ? "RUNNING" : "SCHEDULED";
-      await this.campaignRepo.updateStatus(campaign.id, nextStatus, {
-        completedAt: null,
-      });
+    // Explicit new batch work reopens a normal terminal campaign only through
+    // the atomic guard. Enforcement-stopped and cancelled campaigns were
+    // rejected above.
+    const reopened = await reopenCampaignForNewBatchIfNeeded(
+      this.campaignRepo,
+      input.tenantId,
+      campaign.id,
+      needsReopen,
+      campaign.startedAt ? null : new Date(),
+    );
+    if (reopened) {
       this.log?.info("Reactivated campaign on new batch upload", {
         action: "campaign.reactivate",
         campaignId: campaign.id,
         previousStatus: campaign.status,
-        newStatus: nextStatus,
+        newStatus: "RUNNING",
       });
     }
 

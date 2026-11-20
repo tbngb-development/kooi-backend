@@ -30,3 +30,40 @@ export function activeCampaignGuard(
       : { leads: { none: { stoppedReason: "LOW_BALANCE" } } }),
   };
 }
+
+/**
+ * Row guard for the explicit reopen that accompanies new user work. Only a
+ * normal terminal campaign is eligible. The same UPDATE statement rejects an
+ * expired/ended Sarvam campaign, a CANCELLED campaign, and any campaign whose
+ * leads were stopped by credit enforcement, so a concurrent finalization can
+ * never be undone by a late batch action.
+ */
+export function reopenableCampaignGuard(
+  now: Date = new Date(),
+): Prisma.CampaignWhereInput {
+  return {
+    isDeleted: false,
+    status: { in: ["COMPLETED", "FAILED"] },
+    leads: { none: { stoppedReason: "LOW_BALANCE" } },
+    AND: [
+      {
+        OR: [
+          { provider: { not: "SARVAM" } },
+          { endTimestamp: null },
+          { endTimestamp: { gt: now } },
+        ],
+      },
+      {
+        OR: [
+          { provider: { not: "SARVAM" } },
+          { sarvamStatus: null },
+          {
+            NOT: {
+              sarvamStatus: { equals: "ended", mode: "insensitive" },
+            },
+          },
+        ],
+      },
+    ],
+  };
+}

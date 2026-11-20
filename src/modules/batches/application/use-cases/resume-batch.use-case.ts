@@ -10,6 +10,10 @@ import {
   BolnaBatchCreationError,
 } from "../../domain/errors/batch.errors";
 import { CampaignNotFoundError } from "../../../campaigns/domain/errors/campaign.errors";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import { transformToBolnaCSV } from "../../infrastructure/csv-transformer";
 import { generateBolnaBatchFilename } from "../../domain/rules/bolna-filename.rules";
 import { env } from "../../../../shared/config/env";
@@ -60,11 +64,12 @@ export class ResumeBatchUseCase {
       });
     }
 
-    const campaign = await this.campaignRepo.findByIdWithRelations(
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
       tenantId,
       campaignId,
     );
-    if (!campaign || !campaign.assistant) throw new CampaignNotFoundError();
+    if (!campaign.assistant) throw new CampaignNotFoundError();
 
     // Create new batch
     const newBatch = await this.batchRepo.create({
@@ -135,6 +140,14 @@ export class ResumeBatchUseCase {
     const updatedBatch = await this.batchRepo.update(newBatch.id, {
       bolnaBatchId,
     });
+
+    await reopenCampaignForNewBatchIfNeeded(
+      this.campaignRepo,
+      tenantId,
+      campaignId,
+      needsReopen,
+      campaign.startedAt ? null : new Date(),
+    );
 
     this.logger?.info("Batch resumed", {
       action: "batch.resume",
