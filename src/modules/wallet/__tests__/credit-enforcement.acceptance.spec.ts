@@ -57,6 +57,7 @@ class SharedIncidentStore {
     tenantId,
     state: "OPEN",
     triggerBalancePaisa: 0,
+    detectedAt: new Date("2026-01-01T00:00:00Z"),
     warningSentAt: null as Date | null,
     enforcementStartedAt: null as Date | null,
     resolvedAt: null as Date | null,
@@ -98,6 +99,15 @@ function makeWalletRepo(store: SharedWalletStore) {
 function makeIncidentRepo(store: SharedIncidentStore) {
   return {
     claim: vi.fn(async (input: { triggerBalancePaisa: number }) => {
+      // Match the real repository: a later crossing reopens the singleton with
+      // a fresh timestamp instead of reusing the previous incident lifetime.
+      if (store.state.state === "RESOLVED") {
+        store.state.state = "OPEN";
+        store.state.detectedAt = new Date();
+        store.state.resolvedAt = null;
+        store.state.enforcementStartedAt = null;
+        store.state.providerActions = [];
+      }
       store.state.triggerBalancePaisa = input.triggerBalancePaisa;
       return { ...store.state };
     }),
@@ -294,9 +304,10 @@ describe("credit enforcement acceptance — warning and enforcement are independ
     expect(h.stop.stop).toHaveBeenCalledTimes(1);
     expect(h.stop.stop).toHaveBeenCalledWith(tenantId);
     expect(h.incidentStore.state.state).toBe("BLOCKED");
+    const occurrenceKey = `enforce:${incidentId}:${h.incidentStore.state.detectedAt.getTime()}`;
     expect(h.outbox.envelopes.map((e) => e.idempotencyKey)).toEqual([
-      `enforce:${incidentId}`,
-      `enforce:${incidentId}:admin:admin@example.test`,
+      occurrenceKey,
+      `${occurrenceKey}:admin:admin@example.test`,
     ]);
     expect(h.stop.resume).not.toHaveBeenCalled();
   });
@@ -440,6 +451,30 @@ describe("credit enforcement acceptance — warning and enforcement are independ
     expect(
       h.outbox.envelopes.filter((e) => e.idempotencyKey.startsWith("enforce:")),
     ).toHaveLength(2);
+  });
+
+  it("a second block after reopening sends a fresh enforcement notification", async () => {
+    const h = makeHarness();
+    h.walletStore.wallet.cashBalance = 1_000;
+    await h.debit.execute(callInput);
+    expect(h.incidentStore.state.state).toBe("BLOCKED");
+    const firstKey = `enforce:${incidentId}:${h.incidentStore.state.detectedAt.getTime()}`;
+
+    h.walletStore.wallet.cashBalance = 200_000;
+    await h.enforcement.enforce({ tenantId, reason: "recharge" });
+    expect(h.incidentStore.state.state).toBe("RESOLVED");
+
+    h.walletStore.wallet.cashBalance = 1_000;
+    await h.debit.execute({ ...callInput, callId: "call-acceptance-2" });
+    expect(h.incidentStore.state.state).toBe("BLOCKED");
+
+    const keys = h.outbox.envelopes
+      .filter((e) => e.idempotencyKey.startsWith("enforce:"))
+      .map((e) => e.idempotencyKey);
+    expect(keys).toContain(firstKey);
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(4);
+    expect(h.stop.resume).not.toHaveBeenCalled();
   });
 
   it("a recharge alone closes a blocked incident via the reconciler without resuming work", async () => {

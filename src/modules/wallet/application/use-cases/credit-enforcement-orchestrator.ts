@@ -151,6 +151,7 @@ export class CreditEnforcementOrchestrator {
 
     await this.enqueueEnforcementEmails({
       incidentId: incident.id,
+      occurrenceAt: incident.detectedAt,
       tenantId: input.tenantId,
       reason: input.reason,
       triggerBalancePaisa,
@@ -192,11 +193,15 @@ export class CreditEnforcementOrchestrator {
    * Enqueue the tenant notice and the internal admin copy. Enqueue is a durable
    * DB write, not a delivery — the relay owns retries/backoff/DLQ. Any failure
    * here is logged and swallowed so email can never block the block decision.
-   * Keys are derived from the incident id so retries and duplicate webhooks
-   * cannot create a second envelope.
+   * Keys are derived from the incident id plus the crossing timestamp. The
+   * singleton incident is reopened on a later crossing, so the incident id
+   * alone would suppress the notification for a second, genuine block. The
+   * timestamp is stable within one crossing, keeping retries and duplicate
+   * webhooks deduplicated.
    */
   private async enqueueEnforcementEmails(input: {
     incidentId: string;
+    occurrenceAt: Date;
     tenantId: string;
     reason?: string;
     triggerBalancePaisa: number;
@@ -208,6 +213,7 @@ export class CreditEnforcementOrchestrator {
         this.deps.adminEmails(),
       ]);
 
+      const occurrence = input.occurrenceAt.getTime();
       const templateInput = {
         tenantId: input.tenantId,
         balancePaisa: input.triggerBalancePaisa,
@@ -219,7 +225,7 @@ export class CreditEnforcementOrchestrator {
       if (tenantTo) {
         await this.enqueueSafely(
           {
-            idempotencyKey: `enforce:${input.incidentId}`,
+            idempotencyKey: `enforce:${input.incidentId}:${occurrence}`,
             to: tenantTo,
             subject: "KOOI — wallet balance exhausted",
             html: walletBlockedEmailHtml(templateInput),
@@ -233,7 +239,7 @@ export class CreditEnforcementOrchestrator {
         if (!adminEmail) continue;
         await this.enqueueSafely(
           {
-            idempotencyKey: `enforce:${input.incidentId}:admin:${adminEmail}`,
+            idempotencyKey: `enforce:${input.incidentId}:${occurrence}:admin:${adminEmail}`,
             to: adminEmail,
             subject: "KOOI — credit enforcement (internal)",
             html: adminHtml,

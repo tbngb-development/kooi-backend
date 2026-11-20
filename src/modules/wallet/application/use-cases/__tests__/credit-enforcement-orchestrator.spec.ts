@@ -8,6 +8,8 @@ import type { Logger } from "../../../../../shared/logging/logger.interface";
 
 const tenantId = "tenant-1";
 const incidentId = "incident-1";
+const occurredAt = new Date("2026-01-01T00:00:00Z");
+const enforcementKey = `enforce:${incidentId}:${occurredAt.getTime()}`;
 
 const logger = {
   debug: vi.fn(),
@@ -21,6 +23,7 @@ const openIncident = {
   tenantId,
   state: "OPEN",
   triggerBalancePaisa: -100,
+  detectedAt: occurredAt,
   enforcementStartedAt: null,
   providerActions: [],
 } as any;
@@ -106,7 +109,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       expect.any(Date),
     );
     expect(deps.emailOutbox.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: `enforce:${incidentId}` }),
+      expect.objectContaining({ idempotencyKey: enforcementKey }),
     );
   });
 
@@ -398,6 +401,40 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     expect(deps.incidents.markBlocked).not.toHaveBeenCalled();
   });
 
+  it("reuses a key within one crossing but uses a new key after the singleton reopens", async () => {
+    const deps = makeDeps();
+    const orchestrator = new CreditEnforcementOrchestrator(deps);
+
+    await orchestrator.enforce({ tenantId, reason: "attempt one" });
+    await orchestrator.enforce({ tenantId, reason: "retry" });
+
+    const firstKeys = vi
+      .mocked(deps.emailOutbox.enqueue)
+      .mock.calls.map((call) => call[0].idempotencyKey);
+    expect(firstKeys).toEqual([
+      enforcementKey,
+      `${enforcementKey}:admin:admin@example.com`,
+      enforcementKey,
+      `${enforcementKey}:admin:admin@example.com`,
+    ]);
+
+    const laterCrossing = {
+      ...openIncident,
+      detectedAt: new Date(occurredAt.getTime() + 60_000),
+    };
+    const reopenedDeps = makeDeps({
+      incidents: makeIncidents({
+        claim: vi.fn().mockResolvedValue(laterCrossing),
+      }),
+    });
+    await new CreditEnforcementOrchestrator(reopenedDeps).enforce({ tenantId });
+
+    const laterKey = vi.mocked(reopenedDeps.emailOutbox.enqueue).mock.calls[0][0]
+      .idempotencyKey;
+    expect(laterKey).not.toBe(enforcementKey);
+    expect(laterKey).toContain(`${occurredAt.getTime() + 60_000}`);
+  });
+
   it("enqueues a distinct internal admin copy alongside the tenant notice", async () => {
     const deps = makeDeps({
       adminEmails: vi
@@ -411,9 +448,9 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
     const calls = vi.mocked(deps.emailOutbox.enqueue).mock.calls.map((c) => c[0]);
     expect(calls).toHaveLength(3);
     expect(calls.map((c) => c.idempotencyKey)).toEqual([
-      "enforce:incident-1",
-      "enforce:incident-1:admin:admin1@example.com",
-      "enforce:incident-1:admin:admin2@example.com",
+      enforcementKey,
+      `${enforcementKey}:admin:admin1@example.com`,
+      `${enforcementKey}:admin:admin2@example.com`,
     ]);
     expect(calls[0].to).toBe("owner@example.com");
     expect(calls[0].subject).toContain("wallet");
@@ -459,7 +496,7 @@ describe("CreditEnforcementOrchestrator — U-04 single awaited path", () => {
       "Enforcement email enqueue failed",
       expect.any(Error),
       expect.objectContaining({
-        idempotencyKey: "enforce:incident-1:admin:admin1@example.com",
+        idempotencyKey: `${enforcementKey}:admin:admin1@example.com`,
       }),
     );
   });
