@@ -16,6 +16,19 @@ export function isTerminalCallStatus(status: CallStatus): boolean {
 }
 
 /**
+ * Whether a completion event may still be applied to a call in `status`.
+ *
+ * A late completion must not overwrite a different terminal outcome — most
+ * importantly a call stopped by credit enforcement, but also NO_ANSWER/BUSY/
+ * FAILED. Replaying an already COMPLETED call remains allowed: the webhook
+ * controller returns 500 when a downstream step throws, so the provider retry
+ * has to re-run the completion path (the wallet debit is idempotent).
+ */
+export function canApplyCallCompletion(status: CallStatus): boolean {
+  return !isTerminalCallStatus(status) || status === "COMPLETED";
+}
+
+/**
  * Validates whether transitioning from currentStatus to nextStatus is permissible.
  * Specifically prevents out-of-order webhooks (e.g. late 'ringing' or 'calling' events)
  * from regressing calls that have already reached a terminal state.

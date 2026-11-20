@@ -10,7 +10,10 @@ import {
   mapLastRetryToLeadStatus,
   mapRetryStatusToCallStatus,
 } from "../../domain/rules/call-retry.rules";
-import { canTransitionCallStatus } from "../../domain/rules/call-state-machine.rules";
+import {
+  canApplyCallCompletion,
+  canTransitionCallStatus,
+} from "../../domain/rules/call-state-machine.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export class ProcessCallWebhookUseCase {
@@ -211,6 +214,20 @@ export class ProcessCallWebhookUseCase {
       case "call-completed": {
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
         if (!resolved) break;
+
+        // A late completion after a stop/no-answer/busy/failure would resurrect
+        // a terminal call and re-run billing and lifecycle side effects. A
+        // duplicate completion of an already COMPLETED call is still replayed
+        // so provider retries after a downstream failure can finish the work.
+        if (!canApplyCallCompletion(resolved.status)) {
+          this.logger?.warn("Ignored late completion event on terminal call", {
+            action: "webhook.call.completed_ignored",
+            callId: resolved.id,
+            currentStatus: resolved.status,
+            incomingState: state,
+          });
+          break;
+        }
 
         await this.callCompletion.handleCallCompleted(resolved, payload, callId);
         break;
