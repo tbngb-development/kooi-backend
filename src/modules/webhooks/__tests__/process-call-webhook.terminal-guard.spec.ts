@@ -182,10 +182,8 @@ describe("Bolna call webhook — late completion terminal guard", () => {
     },
   );
 
-  it("allows retry dispositions to advance between NO_ANSWER, BUSY and FAILED", async () => {
+  it("does not let a same-attempt disposition overwrite a different terminal outcome", async () => {
     for (const [current, incoming] of [
-      ["CALLING", "no-answer"],
-      ["NO_ANSWER", "no-answer"],
       ["NO_ANSWER", "busy"],
       ["BUSY", "failed"],
       ["FAILED", "no-answer"],
@@ -195,11 +193,32 @@ describe("Bolna call webhook — late completion terminal guard", () => {
         callWithStatus(current),
       );
 
-      await useCase.execute(completionPayload(incoming));
+      await useCase.execute({
+        ...completionPayload(incoming),
+        retry_count: 0,
+      });
     }
 
-    expect(terminal.handleCallTerminal).toHaveBeenCalledTimes(5);
-    expect(terminal.handleCallCanceled).toHaveBeenCalledTimes(1);
+    expect(terminal.handleCallTerminal).not.toHaveBeenCalled();
+    expect(terminal.handleCallCanceled).not.toHaveBeenCalled();
+  });
+
+  it("allows a higher-retry disposition after a terminal attempt", async () => {
+    vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
+      callWithStatus("NO_ANSWER"),
+    );
+
+    await useCase.execute({
+      ...completionPayload("busy"),
+      retry_count: 1,
+    });
+
+    expect(terminal.handleCallTerminal).toHaveBeenCalledTimes(1);
+    expect(terminal.handleCallTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "NO_ANSWER" }),
+      "BUSY",
+      expect.any(Object),
+    );
   });
 
   it("replays a stop event on an already STOPPED call", async () => {

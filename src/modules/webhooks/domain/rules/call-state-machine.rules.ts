@@ -8,11 +8,30 @@ const TERMINAL_CALL_STATUSES = new Set<CallStatus>([
   "BUSY",
 ]);
 
+const RETRYABLE_TERMINAL_CALL_STATUSES = new Set<CallStatus>([
+  "NO_ANSWER",
+  "BUSY",
+  "FAILED",
+]);
+
+export interface CallTransitionContext {
+  currentAttempt?: number;
+  incomingAttempt?: number;
+}
+
 /**
  * Checks if a call status is terminal (cannot transition back to active/in-progress states).
  */
 export function isTerminalCallStatus(status: CallStatus): boolean {
   return TERMINAL_CALL_STATUSES.has(status);
+}
+
+/**
+ * Terminal outcomes that Bolna may retry. COMPLETED and STOPPED are final;
+ * NO_ANSWER, BUSY and FAILED can be superseded by a higher retry attempt.
+ */
+export function isRetryableTerminalCallStatus(status: CallStatus): boolean {
+  return RETRYABLE_TERMINAL_CALL_STATUSES.has(status);
 }
 
 /**
@@ -30,28 +49,33 @@ export function canApplyCallCompletion(status: CallStatus): boolean {
 
 /**
  * Validates whether transitioning from currentStatus to nextStatus is permissible.
- * Specifically prevents out-of-order webhooks (e.g. late 'ringing' or 'calling' events)
- * from regressing calls that have already reached a terminal state.
+ *
+ * Identical terminal replays remain allowed. A retryable terminal disposition
+ * (NO_ANSWER/BUSY/FAILED) may only be superseded when the incoming event carries
+ * a strictly higher attempt number; otherwise a stale/duplicate webhook could
+ * overwrite the actual outcome. COMPLETED and STOPPED are always final.
  */
 export function canTransitionCallStatus(
   currentStatus: CallStatus,
   nextStatus: CallStatus,
+  context: CallTransitionContext = {},
 ): boolean {
   if (currentStatus === nextStatus) return true;
 
-  // Once completed or stopped, a call cannot regress to calling or scheduled
   if (currentStatus === "COMPLETED" || currentStatus === "STOPPED") {
     return false;
   }
 
-  // Non-answer, busy, or failed cannot regress to in-flight or scheduled states
-  if (
-    (currentStatus === "NO_ANSWER" ||
-      currentStatus === "BUSY" ||
-      currentStatus === "FAILED") &&
-    (nextStatus === "CALLING" || nextStatus === "PENDING" || nextStatus === "SCHEDULED")
-  ) {
-    return false;
+  if (nextStatus === "PENDING") return false;
+
+  if (isRetryableTerminalCallStatus(currentStatus)) {
+    const { currentAttempt, incomingAttempt } = context;
+    const isHigherRetryAttempt =
+      typeof currentAttempt === "number" &&
+      typeof incomingAttempt === "number" &&
+      incomingAttempt > currentAttempt;
+
+    return isHigherRetryAttempt;
   }
 
   return true;

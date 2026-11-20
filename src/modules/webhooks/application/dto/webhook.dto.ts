@@ -7,10 +7,10 @@ export interface WebhookMessage {
 export interface WebhookCallPayload {
   id?: string;
   execution_id?: string;
-  run_id?: string;
   agent_id?: string;
   batch_id?: string;
   status: string;
+  termination_reason?: string | null;
   transcript?: string | null;
   summary?: string | null;
   conversation_duration?: number;

@@ -1,3 +1,4 @@
+import type { CallStatus } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   WebhookRepository,
@@ -15,10 +16,15 @@ export class CallResolverService {
   /**
    * Resolves or provisions a call record based on Bolna call identifier,
    * falling back to batch run details and lead phone number if needed.
+   *
+   * `initialStatus` is used only when provisioning a brand-new row. `queued`
+   * provisions PENDING; later in-flight events provision CALLING. A retry must
+   * update the existing execution row rather than create a second call.
    */
   async resolveCallRecord(
     bolnaCallId: string,
     payload: WebhookCallPayload,
+    initialStatus: CallStatus = "CALLING",
   ): Promise<ResolvedCallContext | null> {
     const call = await this.webhookRepo.findCallByBolnaCallId(bolnaCallId);
     if (call) {
@@ -46,7 +52,7 @@ export class CallResolverService {
          payload.user_number)
       : (payload.telephony_data?.from_number ??
          payload.user_number);
-    const retried = payload.batch_run_details?.retried ?? 0;
+    const newLeadStatus = initialStatus === "PENDING" ? "PENDING" : "CALLING";
 
     if (!bolnaBatchId && payload.agent_id && phone) {
       // Non-batch call fallback (Quick Dial or Inbound)
@@ -125,7 +131,7 @@ export class CallResolverService {
               assistantId: assistant.id,
               type: callType,
               source: callSource,
-              status: "CALLING",
+              status: newLeadStatus,
             },
           });
         }
@@ -137,12 +143,12 @@ export class CallResolverService {
           leadId: lead.id,
           type: callType,
           source: callSource,
-          status: "CALLING",
+          status: initialStatus,
           startedAt: new Date(),
           agentNumber,
         });
 
-        await this.webhookRepo.updateLeadStatus(lead.id, "CALLING");
+        await this.webhookRepo.updateLeadStatus(lead.id, newLeadStatus);
         return newCall;
       }
     }
@@ -161,36 +167,42 @@ export class CallResolverService {
 
     if (!lead) return null;
 
+    const agentNumber =
+      payload.agent_number ??
+      payload.telephony_data?.from_number ??
+      null;
+
     const existingCall = await this.webhookRepo.findCallByLeadAndBatch(
       lead.id,
       batch.id,
     );
 
-    // If an earlier attempt exists and was left non-terminal, finalize it with previous status
+    // A retry belongs to the same execution row. Only a genuinely finalized
+    // call (COMPLETED/STOPPED) may be replaced by a new execution row.
     if (
       existingCall &&
-      (existingCall.status === "SCHEDULED" ||
-        existingCall.status === "CALLING" ||
-        existingCall.status === "PENDING")
+      existingCall.status !== "COMPLETED" &&
+      existingCall.status !== "STOPPED"
     ) {
-      const lastRetryStatus =
-        payload.retry_history?.[payload.retry_history.length - 1]?.status;
-      const terminalStatus = lastRetryStatus
-        ? lastRetryStatus.toLowerCase().includes("busy")
-          ? "BUSY"
-          : "NO_ANSWER"
-        : "NO_ANSWER";
+      if (
+        existingCall.bolnaCallId !== bolnaCallId ||
+        (!existingCall.agentNumber && agentNumber)
+      ) {
+        await this.webhookRepo.updateCallStatusAndHistory(
+          existingCall.id,
+          bolnaCallId,
+          existingCall.status,
+          (existingCall.callHistory as any[]) ?? [],
+          agentNumber ?? existingCall.agentNumber ?? null,
+        );
+      }
 
-      await this.webhookRepo.updateCallTerminalState(existingCall.id, {
-        status: terminalStatus,
-        endedAt: new Date(),
-      });
+      return {
+        ...existingCall,
+        bolnaCallId,
+        agentNumber: agentNumber ?? existingCall.agentNumber ?? null,
+      };
     }
-
-    const agentNumber =
-      payload.agent_number ??
-      payload.telephony_data?.from_number ??
-      null;
 
     const newCall = await this.webhookRepo.createCall({
       bolnaCallId,
@@ -200,12 +212,12 @@ export class CallResolverService {
       batchId: batch.id,
       type: "OUTBOUND",
       source: "CAMPAIGN",
-      status: "CALLING",
+      status: initialStatus,
       startedAt: new Date(),
       agentNumber,
     });
 
-    await this.webhookRepo.updateLeadStatus(lead.id, "CALLING");
+    await this.webhookRepo.updateLeadStatus(lead.id, newLeadStatus);
 
     this.logger?.debug("Provisioned new call context for webhook", {
       action: "webhook.call_resolved_new",

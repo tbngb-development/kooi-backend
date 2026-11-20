@@ -14,6 +14,21 @@ export interface EvaluateCallRetryResult {
   leadStatus: LeadStatus;
 }
 
+export interface BolnaRetryEventLike {
+  retry_count?: number | null;
+  retry_history?: ReadonlyArray<{
+    attempt?: number | null;
+    status?: string | null;
+  }> | null;
+  batch_run_details?: {
+    retried?: number | null;
+  } | null;
+}
+
+export interface CallHistoryLike {
+  callHistory?: unknown[] | null;
+}
+
 /**
  * Pure domain rules evaluating whether a non-answering/busy/failed call should
  * be scheduled for retry or transitioned to a terminal state.
@@ -66,25 +81,89 @@ export function evaluateCallRetry(
   };
 }
 
+function normalizeRetryStatus(rawStatus?: string | null): string {
+  return (rawStatus ?? "").toLowerCase().trim().replace(/_/g, "-");
+}
+
 /**
- * Maps the last retry status from a scheduled webhook into the appropriate LeadStatus.
+ * Maps a Bolna execution status into the corresponding CallStatus.
+ * Scheduled/rescheduled statuses represent a retry that has not dialed yet.
+ */
+export function mapRetryStatusToCallStatus(rawStatus?: string | null): CallStatus {
+  const normalized = normalizeRetryStatus(rawStatus);
+  if (
+    normalized === "scheduled" ||
+    normalized === "rescheduled" ||
+    normalized === "re-scheduled"
+  ) {
+    return "SCHEDULED";
+  }
+  if (normalized.includes("busy")) return "BUSY";
+  if (normalized.includes("no-answer") || normalized.includes("no_answer")) return "NO_ANSWER";
+  if (normalized.includes("completed")) return "COMPLETED";
+  return "FAILED";
+}
+
+/**
+ * Maps a Bolna execution status into the corresponding LeadStatus.
+ * A scheduled retry means no dial happened, so the lead returns to PENDING.
  */
 export function mapLastRetryToLeadStatus(rawStatus?: string | null): LeadStatus {
-  if (!rawStatus) return "FAILED";
-  const normalized = rawStatus.toLowerCase();
+  const normalized = normalizeRetryStatus(rawStatus);
+  if (
+    normalized === "scheduled" ||
+    normalized === "rescheduled" ||
+    normalized === "re-scheduled"
+  ) {
+    return "PENDING";
+  }
   if (normalized === "busy") return "BUSY";
   if (normalized === "no-answer" || normalized === "no_answer") return "NO_ANSWER";
   return "FAILED";
 }
 
 /**
- * Maps the last retry status from a scheduled webhook into the appropriate CallStatus.
+ * Attempt number carried by a webhook, 1-based.
+ *
+ * retry_count is primary ("attempts so far", 0 for the first attempt).
+ * retry_history is a cross-check/fallback only. Schedule timestamps are
+ * deliberately ignored because they do not identify event order.
  */
-export function mapRetryStatusToCallStatus(rawStatus?: string | null): CallStatus {
-  if (!rawStatus) return "FAILED";
-  const normalized = rawStatus.toLowerCase();
-  if (normalized.includes("busy")) return "BUSY";
-  if (normalized.includes("no-answer") || normalized.includes("no_answer")) return "NO_ANSWER";
-  if (normalized.includes("completed")) return "COMPLETED";
-  return "FAILED";
+export function getBolnaEventAttempt(payload: BolnaRetryEventLike): number {
+  const retryCount = payload.retry_count ?? payload.batch_run_details?.retried;
+  if (typeof retryCount === "number" && Number.isFinite(retryCount)) {
+    return Math.max(1, Math.trunc(retryCount) + 1);
+  }
+
+  const history = Array.isArray(payload.retry_history)
+    ? payload.retry_history
+    : [];
+  const attempts = history
+    .map((entry, index) =>
+      typeof entry?.attempt === "number" && Number.isFinite(entry.attempt)
+        ? Math.trunc(entry.attempt)
+        : index + 1,
+    )
+    .filter((attempt) => attempt > 0);
+
+  return attempts.length > 0 ? Math.max(...attempts) : 1;
+}
+
+/**
+ * Highest attempt already persisted for a call. DB updatedAt is only a
+ * tiebreaker inside an attempt; attempt ordering comes from callHistory.
+ */
+export function getCallRecordAttempt(call: CallHistoryLike): number {
+  const history = Array.isArray(call.callHistory) ? call.callHistory : [];
+  const attempts = history
+    .map((entry, index) => {
+      const attempt = (entry as { attempt?: unknown } | null)?.attempt;
+      if (typeof attempt === "number" && Number.isFinite(attempt)) {
+        return Math.trunc(attempt);
+      }
+      return index + 1;
+    })
+    .filter((attempt) => attempt > 0);
+
+  return attempts.length > 0 ? Math.max(...attempts) : 0;
 }

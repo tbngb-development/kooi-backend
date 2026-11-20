@@ -57,8 +57,12 @@ describe("Bolna call webhook billing status correctness", () => {
     vi.clearAllMocks();
     repo = {
       updateCallTerminalState: vi.fn().mockResolvedValue(undefined),
+      updateCallStatusAndHistory: vi.fn().mockResolvedValue(undefined),
       updateLeadStatus: vi.fn().mockResolvedValue(undefined),
       updateCallCostBreakdown: vi.fn().mockResolvedValue(undefined),
+      findBatchStatusById: vi.fn().mockResolvedValue("RUNNING"),
+      updateBatchStatus: vi.fn().mockResolvedValue(undefined),
+      markCampaignRunningIfActive: vi.fn().mockResolvedValue(true),
     } as unknown as WebhookRepository;
 
     resolver = {
