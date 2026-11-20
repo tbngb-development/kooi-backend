@@ -20,7 +20,7 @@ vi.mock("../../../shared/config/database/prisma", () => ({
       updateMany: vi.fn(),
     },
     campaign: {
-      update: vi.fn(),
+      updateMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -120,8 +120,8 @@ describe("PrismaCampaignStopAdapter — Sarvam enforcement stops", () => {
       where: expect.objectContaining({ batchId: "batch-sarvam-1" }),
       data: { status: "STOPPED", stoppedReason: "LOW_BALANCE" },
     });
-    expect(prisma.campaign.update).toHaveBeenCalledWith({
-      where: { id: "campaign-1" },
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "campaign-1" }),
       data: expect.objectContaining({ status: "COMPLETED" }),
     });
 

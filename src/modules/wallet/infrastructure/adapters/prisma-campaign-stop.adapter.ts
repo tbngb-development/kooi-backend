@@ -9,6 +9,8 @@ import type {
   ProviderStopTarget,
 } from "../../application/interfaces/campaign-stop-adapter.interface";
 import { providerStopTargetKey } from "../../domain/rules/provider-stop-actions";
+import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 
 const STOPPABLE_BATCH_STATUSES = ["RUNNING", "SCHEDULED"] as const;
 const STOPPABLE_CALL_STATUSES = ["SCHEDULED", "CALLING", "PENDING"] as const;
@@ -180,28 +182,24 @@ export class PrismaCampaignStopAdapter implements ICampaignStopAdapter {
   ): Promise<void> {
     for (const campaignId of campaignIds) {
       try {
-        const statuses = await prisma.leadBatch.findMany({
-          where: { campaignId },
+        const batchRows = await prisma.leadBatch.findMany({
+          where: { campaignId, isDeleted: false },
           select: { status: true },
         });
-
-        const allTerminal = statuses.every(
-          (s) =>
-            s.status === "COMPLETED" ||
-            s.status === "STOPPED" ||
-            s.status === "FAILED",
+        const decision = decideCampaignStatusFromBatches(
+          batchRows.map((b) => b.status),
         );
 
-        if (!allTerminal) continue;
+        if (decision.action !== "settle") continue;
 
-        const allFailed =
-          statuses.length > 0 && statuses.every((s) => s.status === "FAILED");
-        await prisma.campaign.update({
-          where: { id: campaignId },
-          data: {
-            status: allFailed ? "FAILED" : "COMPLETED",
-            completedAt: new Date(),
+        await prisma.campaign.updateMany({
+          where: {
+            id: campaignId,
+            ...activeCampaignGuard(new Date(), {
+              allowLowBalanceMarked: true,
+            }),
           },
+          data: { status: decision.status, completedAt: new Date() },
         });
       } catch (err) {
         this.deps.logger.error(

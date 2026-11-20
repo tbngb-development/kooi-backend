@@ -19,6 +19,7 @@ import type {
   CallHistoryItem,
   RetryConfig,
 } from "../../../../shared/types/bolna.types";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 
 const callSelectFields = {
   id: true,
@@ -367,6 +368,21 @@ export class PrismaWebhookRepository implements WebhookRepository {
         status: "RUNNING",
         ...(startedAt && { startedAt }),
       },
+    });
+    return result.count > 0;
+  }
+
+  async settleCampaignIfActive(
+    campaignId: string,
+    status: "COMPLETED" | "FAILED",
+    completedAt: Date,
+  ): Promise<boolean> {
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status, completedAt },
     });
     return result.count > 0;
   }

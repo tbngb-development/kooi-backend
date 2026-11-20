@@ -3,12 +3,19 @@ import type {
   ResolvedCallContext,
 } from "../interfaces/webhook-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { CampaignStatusReconciler } from "../../../campaigns/application/services/campaign-status-reconciler.service";
 
 export class CallLifecycleService {
+  private readonly statusReconciler: CampaignStatusReconciler;
+
   constructor(
     private readonly webhookRepo: WebhookRepository,
     private readonly logger?: Logger,
-  ) {}
+    statusReconciler?: CampaignStatusReconciler,
+  ) {
+    this.statusReconciler =
+      statusReconciler ?? new CampaignStatusReconciler(webhookRepo, logger);
+  }
 
   /**
    * Reconciles batch and campaign completion states after a terminal call event.
@@ -40,32 +47,10 @@ export class CallLifecycleService {
     );
 
     if (statuses.length > 0) {
-      // Ensure unstarted/draft "CREATED" batches never block campaign completion.
-      // Reconciles status based on whether any active dialing/scheduling is in progress.
-      const hasActiveBatches = statuses.some(
-        (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-      );
-
-      if (!hasActiveBatches) {
-        const executedBatches = statuses.filter((s) => s !== "CREATED");
-
-        if (executedBatches.length > 0) {
-          const allFailed = executedBatches.every((s) => s === "FAILED");
-          const finalCampaignStatus = allFailed ? "FAILED" : "COMPLETED";
-
-          await this.webhookRepo.updateCampaignStatus(
-            call.campaignId,
-            finalCampaignStatus,
-            new Date(),
-          );
-
-          this.logger?.info("Campaign marked as finished from call webhook", {
-            action: "webhook.call.campaign_completed",
-            campaignId: call.campaignId,
-            finalCampaignStatus,
-          });
-        }
-      }
+      // All batch-based finalizers share one decision rule. A CREATED batch is
+      // pending work, so a stale webhook can no longer finalize a campaign
+      // while a newly added batch is waiting to run.
+      await this.statusReconciler.reconcile(call.campaignId);
     } else {
       const [legacyActiveLeads, legacyActiveCalls] = await Promise.all([
         this.webhookRepo.countActiveLeadsInCampaignLegacy(call.campaignId),

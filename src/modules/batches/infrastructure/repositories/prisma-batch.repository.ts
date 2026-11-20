@@ -23,6 +23,8 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { getBatchExecutionMetricsMap } from "../../../campaigns/infrastructure/queries/lead-execution-metrics.query";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
+import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
 
 export class PrismaBatchRepository implements BatchRepository {
   private async getBatchMetricsMap(
@@ -570,42 +572,20 @@ export class PrismaBatchRepository implements BatchRepository {
   }
 
   async recalculateCampaignStats(campaignId: string): Promise<void> {
-    const batches = await prisma.leadBatch.findMany({
-      where: { campaignId, isDeleted: false },
-      select: { status: true },
+    const statuses = await this.getAllBatchStatuses(campaignId);
+    const decision = decideCampaignStatusFromBatches(statuses);
+
+    if (decision.action !== "settle") {
+      return;
+    }
+
+    await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status: decision.status, completedAt: new Date() },
     });
-
-    const statuses = batches.map((b) => b.status);
-
-    const hasActiveBatches = statuses.some(
-      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-    );
-
-    let campaignStatusUpdate: {
-      status?: "COMPLETED" | "FAILED";
-      completedAt?: Date;
-    } = {};
-
-    if (statuses.length > 0 && !hasActiveBatches) {
-      const allTerminal = statuses.every(
-        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
-      );
-
-      if (allTerminal) {
-        const allFailed = statuses.every((s) => s === "FAILED");
-        campaignStatusUpdate = {
-          status: allFailed ? "FAILED" : "COMPLETED",
-          completedAt: new Date(),
-        };
-      }
-    }
-
-    if (Object.keys(campaignStatusUpdate).length > 0) {
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: campaignStatusUpdate,
-      });
-    }
   }
 
   async findExistingPhones(
