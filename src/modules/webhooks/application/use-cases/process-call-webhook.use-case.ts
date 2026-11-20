@@ -52,6 +52,7 @@ export class ProcessCallWebhookUseCase {
   }
 
   async execute(payload: WebhookCallPayload): Promise<void> {
+    this.logger?.debug("webhook payload: ", { payload });
     const callId = payload.id ?? payload.execution_id ?? payload.run_id;
     if (!callId) {
       throw new WebhookResolutionError("Missing execution / call ID.");
