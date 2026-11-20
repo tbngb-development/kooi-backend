@@ -45,6 +45,21 @@ describe("campaign status reconciliation rule", () => {
     expect(evaluateCampaignStatusFromBatches([])).toBeNull();
     expect(decideCampaignStatusFromBatches([])).toEqual({ action: "none" });
   });
+
+  it("keeps the campaign RUNNING while a new batch is still processing after an old batch completes", () => {
+    expect(
+      evaluateCampaignStatusFromBatches(["COMPLETED", "PROCESSING"]),
+    ).toBe("RUNNING");
+    expect(
+      decideCampaignStatusFromBatches(["COMPLETED", "PROCESSING"]),
+    ).toEqual({ action: "mark-running" });
+  });
+
+  it("finalizes only after every batch is terminal", () => {
+    expect(
+      decideCampaignStatusFromBatches(["COMPLETED", "COMPLETED"]),
+    ).toEqual({ action: "settle", status: "COMPLETED" });
+  });
 });
 
 describe("CampaignStatusReconciler", () => {
@@ -117,5 +132,42 @@ describe("CampaignStatusReconciler", () => {
       "FAILED",
       expect.any(Date),
     );
+  });
+
+  it("does not finalize when a late completion arrives while new work remains", async () => {
+    (port.getAllBatchStatuses as ReturnType<typeof vi.fn>).mockResolvedValue([
+      "COMPLETED",
+      "CREATED",
+    ] satisfies BatchStatus[]);
+
+    const reconciler = new CampaignStatusReconciler(port);
+    await reconciler.reconcile("campaign-1");
+
+    expect(port.markCampaignRunningIfActive).toHaveBeenCalledWith(
+      "campaign-1",
+      expect.any(Date),
+    );
+    expect(port.settleCampaignIfActive).not.toHaveBeenCalled();
+  });
+
+  it("never falls back to an unguarded write when the atomic settle guard rejects a late finalize", async () => {
+    (port.getAllBatchStatuses as ReturnType<typeof vi.fn>).mockResolvedValue([
+      "COMPLETED",
+      "COMPLETED",
+    ] satisfies BatchStatus[]);
+    (port.settleCampaignIfActive as ReturnType<typeof vi.fn>).mockResolvedValue(
+      false,
+    );
+
+    const reconciler = new CampaignStatusReconciler(port);
+    const applied = await reconciler.reconcile("campaign-1");
+
+    expect(applied).toBe(false);
+    expect(port.settleCampaignIfActive).toHaveBeenCalledWith(
+      "campaign-1",
+      "COMPLETED",
+      expect.any(Date),
+    );
+    expect(port.updateCampaignStatus).not.toHaveBeenCalled();
   });
 });

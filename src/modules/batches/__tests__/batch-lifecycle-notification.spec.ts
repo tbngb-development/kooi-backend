@@ -127,6 +127,8 @@ describe("BatchProcessingWorker lifecycle notifications", () => {
 
     campaignRepo = {
       findByIdWithRelations: vi.fn().mockResolvedValue(bolnaCampaign),
+      hasLowBalanceStoppedLeads: vi.fn().mockResolvedValue(false),
+      reopenCampaignForNewBatch: vi.fn().mockResolvedValue(true),
       updateStatus: vi.fn().mockResolvedValue({}),
     } as unknown as CampaignRepository;
 
@@ -357,5 +359,49 @@ describe("BatchProcessingWorker lifecycle notifications", () => {
 
     expect(batchRepo.update).toHaveBeenCalled();
     expect(publisher.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopens a completed Bolna campaign when a new batch runs immediately", async () => {
+    vi.mocked(campaignRepo.findByIdWithRelations).mockResolvedValue({
+      ...bolnaCampaign,
+      status: "COMPLETED",
+      startedAt: new Date("2025-01-01T00:00:00.000Z"),
+    } as any);
+
+    const job = makeJob();
+    job.data.runImmediately = true;
+
+    await makeBolnaWorker().process(job);
+
+    expect(batchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({ status: "RUNNING" }),
+    );
+    expect(campaignRepo.reopenCampaignForNewBatch).toHaveBeenCalledWith(
+      campaignId,
+      { startedAt: null },
+    );
+    expect(campaignRepo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it("aborts new batch work before provider calls for a credit-enforcement-stopped campaign", async () => {
+    vi.mocked(campaignRepo.findByIdWithRelations).mockResolvedValue({
+      ...bolnaCampaign,
+      status: "COMPLETED",
+    } as any);
+    vi.mocked(campaignRepo.hasLowBalanceStoppedLeads).mockResolvedValueOnce(
+      true,
+    );
+
+    await makeBolnaWorker().process(makeJob());
+
+    expect(campaignRepo.hasLowBalanceStoppedLeads).toHaveBeenCalledWith(
+      campaignId,
+    );
+    expect(bolnaProvider.createBatch).not.toHaveBeenCalled();
+    expect(bolnaProvider.scheduleBatch).not.toHaveBeenCalled();
+    expect(campaignRepo.reopenCampaignForNewBatch).not.toHaveBeenCalled();
+    expect(batchRepo.updateProcessingError).toHaveBeenCalled();
+    expect(publishedEvent()).toMatchObject({ eventType: "batch.failed" });
   });
 });
