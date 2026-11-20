@@ -43,17 +43,18 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
   let repository: PrismaWalletIncidentStateRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     repository = new PrismaWalletIncidentStateRepository();
   });
 
   it("returns the single winner when two claims race on the unique key", async () => {
+    vi.mocked(prisma.walletIncidentState.findUnique)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(openIncident as any);
     vi.mocked(prisma.walletIncidentState.create)
       .mockResolvedValueOnce(openIncident as any)
       .mockRejectedValueOnce(uniqueViolation());
-    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
-      openIncident as any,
-    );
 
     const [first, second] = await Promise.all([
       repository.claim({ tenantId, triggerBalancePaisa: -100 }),
@@ -63,13 +64,9 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     expect(first.id).toBe(openIncident.id);
     expect(second.id).toBe(openIncident.id);
     expect(prisma.walletIncidentState.create).toHaveBeenCalledTimes(2);
-    expect(prisma.walletIncidentState.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it("does not create a second incident for a duplicate webhook while one is active", async () => {
-    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
-      uniqueViolation(),
-    );
     vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(
       openIncident as any,
     );
@@ -84,14 +81,12 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
       state: "OPEN",
       triggerBalancePaisa: -100,
     });
+    expect(prisma.walletIncidentState.create).not.toHaveBeenCalled();
     expect(prisma.walletIncidentState.updateMany).not.toHaveBeenCalled();
   });
 
   it("reopens the same singleton record after a resolved incident instead of inserting another", async () => {
     const reopened = { ...openIncident, state: "OPEN", resolvedAt: null };
-    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
-      uniqueViolation(),
-    );
     vi.mocked(prisma.walletIncidentState.findUnique)
       .mockResolvedValueOnce(resolvedIncident as any)
       .mockResolvedValueOnce(reopened as any);
@@ -105,6 +100,7 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     });
 
     expect(result.state).toBe("OPEN");
+    expect(prisma.walletIncidentState.create).not.toHaveBeenCalled();
     const reopenCall = vi.mocked(prisma.walletIncidentState.updateMany).mock
       .calls[0][0];
     expect(reopenCall.where).toEqual({ id: openIncident.id, state: "RESOLVED" });
@@ -480,6 +476,7 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
 
   it("claims the warning on a newly created singleton and returns the crossing time", async () => {
     const now = new Date("2026-03-01T00:00:00Z");
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValueOnce(null);
     vi.mocked(prisma.walletIncidentState.create).mockResolvedValue({
       ...openIncident,
       warningSentAt: now,
@@ -505,9 +502,9 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
 
   it("atomically claims the warning once when the singleton already exists", async () => {
     const now = new Date("2026-03-01T00:00:00Z");
-    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
-      uniqueViolation(),
-    );
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
+      warningSentAt: null,
+    } as any);
     vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
       count: 1,
     });
@@ -518,6 +515,7 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     );
 
     expect(result).toBe(now);
+    expect(prisma.walletIncidentState.create).not.toHaveBeenCalled();
     expect(prisma.walletIncidentState.updateMany).toHaveBeenCalledWith({
       where: { tenantId, warningSentAt: null },
       data: { warningSentAt: now },
@@ -527,12 +525,6 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
   it("reuses the existing crossing time when a concurrent debit already claimed the warning", async () => {
     const attempted = new Date("2026-03-01T00:00:05Z");
     const winner = new Date("2026-03-01T00:00:00Z");
-    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
-      uniqueViolation(),
-    );
-    vi.mocked(prisma.walletIncidentState.updateMany).mockResolvedValue({
-      count: 0,
-    });
     vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue({
       warningSentAt: winner,
     } as any);
@@ -543,6 +535,30 @@ describe("PrismaWalletIncidentStateRepository — atomic idempotent claim", () =
     );
 
     expect(result).toBe(winner);
+    expect(prisma.walletIncidentState.create).not.toHaveBeenCalled();
+    expect(prisma.walletIncidentState.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("throws when claim retry is exhausted after unique constraint violation", async () => {
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
+      uniqueViolation(),
+    );
+
+    await expect(
+      repository.claim({ tenantId, triggerBalancePaisa: -100 }, 0),
+    ).rejects.toThrow("Unique constraint violation claiming incident");
+  });
+
+  it("throws when claimWarning retry is exhausted after unique constraint violation", async () => {
+    vi.mocked(prisma.walletIncidentState.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.walletIncidentState.create).mockRejectedValue(
+      uniqueViolation(),
+    );
+
+    await expect(
+      repository.claimWarning({ tenantId, balancePaisa: 40000 }, new Date(), 0),
+    ).rejects.toThrow("Unique constraint violation claiming warning");
   });
 
   it("re-arms the warning by clearing warningSentAt on recovery", async () => {

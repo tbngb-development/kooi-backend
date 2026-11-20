@@ -13,33 +13,19 @@ import type {
 export class PrismaWalletIncidentStateRepository
   implements WalletIncidentStateRepository
 {
-  async claim(input: ClaimIncidentInput): Promise<WalletIncidentState> {
+  async claim(
+    input: ClaimIncidentInput,
+    retriesRemaining = 1,
+  ): Promise<WalletIncidentState> {
     const idempotencyKey = `wallet-incident:${input.tenantId}`;
     const now = new Date();
 
-    try {
-      return await prisma.walletIncidentState.create({
-        data: {
-          tenantId: input.tenantId,
-          idempotencyKey,
-          state: "OPEN",
-          triggerBalancePaisa: input.triggerBalancePaisa,
-          detectedAt: now,
-        },
-      });
-    } catch (err: unknown) {
-      if ((err as { code?: string }).code !== "P2002") throw err;
+    // Fast path: singleton already exists for this tenant (avoids P2002 error logs in Prisma)
+    const existing = await prisma.walletIncidentState.findUnique({
+      where: { idempotencyKey },
+    });
 
-      // Another webhook/instance won the insert. Return that singleton.
-      const existing = await prisma.walletIncidentState.findUnique({
-        where: { idempotencyKey },
-      });
-
-      if (!existing) {
-        // Defensive: unique violation but row not visible yet; retry once.
-        return this.claim(input);
-      }
-
+    if (existing) {
       if (existing.state !== "RESOLVED") {
         return existing;
       }
@@ -72,6 +58,29 @@ export class PrismaWalletIncidentStateRepository
       }
       return reopened;
     }
+
+    try {
+      return await prisma.walletIncidentState.create({
+        data: {
+          tenantId: input.tenantId,
+          idempotencyKey,
+          state: "OPEN",
+          triggerBalancePaisa: input.triggerBalancePaisa,
+          detectedAt: now,
+        },
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== "P2002") throw err;
+
+      if (retriesRemaining <= 0) {
+        throw new Error(
+          `Unique constraint violation claiming incident for tenant ${input.tenantId}, but singleton record could not be resolved`,
+        );
+      }
+
+      // Another webhook/instance won the insert race. Fall back to existing with bounded retry.
+      return this.claim(input, retriesRemaining - 1);
+    }
   }
 
   /**
@@ -84,8 +93,32 @@ export class PrismaWalletIncidentStateRepository
   async claimWarning(
     input: ClaimWarningInput,
     now: Date = new Date(),
+    retriesRemaining = 1,
   ): Promise<Date> {
     const idempotencyKey = `wallet-incident:${input.tenantId}`;
+
+    const existing = await prisma.walletIncidentState.findUnique({
+      where: { tenantId: input.tenantId },
+      select: { warningSentAt: true },
+    });
+
+    if (existing) {
+      if (existing.warningSentAt) {
+        return existing.warningSentAt;
+      }
+
+      const claimed = await prisma.walletIncidentState.updateMany({
+        where: { tenantId: input.tenantId, warningSentAt: null },
+        data: { warningSentAt: now },
+      });
+      if (claimed.count === 1) return now;
+
+      const updated = await prisma.walletIncidentState.findUnique({
+        where: { tenantId: input.tenantId },
+        select: { warningSentAt: true },
+      });
+      return updated?.warningSentAt ?? now;
+    }
 
     try {
       await prisma.walletIncidentState.create({
@@ -101,22 +134,15 @@ export class PrismaWalletIncidentStateRepository
       return now;
     } catch (err: unknown) {
       if ((err as { code?: string }).code !== "P2002") throw err;
+
+      if (retriesRemaining <= 0) {
+        throw new Error(
+          `Unique constraint violation claiming warning for tenant ${input.tenantId}, but singleton record could not be resolved`,
+        );
+      }
+
+      return this.claimWarning(input, now, retriesRemaining - 1);
     }
-
-    // Row already exists: atomically take the crossing if none is claimed yet.
-    const claimed = await prisma.walletIncidentState.updateMany({
-      where: { tenantId: input.tenantId, warningSentAt: null },
-      data: { warningSentAt: now },
-    });
-    if (claimed.count === 1) return now;
-
-    // Another debit/instance owns this crossing. Reuse its timestamp so all
-    // callers converge on the same email/event idempotency key.
-    const existing = await prisma.walletIncidentState.findUnique({
-      where: { tenantId: input.tenantId },
-      select: { warningSentAt: true },
-    });
-    return existing?.warningSentAt ?? now;
   }
 
   /** Re-arm warnings when the balance recovers above the threshold. */
