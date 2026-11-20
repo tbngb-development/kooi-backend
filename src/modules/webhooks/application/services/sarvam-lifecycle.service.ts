@@ -67,7 +67,14 @@ export class SarvamLifecycleService {
     ) {
       if (!isCampaignTerminalOrPaused) {
         await this.repo.updateBatchStatus(batchId, "RUNNING");
-        await this.repo.updateCampaignStatus(campaignId, "RUNNING");
+        const started = await this.repo.markCampaignRunningIfActive(campaignId);
+        if (!started) {
+          this.logger?.warn("Ignored campaign start on finalized campaign", {
+            action: "webhook.sarvam.campaign_start_ignored",
+            campaignId,
+            batchId,
+          });
+        }
       }
     }
 

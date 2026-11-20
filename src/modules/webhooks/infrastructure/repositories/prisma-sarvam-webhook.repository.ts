@@ -415,6 +415,21 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
     });
   }
 
+  async markCampaignRunningIfActive(campaignId: string): Promise<boolean> {
+    // Atomic start: a webhook that read DRAFT/SCHEDULED before enforcement
+    // finalized the campaign must not reopen it. RUNNING is intentionally
+    // excluded because starting is a no-op for an already running campaign and
+    // we must not overwrite its original startedAt.
+    const result = await this.client.campaign.updateMany({
+      where: {
+        id: campaignId,
+        status: { in: ["DRAFT", "SCHEDULED"] },
+      },
+      data: { status: "RUNNING", startedAt: new Date() },
+    });
+    return result.count > 0;
+  }
+
   async recalculateCampaignStats(campaignId: string): Promise<void> {
     const batches = await this.client.leadBatch.findMany({
       where: { campaignId, isDeleted: false },

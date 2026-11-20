@@ -191,6 +191,14 @@ export interface ISarvamWebhookRepository {
     completedAt?: Date,
   ): Promise<void>;
 
+  /**
+   * Starts a campaign only while it has not been finalized. The status filter
+   * is part of the UPDATE so credit enforcement cannot be overwritten by a
+   * late Sarvam webhook reading a stale DRAFT/RUNNING campaign.
+   * Returns true when a row was updated.
+   */
+  markCampaignRunningIfActive(campaignId: string): Promise<boolean>;
+
   recalculateCampaignStats(campaignId: string): Promise<void>;
 
   findSarvamAgentForTenant(
