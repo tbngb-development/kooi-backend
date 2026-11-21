@@ -17,12 +17,15 @@ import { CallTerminalService } from "./application/services/call-terminal.servic
 import { CallCompletionService } from "./application/services/call-completion.service";
 import type { Logger } from "../../shared/logging/logger.interface";
 import type { Queue } from "bull";
+import type { CampaignNotifications } from "../campaigns/application/services/campaign-notifications";
+import { CampaignStatusReconciler } from "../campaigns/application/services/campaign-status-reconciler.service";
 
 export interface WebhookModuleDeps {
   debitWalletForCall?: DebitWalletForCallUseCase;
   creditEnforcement?: CreditEnforcementOrchestrator;
   classifierQueue?: Queue;
   materializeCallExtractions?: MaterializeCallExtractionsUseCase;
+  campaignNotifications?: CampaignNotifications;
   logger: Logger;
 }
 
@@ -39,7 +42,16 @@ export function buildWebhookModule(
   const webhookRepo = new PrismaWebhookRepository();
   const log = deps.logger.child({ module: "webhook" });
 
-  const callLifecycle = new CallLifecycleService(webhookRepo, log);
+  const statusReconciler = new CampaignStatusReconciler(
+    webhookRepo,
+    log,
+    deps.campaignNotifications,
+  );
+  const callLifecycle = new CallLifecycleService(
+    webhookRepo,
+    log,
+    statusReconciler,
+  );
   const callResolver = new CallResolverService(webhookRepo, log);
   const callTerminal = new CallTerminalService(webhookRepo, callLifecycle, log);
   const callCompletion = new CallCompletionService(
@@ -60,7 +72,11 @@ export function buildWebhookModule(
     log,
   );
 
-  const processBatchWebhook = new ProcessBatchWebhookUseCase(webhookRepo, log);
+  const processBatchWebhook = new ProcessBatchWebhookUseCase(
+    webhookRepo,
+    log,
+    statusReconciler,
+  );
 
   const sarvamCorrelationRepo = new PrismaSarvamLeadCorrelationRepository();
   const sarvamLeadCorrelation = new SarvamLeadCorrelationService(
@@ -68,7 +84,16 @@ export function buildWebhookModule(
     log,
   );
   const sarvamWebhookRepo = new PrismaSarvamWebhookRepository();
-  const sarvamLifecycle = new SarvamLifecycleService(sarvamWebhookRepo, log);
+  const sarvamStatusReconciler = new CampaignStatusReconciler(
+    sarvamWebhookRepo,
+    log,
+    deps.campaignNotifications,
+  );
+  const sarvamLifecycle = new SarvamLifecycleService(
+    sarvamWebhookRepo,
+    log,
+    sarvamStatusReconciler,
+  );
   const processSarvamWebhook = new ProcessSarvamWebhookUseCase(
     sarvamLeadCorrelation,
     sarvamWebhookRepo,

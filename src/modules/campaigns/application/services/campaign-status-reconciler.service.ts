@@ -1,6 +1,7 @@
 import type { BatchStatus, CampaignStatus } from "@prisma/client";
 import { decideCampaignStatusFromBatches } from "../../domain/rules/campaign-lifecycle.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { CampaignNotifications } from "./campaign-notifications";
 
 /**
  * The minimal persistence surface required to reconcile a campaign's status
@@ -43,6 +44,7 @@ export class CampaignStatusReconciler {
   constructor(
     private readonly port: CampaignStatusReconciliationPort,
     private readonly logger?: Logger,
+    private readonly notifications?: CampaignNotifications,
   ) {}
 
   async reconcile(campaignId: string): Promise<boolean> {
@@ -80,11 +82,30 @@ export class CampaignStatusReconciler {
           campaignId,
           status: decision.status,
         });
+        return false;
       }
-      return settled;
+      await this.notifyCompleted(campaignId, decision.status, completedAt);
+      return true;
     }
 
     await this.port.updateCampaignStatus(campaignId, decision.status, completedAt);
+    await this.notifyCompleted(campaignId, decision.status, completedAt);
     return true;
+  }
+
+  private async notifyCompleted(
+    campaignId: string,
+    status: CampaignStatus,
+    completedAt: Date,
+  ): Promise<void> {
+    if (status !== "COMPLETED" || !this.notifications) return;
+    try {
+      await this.notifications.publishCompleted(campaignId, completedAt);
+    } catch (err) {
+      this.logger?.error("failed to publish campaign.completed event", err, {
+        action: "notification.publish_failed",
+        campaignId,
+      });
+    }
   }
 }

@@ -325,14 +325,6 @@ export function buildContainer(): AppContainer {
   const classifier = buildClassifierModule({ logger });
   const extractions = buildExtractionModule({ logger });
 
-  const webhooks = buildWebhookModule({
-    debitWalletForCall: wallet.useCases.debitWalletForCall,
-    creditEnforcement: wallet.useCases.creditEnforcement,
-    classifierQueue: classifier.queue,
-    materializeCallExtractions: extractions.useCases.materializeCallExtractions,
-    logger,
-  });
-
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
   const tenants = buildTenantModule({
@@ -381,6 +373,18 @@ export function buildContainer(): AppContainer {
     voiceProviderService: tenants.voiceProviderService,
     sarvamCampaignClient,
     sarvamEncryptionService: sarvamApiKeys.encryptionService,
+    eventPublisher: discordEventsPublisher,
+  });
+
+  // Built after campaigns so lifecycle notifications can be shared with the
+  // webhook reconciliation services.
+  const webhooks = buildWebhookModule({
+    debitWalletForCall: wallet.useCases.debitWalletForCall,
+    creditEnforcement: wallet.useCases.creditEnforcement,
+    classifierQueue: classifier.queue,
+    materializeCallExtractions: extractions.useCases.materializeCallExtractions,
+    campaignNotifications: campaigns.notifications,
+    logger,
   });
 
   const batches = buildBatchModule({
