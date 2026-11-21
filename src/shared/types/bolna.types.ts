@@ -464,6 +464,7 @@ export interface RequiredVariable {
 
 export interface DynamicFilterOption {
   id: string;
+  /** User-facing field name shown in dynamic filter UIs. */
   label: string;
   disposition: string;
   category: string;

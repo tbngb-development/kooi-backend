@@ -679,6 +679,7 @@ export class PrismaCallRepository implements CallRepository {
                               select: {
                                 id: true,
                                 name: true,
+                                displayName: true,
                                 slug: true,
                                 isObjective: true,
                                 objectiveOptions: true,
@@ -726,7 +727,7 @@ export class PrismaCallRepository implements CallRepository {
 
         dynamic.push({
           id: disp.id,
-          label: disp.name,
+          label: disp.displayName || disp.name,
           disposition: disp.name,
           category: categoryName,
           options,
