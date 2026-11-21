@@ -22,7 +22,7 @@ export const dynamicFiltersSchema = z
     }
   });
 
-export const listCallsQuerySchema = z.object({
+const listCallsQueryFields = z.object({
   provider: z.enum(["BOLNA", "SARVAM"]).optional(),
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
   batchId: z.string().uuid("Invalid batch ID").optional(),
@@ -58,15 +58,34 @@ export const listCallsQuerySchema = z.object({
       (val) => (val === "" ? undefined : val),
       z.enum(["true", "false"]).optional(),
     ),
-}).superRefine((data, ctx) => {
-  if (data.goalId && data.goalPassed === "false") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Cannot filter by specific goalId when goalPassed is false",
-      path: ["goalPassed"],
-    });
-  }
 });
+
+export const listCallsQuerySchema = listCallsQueryFields.superRefine(
+  (data, ctx) => {
+    if (data.goalId && data.goalPassed === "false") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cannot filter by specific goalId when goalPassed is false",
+        path: ["goalPassed"],
+      });
+    }
+  },
+);
+
+/** Same filters as the listing, without pagination, plus the browser's IANA
+ *  timezone used to render the Date & Time column. */
+export const exportCallsQuerySchema = listCallsQueryFields
+  .omit({ page: true, limit: true })
+  .extend({ timezone: z.string().optional() })
+  .superRefine((data, ctx) => {
+    if (data.goalId && data.goalPassed === "false") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cannot filter by specific goalId when goalPassed is false",
+        path: ["goalPassed"],
+      });
+    }
+  });
 
 export const getCallStatsQuerySchema = z.object({
   provider: z.enum(["BOLNA", "SARVAM"]).optional(),
@@ -114,6 +133,7 @@ export type AdminGetCallStatsQuery = z.infer<
   typeof adminGetCallStatsQuerySchema
 >;
 export type ListCallsQuery = z.infer<typeof listCallsQuerySchema>;
+export type ExportCallsQuery = z.infer<typeof exportCallsQuerySchema>;
 export type GetCallStatsQuery = z.infer<typeof getCallStatsQuerySchema>;
 export type AvailableFiltersQuery = z.infer<typeof availableFiltersQuerySchema>;
 export type SyncBolnaExecutionInput = z.infer<typeof syncBolnaExecutionSchema>;

@@ -9,6 +9,7 @@ import {
   listCallsQuerySchema,
   getCallStatsQuerySchema,
   availableFiltersQuerySchema,
+  exportCallsQuerySchema,
   quickDialSchema,
 } from "./call.schema";
 
@@ -37,6 +38,14 @@ export function buildTenantCallRoutes(
   );
 
   router.get("/", validateQuery(listCallsQuerySchema), controller.list);
+
+  // Contact-list CSV export — must be registered before "/:id"
+  router.get(
+    "/export",
+    validateQuery(exportCallsQuerySchema),
+    controller.exportCsv,
+  );
+
   router.get(
     "/available-filters",
     validateQuery(availableFiltersQuerySchema),

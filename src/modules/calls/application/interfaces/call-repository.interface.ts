@@ -29,6 +29,14 @@ export interface ListCallsFilters {
   goalPassed?: boolean;
 }
 
+/** Slim call shape used by the contact-list CSV export. */
+export interface CallExportRecord {
+  status: string;
+  startedAt: Date | null;
+  createdAt: Date;
+  lead: { id: string; name: string | null; phone: string } | null;
+}
+
 export interface PaginatedCallsResult {
   overview: CallListOverview;
   calls: Array<
@@ -159,6 +167,13 @@ export interface CallRepository {
     tenantId: string,
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult>;
+
+  /** Unpaginated, tenant-scoped fetch using the same filters as `list`. */
+  findAllForExport(
+    tenantId: string,
+    filters: ListCallsFilters,
+    limit: number,
+  ): Promise<CallExportRecord[]>;
 
   findById(tenantId: string, id: string): Promise<DetailedCallResult | null>;
 
