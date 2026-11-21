@@ -51,6 +51,10 @@ export interface ListTransactionsOptions {
 export interface WalletTransactionSummary {
   totalCreditsAddedPaisa: number;
   totalCreditsUsedPaisa: number;
+  totalPurchasedCreditsPaisa: number;
+  totalCallSpendPaisa: number;
+  totalOtherDebitsPaisa: number;
+  totalBonusExpiredPaisa: number;
   cashBalance: number;
   bonusBalance: number;
 }
