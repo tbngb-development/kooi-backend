@@ -96,7 +96,7 @@ describe("call export CSV helpers", () => {
     );
 
     expect(csv).toBe(
-      "\uFEFF\"Name\",\"Phone\",\"Status\",\"Date & Time\"\r\n" +
+      "\uFEFF\"Name\",\"Contact Number\",\"Status\",\"Date & Time\"\r\n" +
         "\"'=HYPERLINK(\"\"x\"\")\",\"+919876543210\",\"No Answer\",\"2026-11-21 05:30:00\"\r\n" +
         "\"\",\"+919999999999\",\"Completed\",\"2026-11-21 05:30:00\"",
     );

@@ -12,7 +12,7 @@ const FORMULA_PREFIXES = ["=", "+", "-", "@"];
 const CSV_BOM = "\uFEFF";
 const CSV_LINE_BREAK = "\r\n";
 
-export const CALL_EXPORT_HEADER = '"Name","Phone","Status","Date & Time"';
+export const CALL_EXPORT_HEADER = '"Name","Contact Number","Status","Date & Time"';
 
 /** Normalize a phone into a dedupe key. The stored value is already E.164,
  *  but whitespace/dash variants and a leading "+" are collapsed defensively. */
