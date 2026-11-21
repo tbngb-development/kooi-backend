@@ -77,7 +77,7 @@ export function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
     case "ringing":
       return "CALLING";
     case "scheduled":
-    case "re-scheduled":
+    case "rescheduled":
       return "SCHEDULED";
     // Fail closed: an unrecognised provider status is never billable. Only the
     // explicit completed cases above may resolve to COMPLETED.

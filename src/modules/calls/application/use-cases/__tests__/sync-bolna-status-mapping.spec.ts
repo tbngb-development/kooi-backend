@@ -12,6 +12,13 @@ describe("Bolna execution status → call status mapping (billing safety)", () =
     },
   );
 
+  it.each(["scheduled", "rescheduled"])(
+    "maps retry status %s to SCHEDULED",
+    (status) => {
+      expect(mapBolnaStatusToCallStatus(status)).toBe("SCHEDULED");
+    },
+  );
+
   it.each([
     "call-disconnected",
     "call_disconnected",

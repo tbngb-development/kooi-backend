@@ -190,6 +190,18 @@ describe("Bolna webhook — retry execution lifecycle", () => {
     expect(repo.updateLeadStatus).toHaveBeenCalledWith("lead-1", "PENDING");
   });
 
+  it("ignores the legacy hyphenated re-scheduled webhook state", async () => {
+    vi.mocked(resolver.resolveCallRecord).mockResolvedValue(callWith("PENDING"));
+
+    await useCase.execute(payload("re-scheduled"));
+
+    expect(resolver.resolveCallRecord).not.toHaveBeenCalled();
+    expect(repo.updateCallStatusAndHistory).not.toHaveBeenCalled();
+    expect(repo.updateLeadStatus).not.toHaveBeenCalled();
+    expect(repo.updateBatchStatus).not.toHaveBeenCalled();
+    expect(repo.markCampaignRunningIfActive).not.toHaveBeenCalled();
+  });
+
   it("ignores a duplicate scheduled event for the same attempt", async () => {
     vi.mocked(resolver.resolveCallRecord).mockResolvedValue(
       callWith("SCHEDULED", [historyEntry(2, "SCHEDULED")]),

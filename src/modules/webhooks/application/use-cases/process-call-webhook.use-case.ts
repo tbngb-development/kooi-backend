@@ -234,8 +234,7 @@ export class ProcessCallWebhookUseCase {
       }
 
       case "scheduled":
-      case "rescheduled":
-      case "re-scheduled": {
+      case "rescheduled": {
         this.logger?.warn("call scheduled: ", { payload });
         const resolved = await this.callResolver.resolveCallRecord(callId, payload);
         if (!resolved) break;

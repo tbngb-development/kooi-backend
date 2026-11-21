@@ -91,11 +91,7 @@ function normalizeRetryStatus(rawStatus?: string | null): string {
  */
 export function mapRetryStatusToCallStatus(rawStatus?: string | null): CallStatus {
   const normalized = normalizeRetryStatus(rawStatus);
-  if (
-    normalized === "scheduled" ||
-    normalized === "rescheduled" ||
-    normalized === "re-scheduled"
-  ) {
+  if (normalized === "scheduled" || normalized === "rescheduled") {
     return "SCHEDULED";
   }
   if (normalized.includes("busy")) return "BUSY";
@@ -110,11 +106,7 @@ export function mapRetryStatusToCallStatus(rawStatus?: string | null): CallStatu
  */
 export function mapLastRetryToLeadStatus(rawStatus?: string | null): LeadStatus {
   const normalized = normalizeRetryStatus(rawStatus);
-  if (
-    normalized === "scheduled" ||
-    normalized === "rescheduled" ||
-    normalized === "re-scheduled"
-  ) {
+  if (normalized === "scheduled" || normalized === "rescheduled") {
     return "PENDING";
   }
   if (normalized === "busy") return "BUSY";

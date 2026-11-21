@@ -19,19 +19,24 @@ function callWithHistory(attempts: number[]): ResolvedCallContext {
 }
 
 describe("Bolna retry rules", () => {
-  it.each(["scheduled", "rescheduled", "re-scheduled"])(
+  it.each(["scheduled", "rescheduled"])(
     "maps %s webhook status to SCHEDULED call status",
     (status) => {
       expect(mapRetryStatusToCallStatus(status)).toBe("SCHEDULED");
     },
   );
 
-  it.each(["scheduled", "rescheduled", "re-scheduled"])(
+  it.each(["scheduled", "rescheduled"])(
     "maps %s webhook status to PENDING lead status",
     (status) => {
       expect(mapLastRetryToLeadStatus(status)).toBe("PENDING");
     },
   );
+
+  it("does not treat the legacy hyphenated re-scheduled status as a retry", () => {
+    expect(mapRetryStatusToCallStatus("re-scheduled")).toBe("FAILED");
+    expect(mapLastRetryToLeadStatus("re-scheduled")).toBe("FAILED");
+  });
 
   it("uses retry_count as the primary attempt source", () => {
     expect(
