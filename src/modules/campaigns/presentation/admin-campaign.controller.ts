@@ -232,6 +232,7 @@ export class AdminCampaignController {
         description: body.description,
         platformAgentId: body.platformAgentId,
         assistantId: body.assistantId,
+        sarvamAgentId: body.sarvamAgentId,
         variables: body.variables,
         defaultRetryConfig: finalRetryConfig,
       });
