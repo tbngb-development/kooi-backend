@@ -57,7 +57,7 @@ export function buildRoutes(c: AppContainer): Router {
   // ── Tenant API v1 (Scoped workspace actions) ─────────────────────────────
   router.use(
     "/v1/auth",
-    buildTenantAuthRoutes(c.auth.tenantController, c.authenticate, c.authorize),
+    buildTenantAuthRoutes(c.auth.tenantController, c.authenticate),
   );
 
   router.use(

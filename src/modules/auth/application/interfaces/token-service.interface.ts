@@ -2,7 +2,6 @@ import type { TenantRole } from "@prisma/client";
 import type {
   AccessTokenPayload,
   RefreshTokenPayload,
-  InviteTokenPayload,
 } from "../../../../shared/types";
 
 export interface TokenPair {
@@ -41,16 +40,8 @@ export interface TokenService {
     expiresIn: number;
   };
 
-  generateInviteToken(
-    tenantId: string,
-    role: TenantRole,
-    email: string,
-    inviterId: string,
-  ): string;
-
   verifyAccessToken(token: string): AccessTokenPayload;
   verifyRefreshToken(token: string): RefreshTokenPayload;
-  verifyInviteToken(token: string): InviteTokenPayload;
 
   hashToken(rawToken: string): string;
 }

@@ -6,11 +6,9 @@ import {
 } from "../../application/interfaces/token-service.interface";
 import {
   type AccessTokenPayload,
-  type InviteTokenPayload,
   type RefreshTokenPayload,
 } from "../../../../shared/types";
 import { env } from "../../../../shared/config/env";
-import { type TenantRole } from "@prisma/client";
 import { UnauthorizedError } from "../../../../shared/errors";
 import { AuthMessages } from "../../../../shared/constants";
 
@@ -132,27 +130,6 @@ export class JwtTokenService implements TokenService {
     };
   }
 
-  generateInviteToken(
-    tenantId: string,
-    role: TenantRole,
-    email: string,
-    inviterId: string,
-  ): string {
-    const payload: InviteTokenPayload = {
-      tenantId,
-      role,
-      email,
-      inviterId,
-      type: "invite",
-    };
-
-    const options: SignOptions = {
-      expiresIn: env.jwt.inviteExpiry as SignOptions["expiresIn"],
-    };
-
-    return jwt.sign(payload, env.jwt.secret, options);
-  }
-
   verifyAccessToken(token: string): AccessTokenPayload {
     try {
       return jwt.verify(token, env.jwt.secret) as AccessTokenPayload;
@@ -166,14 +143,6 @@ export class JwtTokenService implements TokenService {
       return jwt.verify(token, env.jwt.secret) as RefreshTokenPayload;
     } catch {
       throw new UnauthorizedError(AuthMessages.REFRESH_TOKEN_INVALID);
-    }
-  }
-
-  verifyInviteToken(token: string): InviteTokenPayload {
-    try {
-      return jwt.verify(token, env.jwt.secret) as InviteTokenPayload;
-    } catch {
-      throw new UnauthorizedError(AuthMessages.INVALID_INVITE);
     }
   }
 

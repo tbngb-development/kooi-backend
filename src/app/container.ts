@@ -83,6 +83,10 @@ import {
   type InviteModule,
 } from "../modules/invites/container";
 import {
+  buildTeamInvitationModule,
+  type TeamInvitationModule,
+} from "../modules/team-invitations/container";
+import {
   buildPlatformAgentModule,
   type PlatformAgentModule,
 } from "../modules/platform-agents/container";
@@ -142,6 +146,7 @@ export interface AppContainer {
   wallet: WalletModule;
   payments: PaymentModule;
   invites: InviteModule;
+  teamInvitations: TeamInvitationModule;
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
@@ -319,6 +324,11 @@ export function buildContainer(): AppContainer {
     emailService: email,
   });
 
+  // Team invitations - shared repository + membership rules (used by later phases)
+  const teamInvitations = buildTeamInvitationModule({
+    planRepository: plans.repository,
+  });
+
   // 8. Assistants Module
   const assistants = buildAssistantModule({ bolnaClientFactory });
 
@@ -407,7 +417,7 @@ export function buildContainer(): AppContainer {
     leads: buildLeadModule(),
     calls,
     dashboard: buildDashboardModule(),
-    users: buildUserModule({ passwordService }),
+    users: buildUserModule(),
     webhooks,
 
     platformAgents,
@@ -419,6 +429,7 @@ export function buildContainer(): AppContainer {
     wallet,
     payments,
     invites,
+    teamInvitations,
     classifier,
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),

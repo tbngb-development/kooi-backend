@@ -39,6 +39,7 @@ model Tenant {
 
   classifierResults ClassifierCallResult[]
   memberships   TenantUser[]
+  invitations   Invitation[]
   voiceProvider VoiceProvider  @default(BOLNA)
   bolnaApiKeyId String?
   bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
@@ -124,6 +125,38 @@ enum TenantRole {
   OWNER
   ADMIN
   USER
+}
+
+// Team membership invitations (distinct from TenantInvite, which is the
+// platform-admin workspace/onboarding invite).
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model Invitation {
+  id               String           @id @default(uuid())
+  tenantId         String
+  email            String
+  role             TenantRole
+  tokenHash        String           @unique
+  status           InvitationStatus @default(PENDING)
+  invitedById      String
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  lastSentAt       DateTime?
+  sendCount        Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([email])
 }
 
 model PlatformAdmin {
