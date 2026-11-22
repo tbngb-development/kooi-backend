@@ -8,6 +8,7 @@ import type { AuthRepository } from "../../../auth/application/interfaces/auth-r
 import type { SelectTenantUseCase } from "../../../auth/application/use-cases/select-tenant.use-case";
 import type { SelectTenantOutput } from "../../../auth/application/dto/select-tenant.dto";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { IInvitationDeliveryQueue } from "../interfaces/invitation-delivery-queue";
 import {
   getInviteInvalidReason,
   maskEmail,
@@ -92,6 +93,8 @@ export interface InvitationServiceDeps {
   /** Existing auth use case; no token logic is duplicated here. */
   sessionIssuer: Pick<SelectTenantUseCase, "execute">;
   authRepository: Pick<AuthRepository, "findUserByEmail" | "checkMembershipExists">;
+  /** Optional so the pure lifecycle tests stay isolated from Redis. */
+  deliveryQueue?: IInvitationDeliveryQueue;
   logger: Logger;
   now?: () => Date;
   expiryDays?: number;
@@ -169,6 +172,8 @@ export class InvitationService {
       },
     );
 
+    await this.enqueueDelivery(result.invitation.id);
+
     return { invitation: toSummary(result.invitation), resent: result.resent };
   }
 
@@ -218,6 +223,7 @@ export class InvitationService {
       invitationId,
       tenantId,
     });
+    await this.enqueueDelivery(invitation.id);
     return { invitation: toSummary(invitation), resent: true };
   }
 
@@ -341,6 +347,21 @@ export class InvitationService {
 
   getSeats(tenantId: string) {
     return this.deps.membershipService.getSeatAvailability(tenantId);
+  }
+
+  private async enqueueDelivery(invitationId: string): Promise<void> {
+    if (!this.deps.deliveryQueue) return;
+    try {
+      // The payload is intentionally only the id; the worker creates the token.
+      await this.deps.deliveryQueue.enqueue({ invitationId });
+    } catch (err) {
+      // The invitation is already committed. Never roll it back for a queue
+      // outage, but keep the failure observable.
+      this.deps.logger.error("Failed to enqueue team invitation email", err, {
+        action: "invitation.email.enqueue_failed",
+        invitationId,
+      });
+    }
   }
 
   private async finishAccept(accepted: AcceptedInvite): Promise<AcceptResult> {

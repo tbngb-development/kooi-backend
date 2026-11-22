@@ -80,6 +80,8 @@ export interface InvitationRepository extends TenantMembershipRepository {
   markRevoked(id: string): Promise<void>;
   markExpired(id: string): Promise<void>;
   touchSent(id: string): Promise<void>;
+  /** Replace only the token digest; send counters are owned by the worker. */
+  setTokenHash(id: string, tokenHash: string): Promise<void>;
   rotateToken(
     id: string,
     tokenHash: string,

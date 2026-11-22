@@ -134,6 +134,7 @@ type Harness = {
   tokens: InvitationTokenService;
   password: PasswordService;
   sessionIssuer: { execute: MockFn };
+  deliveryQueue: { enqueue: MockFn };
   logger: Logger;
 };
 
@@ -172,6 +173,7 @@ function makeHarness(options: { invite?: InvitationRecord | null; overrides?: Ct
   const tokens = makeTokenService();
   const password: PasswordService = { hash: vi.fn().mockResolvedValue("hashed-password"), compare: vi.fn() };
   const sessionIssuer = { execute: vi.fn().mockResolvedValue(makeSession()) };
+  const deliveryQueue = { enqueue: vi.fn().mockResolvedValue(undefined) };
   const logger = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -187,6 +189,7 @@ function makeHarness(options: { invite?: InvitationRecord | null; overrides?: Ct
     passwordService: password,
     sessionIssuer: sessionIssuer as unknown as SelectTenantUseCase,
     authRepository: authRepo as unknown as Pick<AuthRepository, "findUserByEmail" | "checkMembershipExists">,
+    deliveryQueue,
     logger,
     now: () => NOW,
     expiryDays: 7,
@@ -201,6 +204,7 @@ function makeHarness(options: { invite?: InvitationRecord | null; overrides?: Ct
     tokens,
     password,
     sessionIssuer,
+    deliveryQueue,
     logger,
   };
 }
@@ -298,6 +302,19 @@ describe("InvitationService", () => {
         expect(serialised).not.toContain("alice@example.com");
       }
     });
+
+    it("enqueues delivery with only the invitation id", async () => {
+      await h.service.createOrResend(inviteInput);
+
+      expect(h.deliveryQueue.enqueue).toHaveBeenCalledWith({ invitationId: "invite-new" });
+      expect(Object.keys(vi.mocked(h.deliveryQueue.enqueue).mock.calls[0][0])).toEqual(["invitationId"]);
+    });
+
+    it("does not fail the request when enqueueing fails", async () => {
+      h.deliveryQueue.enqueue.mockRejectedValue(new Error("redis down"));
+
+      await expect(h.service.createOrResend(inviteInput)).resolves.toMatchObject({ resent: false });
+    });
   });
 
   describe("list", () => {
@@ -337,10 +354,17 @@ describe("InvitationService", () => {
       expect(h.ctx.rotateToken).toHaveBeenCalledWith("invite-1", "hash-raw-token-1", EXPIRES);
     });
 
+    it("enqueues delivery after rotating the token", async () => {
+      await h.service.resend(TENANT_ID, "invite-1");
+
+      expect(h.deliveryQueue.enqueue).toHaveBeenCalledWith({ invitationId: "invite-1" });
+    });
+
     it("rejects resending a revoked invite", async () => {
       const h2 = makeHarness({ invite: makeInvite({ status: "REVOKED" }) });
 
       await expect(h2.service.resend(TENANT_ID, "invite-1")).rejects.toBeInstanceOf(InviteNotPendingError);
+      expect(h2.deliveryQueue.enqueue).not.toHaveBeenCalled();
     });
   });
 

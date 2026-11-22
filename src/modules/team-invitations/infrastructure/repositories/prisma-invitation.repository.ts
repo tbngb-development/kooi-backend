@@ -196,6 +196,13 @@ export class PrismaInvitationRepository implements InvitationRepository {
     });
   }
 
+  async setTokenHash(id: string, tokenHash: string): Promise<void> {
+    await prisma.invitation.update({
+      where: { id },
+      data: { tokenHash },
+    });
+  }
+
   async rotateToken(
     id: string,
     tokenHash: string,
@@ -209,8 +216,6 @@ export class PrismaInvitationRepository implements InvitationRepository {
         expiresAt,
         status: "PENDING",
         revokedAt: null,
-        lastSentAt: new Date(),
-        sendCount: { increment: 1 },
       },
     });
   }

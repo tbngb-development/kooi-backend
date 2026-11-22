@@ -1,4 +1,5 @@
 import type { Logger } from "../../shared/logging/logger.interface";
+import { env } from "../../shared/config/env";
 import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
 import type {
   AuthRepository,
@@ -9,6 +10,9 @@ import type { SelectTenantUseCase } from "../auth/application/use-cases/select-t
 import { PrismaInvitationRepository } from "./infrastructure/repositories/prisma-invitation.repository";
 import { InvitationTokenServiceImpl } from "./infrastructure/services/invitation-token.service";
 import { InvitationExpiryScheduler } from "./infrastructure/jobs/invitation-expiry.scheduler";
+import { InvitationEmailWorker } from "./infrastructure/jobs/invitation-email.worker";
+import { BullInvitationDeliveryQueue } from "./infrastructure/queue/bull-invitation-delivery-queue";
+import { buildInvitationEmailSender } from "./infrastructure/mail/invitation-email-sender.factory";
 import { TenantMembershipService } from "./application/services/tenant-membership.service";
 import { InvitationService } from "./application/services/invitation.service";
 import { TenantInvitationController } from "./presentation/tenant-invitation.controller";
@@ -16,6 +20,8 @@ import { PublicInvitationController } from "./presentation/public-invitation.con
 
 import type { InvitationRepository } from "./application/interfaces/invitation.repository";
 import type { InvitationTokenService } from "./application/interfaces/invitation-token.service";
+import type { IInvitationDeliveryQueue } from "./application/interfaces/invitation-delivery-queue";
+import type { IInvitationEmailSender } from "./application/interfaces/invitation-email-sender";
 
 export interface TeamInvitationModule {
   repository: InvitationRepository;
@@ -27,6 +33,9 @@ export interface TeamInvitationModule {
   schedulers: {
     invitationExpiry: InvitationExpiryScheduler;
   };
+  workers: {
+    invitationEmail: InvitationEmailWorker;
+  };
 }
 
 export interface BuildTeamInvitationModuleDependencies {
@@ -37,6 +46,10 @@ export interface BuildTeamInvitationModuleDependencies {
   /** The existing auth use case issues sessions; no token logic is duplicated. */
   sessionIssuer: Pick<SelectTenantUseCase, "execute">;
   logger: Logger;
+  /** Overridable for tests; production uses the Bull queue adapter. */
+  deliveryQueue?: IInvitationDeliveryQueue;
+  /** Overridable for tests; production picks a transport from the environment. */
+  invitationEmailSender?: IInvitationEmailSender;
 }
 
 /** Wires the shared invitation/membership repository and full lifecycle. */
@@ -50,6 +63,9 @@ export function buildTeamInvitationModule(
     deps.planRepository,
   );
   const tokenService = new InvitationTokenServiceImpl();
+  const deliveryQueue = deps.deliveryQueue ?? new BullInvitationDeliveryQueue();
+  const emailSender =
+    deps.invitationEmailSender ?? buildInvitationEmailSender(log);
   const service = new InvitationService({
     repository,
     membershipService,
@@ -57,7 +73,15 @@ export function buildTeamInvitationModule(
     passwordService: deps.passwordService,
     sessionIssuer: deps.sessionIssuer,
     authRepository: deps.authRepository,
+    deliveryQueue,
     logger: log,
+  });
+  const invitationEmailWorker = new InvitationEmailWorker({
+    repository,
+    tokenService,
+    sender: emailSender,
+    logger: log,
+    frontendUrl: env.frontendUrl,
   });
 
   return {
@@ -69,6 +93,9 @@ export function buildTeamInvitationModule(
     publicController: new PublicInvitationController(service),
     schedulers: {
       invitationExpiry: new InvitationExpiryScheduler(service, log),
+    },
+    workers: {
+      invitationEmail: invitationEmailWorker,
     },
   };
 }

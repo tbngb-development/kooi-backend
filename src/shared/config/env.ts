@@ -88,6 +88,15 @@ export const env = {
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",
   },
 
+  // Team invitation email transport.
+  // 'auto' logs the accept link in development and uses Resend otherwise.
+  teamInvites: {
+    emailMode: (process.env.TEAM_INVITE_EMAIL_MODE || "auto") as
+      | "auto"
+      | "console"
+      | "resend",
+  },
+
   // U-08: durable email delivery. Empty outboxes make enabling harmless.
   emailOutbox: {
     enabled: process.env.EMAIL_OUTBOX_ENABLED !== "false",

@@ -113,8 +113,6 @@ class InMemoryInvitationRepository implements InvitationRepository {
         invitation.expiresAt = expiresAt;
         invitation.status = "PENDING";
         invitation.revokedAt = null;
-        invitation.lastSentAt = new Date();
-        invitation.sendCount += 1;
         return invitation;
       },
       markRevoked: async (id) => {
@@ -283,8 +281,13 @@ class InMemoryInvitationRepository implements InvitationRepository {
     if (!invite) throw new Error("invitation missing");
     invite.tokenHash = tokenHash;
     invite.expiresAt = expiresAt;
-    invite.sendCount += 1;
     return Promise.resolve(invite);
+  }
+
+  setTokenHash(id: string, tokenHash: string): Promise<void> {
+    const invite = this.invitations.find((i) => i.id === id);
+    if (invite) invite.tokenHash = tokenHash;
+    return Promise.resolve();
   }
 
   findPreviewContext(invitationId: string): Promise<InvitationPreviewContext | null> {
@@ -345,6 +348,7 @@ interface Harness {
   publicUser: { user: AuthContext | undefined };
   currentUser: { value: TenantAuthContext | null };
   limiterSpy: ReturnType<typeof vi.fn>;
+  deliveryQueue: { enqueue: ReturnType<typeof vi.fn> };
 }
 
 function makeApp(limit: number | null = 5): Harness {
@@ -395,6 +399,7 @@ function makeApp(limit: number | null = 5): Harness {
   const sessionIssuer = {
     execute: vi.fn().mockResolvedValue(sessionOutput),
   } as unknown as SelectTenantUseCase;
+  const deliveryQueue = { enqueue: vi.fn().mockResolvedValue(undefined) };
 
   const service = new InvitationService({
     repository: repo,
@@ -403,6 +408,7 @@ function makeApp(limit: number | null = 5): Harness {
     passwordService: password,
     sessionIssuer,
     authRepository: authRepo as Pick<AuthRepository, "findUserByEmail" | "checkMembershipExists">,
+    deliveryQueue,
     logger,
     now: () => new Date(),
     expiryDays: 7,
@@ -463,7 +469,7 @@ function makeApp(limit: number | null = 5): Harness {
   );
   app.use(createErrorHandler(logger));
 
-  return { app, repo, tokens, logs, publicUser, currentUser, limiterSpy };
+  return { app, repo, tokens, logs, publicUser, currentUser, limiterSpy, deliveryQueue };
 }
 
 describe("Team invitation HTTP integration", () => {
@@ -485,6 +491,9 @@ describe("Team invitation HTTP integration", () => {
       expect(h.repo.invitations).toHaveLength(1);
       expect(h.repo.invitations[0].tokenHash).not.toBe(h.tokens.generated[0]);
       expect(h.repo.invitations[0].tokenHash).toBe(`hash:${h.tokens.generated[0]}`);
+      expect(h.deliveryQueue.enqueue).toHaveBeenCalledWith({
+        invitationId: h.repo.invitations[0].id,
+      });
     });
 
     it("invites an existing user without disclosing that an account exists", async () => {
@@ -540,7 +549,8 @@ describe("Team invitation HTTP integration", () => {
       expect(second.status).toBe(201);
       expect(second.body.data.resent).toBe(true);
       expect(h.repo.invitations).toHaveLength(1);
-      expect(h.repo.invitations[0].sendCount).toBe(1);
+      expect(h.repo.invitations[0].sendCount).toBe(0);
+      expect(h.repo.invitations[0].lastSentAt).toBeNull();
       expect(h.repo.invitations[0].tokenHash).toBe(`hash:${h.tokens.generated[1]}`);
 
       const stalePreview = await request(h.app)
