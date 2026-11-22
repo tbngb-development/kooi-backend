@@ -382,4 +382,18 @@ describe("SarvamCohortTransformer", () => {
       alternate_phone_numbers: [],
     });
   });
+
+  it("drops non-importable phone numbers even when they have a +91 prefix", () => {
+    const result = transformer.transform(
+      [{ name: "Test User", phone: "+911234567890" }],
+      dummyVariables,
+      {},
+      {},
+    );
+
+    expect(result.totalLeads).toBe(0);
+    expect(result.transformedCsvBuffer.toString("utf-8")).not.toContain(
+      "+911234567890",
+    );
+  });
 });

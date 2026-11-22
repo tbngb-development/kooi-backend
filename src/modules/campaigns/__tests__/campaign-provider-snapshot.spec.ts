@@ -12,6 +12,10 @@ import {
   InactiveVoiceProviderCredentialError,
 } from "../../tenants/domain/tenant.errors";
 
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
+  assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("Campaign Voice Provider Snapshotting & Immutability", () => {
   let mockCampaignRepo: Partial<CampaignRepository>;
   let mockPlanRepo: Partial<PlanRepository>;

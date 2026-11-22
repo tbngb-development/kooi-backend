@@ -23,6 +23,10 @@ import {
   SarvamActiveCampaignLimitReachedError,
 } from "../domain/errors/campaign.errors";
 
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
+  assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("Sarvam Campaign Creation Suite (Phase 1)", () => {
   const tenantId = "tenant-sarvam-001";
   const validAgentId = "b97d1956-fdf9-4c80-be34-e4210e7ee61b";

@@ -17,7 +17,7 @@ import type { TenantNameRepository } from "../application/interfaces/tenant-name
 import { BatchProcessingWorker } from "../infrastructure/jobs/batch-processing.worker";
 
 vi.mock("axios");
-vi.mock("../../../../shared/utils/tenant-freeze.guard", () => ({
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
   assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
 }));
 

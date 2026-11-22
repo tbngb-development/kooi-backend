@@ -11,7 +11,7 @@ import type { FileStorageProvider } from "../../../shared/config/external/storag
 import axios from "axios";
 
 vi.mock("axios");
-vi.mock("../../../../shared/utils/tenant-freeze.guard", () => ({
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
   assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -929,5 +929,42 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
       expect.objectContaining({ status: "STOPPED" }),
     );
     expect(mockCampaignRepo.reopenCampaignForNewBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a foreign contact number before persisting or uploading the cohort", async () => {
+    const csvContent =
+      "Contact Number,Customer Name\n+919876543210,Indian User\n+6587792911,Foreign User";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        scheduledAt: null,
+        runImmediately: false,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockBatchRepo.createLeads).toHaveBeenCalledTimes(1);
+    expect(mockBatchRepo.createLeads).toHaveBeenCalledWith([
+      expect.objectContaining({ phone: "+919876543210" }),
+    ]);
+    expect(mockSarvamCohortClient.uploadCohort).toHaveBeenCalledTimes(1);
+    const uploadedCsv = vi.mocked(mockSarvamCohortClient.uploadCohort).mock
+      .calls[0][0].cohortFile.toString("utf-8");
+    expect(uploadedCsv).toContain("+919876543210");
+    expect(uploadedCsv).not.toContain("+6587792911");
   });
 });
