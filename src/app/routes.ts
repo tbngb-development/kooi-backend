@@ -41,6 +41,13 @@ import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentat
 import { buildTenantContactRoutes } from "../modules/contact/presentation/contact.routes";
 import { buildPublicContactRoutes } from "../modules/contact/presentation/public-contact.routes";
 import { buildTenantApiKeyRoutes } from "../modules/tenant-api-keys/presentation/tenant-api-key.routes";
+import { buildTenantInvitationRoutes } from "../modules/team-invitations/presentation/tenant-invitation.routes";
+import { buildPublicInvitationRoutes } from "../modules/team-invitations/presentation/public-invitation.routes";
+import {
+  teamInviteWriteLimiter,
+  teamInvitePreviewLimiter,
+  teamInviteAcceptLimiter,
+} from "../shared/middleware/rate-limiters";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -135,6 +142,30 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+  // Team invitations — nested under the current workspace. Mounted BEFORE the
+  // general tenant workspace router; guards are per-route so other `/current`
+  // paths still fall through to the workspace router below.
+  router.use(
+    "/v1/tenants/current",
+    buildTenantInvitationRoutes(
+      c.teamInvitations.tenantController,
+      c.authenticate,
+      c.authorize,
+      teamInviteWriteLimiter,
+    ),
+  );
+
+  // Public invite-link endpoints (optional auth, rate limited).
+  router.use(
+    "/v1/invitations",
+    buildPublicInvitationRoutes(
+      c.teamInvitations.publicController,
+      c.authenticate,
+      teamInvitePreviewLimiter,
+      teamInviteAcceptLimiter,
+    ),
+  );
+
   router.use(
     "/v1/tenants",
     buildTenantWorkspaceRoutes(

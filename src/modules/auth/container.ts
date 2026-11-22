@@ -29,6 +29,8 @@ import { RefreshTokenCleanupScheduler } from "./infrastructure/jobs/refresh-toke
 export interface AuthModule {
   tenantController: TenantAuthController;
   adminController: AdminAuthController;
+  /** Shared with other modules that need the canonical session issuer. */
+  selectTenantUseCase: SelectTenantUseCase;
   schedulers: {
     refreshTokenCleanup: RefreshTokenCleanupScheduler;
   };
@@ -144,6 +146,12 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       verifyForgotPasswordOtpUseCase,
       resetPasswordUseCase,
       changePasswordUseCase,
+    ),
+
+    selectTenantUseCase: new SelectTenantUseCase(
+      authRepository,
+      tokenService,
+      log,
     ),
 
     schedulers: {

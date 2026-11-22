@@ -324,9 +324,13 @@ export function buildContainer(): AppContainer {
     emailService: email,
   });
 
-  // Team invitations - shared repository + membership rules (used by later phases)
+  // Team invitations — full lifecycle, sharing the canonical session issuer.
   const teamInvitations = buildTeamInvitationModule({
     planRepository: plans.repository,
+    authRepository,
+    passwordService,
+    sessionIssuer: auth.selectTenantUseCase,
+    logger,
   });
 
   // 8. Assistants Module

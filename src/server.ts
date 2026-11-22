@@ -25,6 +25,7 @@ const server = app.listen(env.port, () => {
     container.auth.schedulers.refreshTokenCleanup.start();
     container.classifier.schedulers.classifierExtraction.start();
     container.payments.schedulers.paymentReconciliation.start();
+    container.teamInvitations.schedulers.invitationExpiry.start();
     container.calls.schedulers.sarvamRecording?.start();
     container.discordOutboxRelay.start();
     container.emailOutboxRelay.start();
@@ -45,6 +46,7 @@ function gracefulShutdown(signal: string): void {
   container.auth.schedulers.refreshTokenCleanup.stop();
   container.classifier.schedulers.classifierExtraction.stop();
   container.payments.schedulers.paymentReconciliation.stop();
+  void container.teamInvitations.schedulers.invitationExpiry.stop();
   container.calls.schedulers.sarvamRecording?.stop();
   container.discordOutboxRelay.stop();
   container.emailOutboxRelay.stop();
