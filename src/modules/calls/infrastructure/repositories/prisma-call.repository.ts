@@ -243,6 +243,13 @@ export class PrismaCallRepository implements CallRepository {
       };
     }
 
+    if (filters.durationCondition && filters.durationSeconds !== undefined) {
+      where.duration =
+        filters.durationCondition === "gt"
+          ? { gt: filters.durationSeconds }
+          : { lt: filters.durationSeconds };
+    }
+
     if (search) {
       where.OR = [
         {

@@ -22,6 +22,16 @@ export const dynamicFiltersSchema = z
     }
   });
 
+const durationConditionSchema = z.enum(["gt", "lt"]);
+
+const optionalDurationSecondsSchema = z.preprocess(
+  (val) => {
+    if (val === undefined || val === null || val === "") return undefined;
+    return Number(val);
+  },
+  z.number().int().positive().optional(),
+);
+
 const listCallsQueryFields = z.object({
   provider: z.enum(["BOLNA", "SARVAM"]).optional(),
   campaignId: z.string().uuid("Invalid campaign ID").optional(),
@@ -43,6 +53,8 @@ const listCallsQueryFields = z.object({
   limit: z
     .preprocess((val) => Number(val), z.number().int().positive())
     .optional(),
+  durationCondition: durationConditionSchema.optional(),
+  durationSeconds: optionalDurationSecondsSchema,
   dynamicFilters: dynamicFiltersSchema,
   isDeleted: z
     .preprocess((val) => val === "true" || val === true, z.boolean())
@@ -69,6 +81,20 @@ export const listCallsQuerySchema = listCallsQueryFields.superRefine(
         path: ["goalPassed"],
       });
     }
+    if (data.durationCondition && data.durationSeconds === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "durationSeconds is required with durationCondition",
+        path: ["durationSeconds"],
+      });
+    }
+    if (data.durationSeconds !== undefined && !data.durationCondition) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "durationCondition is required with durationSeconds",
+        path: ["durationCondition"],
+      });
+    }
   },
 );
 
@@ -83,6 +109,20 @@ export const exportCallsQuerySchema = listCallsQueryFields
         code: z.ZodIssueCode.custom,
         message: "Cannot filter by specific goalId when goalPassed is false",
         path: ["goalPassed"],
+      });
+    }
+    if (data.durationCondition && data.durationSeconds === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "durationSeconds is required with durationCondition",
+        path: ["durationSeconds"],
+      });
+    }
+    if (data.durationSeconds !== undefined && !data.durationCondition) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "durationCondition is required with durationSeconds",
+        path: ["durationCondition"],
       });
     }
   });

@@ -24,6 +24,8 @@ export interface ListCallsInput {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  durationCondition?: "gt" | "lt";
+  durationSeconds?: number;
   dynamicFilters?: DynamicFilterMap;
   isDeleted?: boolean;
   goalId?: string;

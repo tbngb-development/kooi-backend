@@ -38,6 +38,8 @@ export class ExportCallsUseCase {
       dateTo: input.dateTo,
       sortBy: input.sortBy,
       sortOrder: input.sortOrder,
+      durationCondition: input.durationCondition,
+      durationSeconds: input.durationSeconds,
       dynamicFilters: input.dynamicFilters,
       isDeleted: input.isDeleted,
       goalId: input.goalId,

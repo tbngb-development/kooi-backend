@@ -69,6 +69,8 @@ export class AdminCallController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
+        durationCondition: query.durationCondition,
+        durationSeconds: query.durationSeconds,
         dynamicFilters: query.dynamicFilters,
         isDeleted: query.isDeleted,
         goalId: query.goalId,
