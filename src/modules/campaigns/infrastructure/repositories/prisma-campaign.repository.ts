@@ -365,6 +365,34 @@ export class PrismaCampaignRepository implements CampaignRepository {
     return this.toEntityData(campaign, counts);
   }
 
+  async getCallingWindowContext(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{ industryCallingHours: unknown; sarvamSchedule: unknown }> {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, tenantId },
+      select: {
+        assistant: {
+          select: {
+            platformAgent: {
+              select: {
+                industryPack: { select: { allowedCallingHours: true } },
+              },
+            },
+          },
+        },
+        sarvamAgent: { select: { allowedSchedule: true } },
+      },
+    });
+
+    return {
+      industryCallingHours:
+        campaign?.assistant?.platformAgent?.industryPack?.allowedCallingHours ??
+        null,
+      sarvamSchedule: campaign?.sarvamAgent?.allowedSchedule ?? null,
+    };
+  }
+
   async findByIdGlobal(campaignId: string): Promise<CampaignEntityData | null> {
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },

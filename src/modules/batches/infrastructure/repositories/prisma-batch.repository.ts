@@ -13,6 +13,7 @@ import type {
   ProcessingSarvamBatchRecord,
   BatchListItem,
   PendingLeadRow,
+  ActiveWindowBatch,
 } from "../../application/interfaces/batch-repository.interface";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import {
@@ -25,6 +26,7 @@ import {
 import { getBatchExecutionMetricsMap } from "../../../campaigns/infrastructure/queries/lead-execution-metrics.query";
 import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
+import { selectCarryForwardLeads } from "../../domain/rules/carry-forward.rules";
 
 export class PrismaBatchRepository implements BatchRepository {
   private async getBatchMetricsMap(
@@ -338,6 +340,7 @@ export class PrismaBatchRepository implements BatchRepository {
       cohortResult?: Record<string, unknown> | null;
       scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
+      windowPausedAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData> {
     const { cohortResult, ...rest } = data;
@@ -500,6 +503,81 @@ export class PrismaBatchRepository implements BatchRepository {
     }));
   }
 
+  async findCarryForwardLeads(
+    batchId: string,
+    windowEndAt: Date,
+  ): Promise<PendingLeadRow[]> {
+    const leads = await prisma.lead.findMany({
+      where: {
+        batchId,
+        doNotCall: false,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        metadata: true,
+        status: true,
+        calls: {
+          where: { isDeleted: false },
+          select: { status: true, createdAt: true },
+        },
+      },
+    });
+
+    return selectCarryForwardLeads(
+      leads.map((lead) => ({
+        ...lead,
+        status: String(lead.status),
+        metadata: (lead.metadata as Record<string, unknown> | null) ?? null,
+        calls: lead.calls.map((call) => ({
+          status: String(call.status),
+          createdAt: call.createdAt,
+        })),
+      })),
+      windowEndAt,
+    );
+  }
+
+  async findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]> {
+    const batches = await prisma.leadBatch.findMany({
+      where: {
+        isDeleted: false,
+        status: { in: ["RUNNING", "SCHEDULED"] },
+        windowPausedAt: null,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        campaignId: true,
+        bolnaBatchId: true,
+        status: true,
+        scheduledAt: true,
+      },
+    });
+
+    return batches.map((batch) => ({
+      id: batch.id,
+      tenantId: batch.tenantId,
+      campaignId: batch.campaignId,
+      bolnaBatchId: batch.bolnaBatchId,
+      status: batch.status,
+      scheduledAt: batch.scheduledAt,
+    }));
+  }
+
+  async markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean> {
+    const result = await prisma.leadBatch.updateMany({
+      where: { id: batchId, windowPausedAt: null },
+      data: { windowPausedAt: pausedAt, status: "STOPPED" },
+    });
+
+    return result.count > 0;
+  }
+
   async reassignCampaignLeadsToBatch(
     campaignId: string,
     batchId: string,
@@ -541,6 +619,18 @@ export class PrismaBatchRepository implements BatchRepository {
       },
     });
 
+    return result.count;
+  }
+
+  async reassignLeadsByIdsToBatch(
+    leadIds: string[],
+    newBatchId: string,
+  ): Promise<number> {
+    if (leadIds.length === 0) return 0;
+    const result = await prisma.lead.updateMany({
+      where: { id: { in: leadIds }, doNotCall: false, isDeleted: false },
+      data: { batchId: newBatchId, status: "PENDING", stoppedReason: null },
+    });
     return result.count;
   }
 
@@ -777,6 +867,7 @@ export class PrismaBatchRepository implements BatchRepository {
       retryConfig: unknown;
       scheduledAt: Date | null;
       bolnaScheduledAt: Date | null;
+      windowPausedAt?: Date | null;
       termsAccepted: boolean;
       termsAcceptedAt: Date | null;
       termsVersion: string | null;
@@ -815,6 +906,7 @@ export class PrismaBatchRepository implements BatchRepository {
       retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined,
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
+      windowPausedAt: batch.windowPausedAt ?? null,
       totalLeads: counts?.totalLeads ?? 0,
       calledLeads: counts?.calledLeads ?? 0,
       completedLeads: counts?.completedLeads ?? 0,

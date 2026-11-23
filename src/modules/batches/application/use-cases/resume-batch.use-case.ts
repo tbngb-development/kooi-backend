@@ -23,6 +23,8 @@ import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 
 import type { CheckBalanceForBatchUseCase } from "../../../wallet/application/use-cases/check-balance-for-batch.use-case";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../services/new-dial-window.guard";
 
 export class ResumeBatchUseCase {
   constructor(
@@ -32,6 +34,7 @@ export class ResumeBatchUseCase {
     private readonly bolnaProvider: BolnaBatchProvider,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
+    private readonly callingWindowService?: CallingWindowService,
   ) {}
 
   async execute(
@@ -53,6 +56,13 @@ export class ResumeBatchUseCase {
         `Cannot resume batch in "${batchData.status}" status.`,
       );
     }
+
+    await assertNewDialAllowed(
+      this.callingWindowService,
+      tenantId,
+      campaignId,
+      new Date(),
+    );
 
     const pendingLeads = await this.batchRepo.findPendingLeads(batchId);
     if (pendingLeads.length === 0) throw new BatchNoPendingLeadsError();

@@ -48,6 +48,8 @@ import {
   assertCampaignAcceptsNewBatch,
   reopenCampaignForNewBatchIfNeeded,
 } from "../../../campaigns/application/services/campaign-new-batch-guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../../application/services/new-dial-window.guard";
 
 export interface BatchJobData {
   batchId: string;
@@ -80,6 +82,7 @@ export class BatchProcessingWorker {
     logger?: Logger,
     private readonly tenantNameRepo?: TenantNameRepository,
     private readonly notifications: IDiscordEventsPublisher = noopDiscordEventsPublisher,
+    private readonly callingWindowService?: CallingWindowService,
   ) {
     this.log = logger?.child({ component: "BatchProcessingWorker" });
     this.sarvamCohortTransformer = new SarvamCohortTransformer();
@@ -427,8 +430,32 @@ export class BatchProcessingWorker {
       let localScheduledAt: Date | null = null;
 
       const targetScheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+      const wantsDial = targetScheduledDate || runImmediately;
+      let dialBlockedByWindow = false;
 
-      if (targetScheduledDate || runImmediately) {
+      if (wantsDial) {
+        try {
+          await assertNewDialAllowed(
+            this.callingWindowService,
+            tenantId,
+            campaignId,
+            targetScheduledDate ?? new Date(),
+          );
+        } catch (err) {
+          // Keep the parsed batch staged (CREATED) instead of scheduling new
+          // dials outside the calling window. The tenant can retry later.
+          dialBlockedByWindow = true;
+          this.log?.warn("New dials blocked by calling window; batch left unscheduled", {
+            action: "batch.worker.calling_window_blocked",
+            batchId,
+            tenantId,
+            campaignId,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      if (wantsDial && !dialBlockedByWindow) {
         const scheduleTimeISO = toBolnaISO(targetScheduledDate ?? new Date());
         const scheduleRes = await this.bolnaProvider.scheduleBatch(
           tenantId,
@@ -486,7 +513,7 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.recalculateCampaignStats(campaignId);
 
-      if (runImmediately && campaignForFinalize.status === "DRAFT") {
+      if (finalStatus === "RUNNING" && campaignForFinalize.status === "DRAFT") {
         await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
           startedAt: new Date(),
         });

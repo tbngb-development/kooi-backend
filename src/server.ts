@@ -21,6 +21,7 @@ const server = app.listen(env.port, () => {
     container.wallet.schedulers.creditEnforcementReconciler.start();
     container.plans.schedulers.trialExpiry.start();
     container.batches.schedulers.batchProcessing.start();
+    container.batches.schedulers.callingWindow.start();
     container.bolnaApiKeys.schedulers.agentClone.start();
     container.auth.schedulers.refreshTokenCleanup.start();
     container.classifier.schedulers.classifierExtraction.start();
@@ -43,6 +44,7 @@ function gracefulShutdown(signal: string): void {
   container.wallet.schedulers.creditEnforcementReconciler.stop();
   container.plans.schedulers.trialExpiry.stop();
   container.batches.schedulers.batchProcessing.stop();
+  container.batches.schedulers.callingWindow.stop();
   container.bolnaApiKeys.schedulers.agentClone.stop();
   container.auth.schedulers.refreshTokenCleanup.stop();
   container.classifier.schedulers.classifierExtraction.stop();

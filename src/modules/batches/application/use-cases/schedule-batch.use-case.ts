@@ -19,6 +19,8 @@ import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/pla
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../services/new-dial-window.guard";
 
 export class ScheduleBatchUseCase {
   constructor(
@@ -28,6 +30,7 @@ export class ScheduleBatchUseCase {
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
+    private readonly callingWindowService?: CallingWindowService,
   ) {}
 
   async execute(
@@ -60,6 +63,13 @@ export class ScheduleBatchUseCase {
     if (targetDate.getTime() < Date.now()) {
       throw new BatchOperationError("Scheduled time must be in the future.");
     }
+
+    await assertNewDialAllowed(
+      this.callingWindowService,
+      tenantId,
+      campaignId,
+      targetDate,
+    );
 
     // 2. Validate campaign and remember whether a guarded reopen is required.
     const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(

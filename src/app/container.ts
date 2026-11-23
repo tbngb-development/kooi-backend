@@ -408,6 +408,7 @@ export function buildContainer(): AppContainer {
     sarvamCohortClient,
     sarvamEncryptionService: sarvamApiKeys.encryptionService,
     syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+    callingWindowService: campaigns.useCases.callingWindow,
     eventPublisher: discordEventsPublisher,
   });
 

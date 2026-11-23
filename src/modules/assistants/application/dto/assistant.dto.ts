@@ -40,6 +40,7 @@ export interface GetAssistantOutput {
         id: string;
         name: string;
         slug: string;
+        allowedCallingHours?: unknown;
       } | null;
     };
   };

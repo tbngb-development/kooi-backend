@@ -1,6 +1,7 @@
 // modules/campaigns/application/dto/campaign.dto.ts
 
 import { type CampaignListItem } from "../interfaces/campaign-repository.interface";
+import type { CallingWindowTiming } from "../../../../shared/utils/calling-window";
 
 export interface CreateCampaignInput {
   name: string;
@@ -96,6 +97,7 @@ export interface ParseLeadsOutput {
     contactLimit: number | null;
     remaining: number | null;
   };
+  timing: CallingWindowTiming;
 }
 
 // ── Campaign List ──────────────────────────────────────────────────────────

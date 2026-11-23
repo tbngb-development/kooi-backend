@@ -34,6 +34,7 @@ import type {
   IDiscordEventsPublisher,
 } from "../../shared/config/external/notifications/discordevents-publisher";
 import { noopDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import { CallingWindowService } from "./application/services/calling-window.service";
 
 export interface CampaignModuleDeps {
   logger: Logger;
@@ -51,6 +52,7 @@ export interface CampaignModule {
   useCases: {
     controlSarvamCampaign?: ControlSarvamCampaignUseCase;
     syncSarvamCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+    callingWindow: CallingWindowService;
   };
 }
 
@@ -168,6 +170,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     useCases: {
       controlSarvamCampaign,
       syncSarvamCampaignLifecycle,
+      callingWindow: new CallingWindowService(campaignRepo),
     },
     tenantController: new TenantCampaignController(
       listCampaigns,

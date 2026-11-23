@@ -19,6 +19,8 @@ import {
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../services/new-dial-window.guard";
 
 export class RunBatchUseCase {
   constructor(
@@ -28,6 +30,7 @@ export class RunBatchUseCase {
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
+    private readonly callingWindowService?: CallingWindowService,
   ) {}
 
   async execute(tenantId: string, campaignId: string, batchId: string) {
@@ -47,6 +50,13 @@ export class RunBatchUseCase {
       );
     }
     if (!batchData.bolnaBatchId) throw new BatchNoBolnaIdError();
+
+    await assertNewDialAllowed(
+      this.callingWindowService,
+      tenantId,
+      campaignId,
+      new Date(),
+    );
 
     // 2. Validate campaign and remember whether a guarded reopen is required.
     const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(

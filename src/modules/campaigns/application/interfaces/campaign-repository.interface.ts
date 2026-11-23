@@ -166,6 +166,15 @@ export interface CampaignRepository {
     campaignId: string,
   ): Promise<CampaignEntityData | null>;
 
+  /** Agent-supplied calling window used when the campaign has no override. */
+  getCallingWindowContext?(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    industryCallingHours?: unknown;
+    sarvamSchedule?: unknown;
+  }>;
+
   findByIdGlobal(campaignId: string): Promise<CampaignEntityData | null>;
 
   findByIdWithRelations(

@@ -26,6 +26,7 @@ export interface LeadBatchEntityData {
   retryConfig?: RetryConfig;
   scheduledAt: Date | null;
   bolnaScheduledAt: Date | null;
+  windowPausedAt?: Date | null;
   totalLeads: number;
   calledLeads: number;
   completedLeads: number;
