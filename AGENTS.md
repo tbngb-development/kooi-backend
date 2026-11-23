@@ -792,3 +792,18 @@ api.interceptors.response.use(
   },
 );
 ```
+
+---
+
+## 11. Branching, Release & Hosting
+
+> Full runbook: [`../Docs/BRANCHING.md`](../Docs/BRANCHING.md)
+
+- **`master` = production, `dev` = staging.** Both are protected; no direct pushes.
+- **`main` is retired.** Use `master`.
+- Feature work uses short-lived `feat/*`, `fix/*`, `refactor/*`, `chore/*` branches off `dev`, merged via PR.
+- **Release:** PR `dev → master` → tag `vX.Y.Z` → deploy → back-merge `master → dev`.
+- **Hotfix:** branch `hotfix/*` off `master`, PR to `master`, tag a patch, deploy, then back-merge `master → dev`. Never hotfix from `dev`.
+- **Backend deploy:** `node scripts/deploy.mjs --env staging|production` on the host, from the release dir. Fixed order: preflight → generate → build → migrate → reload → verify.
+- **Destructive migrations:** use expand/contract across two releases; preflight blocks drop/rename/truncate/type changes.
+- **Environments:** prod `/srv/apps/kooi/current` (`kooi-api`, `https://api.kooi.in/api/health`); staging `/srv/apps/kooi-staging/current` (`kooi-api-staging`, `https://staging-api.kooi.in/api/health`).
