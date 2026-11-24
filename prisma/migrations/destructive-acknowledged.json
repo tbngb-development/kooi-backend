@@ -1,3 +1,6 @@
 {
-  "acknowledged": []
+  "acknowledged": [
+    "20261102213000_rename_sarvam_configuration_to_sarvam_api_key",
+    "20261105185000_remove_sarvam_agent_webhook_url"
+  ]
 }
