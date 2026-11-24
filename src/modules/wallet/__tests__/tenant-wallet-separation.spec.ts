@@ -58,6 +58,10 @@ describe("Tenant Wallet Separation & Summary", () => {
       vi.mocked(mockWalletRepo.getTransactionSummary).mockResolvedValue({
         totalCreditsAddedPaisa: 30000,
         totalCreditsUsedPaisa: 45000,
+        totalPurchasedCreditsPaisa: 60000,
+        totalCallSpendPaisa: 40000,
+        totalOtherDebitsPaisa: 5000,
+        totalBonusExpiredPaisa: 2000,
         cashBalance: 15000,
         bonusBalance: 5000,
       });

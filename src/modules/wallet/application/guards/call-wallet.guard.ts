@@ -1,7 +1,7 @@
 // modules/wallet/application/guards/call-wallet.guard.ts
 
 import type { WalletRepository } from "../interfaces/wallet-repository.interface";
-import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
+import { hasExecutableBalance } from "../../domain/rules/wallet-balance.policy";
 import {
   WalletNotFoundError,
   InsufficientBalanceError,
@@ -25,8 +25,7 @@ export class CallWalletGuard implements ICallWalletGuard {
       return false;
     }
 
-    const availableBalance = getEffectiveAvailableBalance(wallet, now);
-    return availableBalance > 0;
+    return hasExecutableBalance(wallet, now);
   }
 
   /**
@@ -40,8 +39,7 @@ export class CallWalletGuard implements ICallWalletGuard {
       throw new WalletNotFoundError(tenantId);
     }
 
-    const availableBalance = getEffectiveAvailableBalance(wallet, now);
-    if (availableBalance <= 0) {
+    if (!hasExecutableBalance(wallet, now)) {
       throw new InsufficientBalanceError(
         "Insufficient wallet balance to place a call. Please recharge your wallet.",
       );

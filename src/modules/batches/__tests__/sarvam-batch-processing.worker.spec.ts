@@ -11,7 +11,7 @@ import type { FileStorageProvider } from "../../../shared/config/external/storag
 import axios from "axios";
 
 vi.mock("axios");
-vi.mock("../../../../shared/utils/tenant-freeze.guard", () => ({
+vi.mock("../../../shared/utils/tenant-freeze.guard", () => ({
   assertTenantNotFrozen: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -115,6 +115,8 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
         overrides: [],
       } as any),
       updateStatus: vi.fn().mockResolvedValue({} as any),
+      hasLowBalanceStoppedLeads: vi.fn().mockResolvedValue(false),
+      reopenCampaignForNewBatch: vi.fn().mockResolvedValue(true),
       countActiveCampaignsForAgent: vi.fn().mockResolvedValue(0),
     } as unknown as CampaignRepository;
 
@@ -823,5 +825,146 @@ describe("BatchProcessingWorker (Sarvam Flow)", () => {
         scheduledAt: null,
       }),
     );
+  });
+
+  it("reopens a completed Sarvam campaign and runs a new batch immediately", async () => {
+    const csvContent =
+      "Contact Number,Customer Name,account_number\n+919876543210,Aarav Sharma,ACC-101";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    vi.mocked(mockCampaignRepo.findByIdWithRelations).mockResolvedValue({
+      id: campaignId,
+      tenantId,
+      name: "Sarvam Completed Campaign",
+      provider: "SARVAM",
+      status: "COMPLETED",
+      startedAt: new Date("2025-01-01T00:00:00.000Z"),
+      sarvamAgentId,
+      sarvamCampaignId,
+      variables: {},
+    } as any);
+
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        runImmediately: true,
+        scheduledAt: null,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({ status: "RUNNING" }),
+    );
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).toHaveBeenCalledWith(
+      campaignId,
+      { startedAt: null },
+    );
+    expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it("aborts Sarvam cohort upload before provider calls for a credit-enforcement-stopped campaign", async () => {
+    const csvContent =
+      "Contact Number,Customer Name,account_number\n+919876543210,Aarav Sharma,ACC-101";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    vi.mocked(mockCampaignRepo.findByIdWithRelations).mockResolvedValue({
+      id: campaignId,
+      tenantId,
+      name: "Sarvam Low Balance Campaign",
+      provider: "SARVAM",
+      status: "COMPLETED",
+      sarvamAgentId,
+      sarvamCampaignId,
+      variables: {},
+    } as any);
+    vi.mocked(mockCampaignRepo.hasLowBalanceStoppedLeads).mockResolvedValueOnce(
+      true,
+    );
+
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        runImmediately: true,
+        scheduledAt: null,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockCampaignRepo.hasLowBalanceStoppedLeads).toHaveBeenCalledWith(
+      campaignId,
+    );
+    expect(mockSarvamCohortClient.uploadCohort).not.toHaveBeenCalled();
+    expect(mockBatchRepo.markPendingLeadsAsStopped).toHaveBeenCalledWith(
+      batchId,
+      "MANUAL",
+    );
+    expect(mockBatchRepo.update).toHaveBeenCalledWith(
+      batchId,
+      expect.objectContaining({ status: "STOPPED" }),
+    );
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a foreign contact number before persisting or uploading the cohort", async () => {
+    const csvContent =
+      "Contact Number,Customer Name\n+919876543210,Indian User\n+6587792911,Foreign User";
+
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: Buffer.from(csvContent, "utf-8"),
+    });
+
+    const job = {
+      data: {
+        batchId,
+        tenantId,
+        campaignId,
+        rawFileUrl: "https://storage.example.com/raw.csv",
+        fileName: "leads.csv",
+        scheduledAt: null,
+        runImmediately: false,
+        retryConfig: null,
+        termsVersion: "1.0",
+      },
+      opts: { attempts: 1 },
+      attemptsMade: 0,
+    } as any;
+
+    await worker.process(job);
+
+    expect(mockBatchRepo.createLeads).toHaveBeenCalledTimes(1);
+    expect(mockBatchRepo.createLeads).toHaveBeenCalledWith([
+      expect.objectContaining({ phone: "+919876543210" }),
+    ]);
+    expect(mockSarvamCohortClient.uploadCohort).toHaveBeenCalledTimes(1);
+    const uploadedCsv = vi.mocked(mockSarvamCohortClient.uploadCohort).mock
+      .calls[0][0].cohortFile.toString("utf-8");
+    expect(uploadedCsv).toContain("+919876543210");
+    expect(uploadedCsv).not.toContain("+6587792911");
   });
 });

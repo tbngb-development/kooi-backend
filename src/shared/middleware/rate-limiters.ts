@@ -120,4 +120,46 @@ export const outboundCallRateLimiter = rateLimit({
   },
 });
 
+/**
+ * Team invitation writes (create/resend/revoke) are authenticated and scoped,
+ * so a moderate per-tenant/per-IP cap is sufficient.
+ */
+export const teamInviteWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    message: "Too many invitation requests. Please try again later.",
+  },
+});
+
+/** Public invite preview — blocks token guessing/brute force. */
+export const teamInvitePreviewLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    message: "Too many invitation lookups. Please try again later.",
+  },
+});
+
+/** Public invite acceptance — stricter, since it creates accounts/sessions. */
+export const teamInviteAcceptLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: "TOO_MANY_REQUESTS",
+    message: "Too many invitation attempts. Please try again later.",
+  },
+});
+
 

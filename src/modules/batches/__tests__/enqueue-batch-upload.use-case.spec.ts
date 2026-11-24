@@ -3,13 +3,15 @@ import { EnqueueBatchUploadUseCase } from "../application/use-cases/enqueue-batc
 import {
   CampaignNotEligibleForUploadError,
   CampaignNotFoundError,
+  CampaignStoppedForLowBalanceError,
 } from "../../campaigns/domain/errors/campaign.errors";
 import type { BatchRepository } from "../application/interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../campaigns/application/interfaces/campaign-repository.interface";
 import type { PlanRepository } from "../../plans/application/interfaces/plan-repository.interface";
 import type { FileStorageProvider } from "../../../shared/config/external/storage/file-storage.interface";
+import { getQueue } from "../../../shared/config/external/queue/queue.factory";
 
-vi.mock("../../../../shared/config/external/queue/queue.factory", () => ({
+vi.mock("../../../shared/config/external/queue/queue.factory", () => ({
   getQueue: vi.fn().mockReturnValue({
     add: vi.fn().mockResolvedValue({ id: "job-1" }),
     getJobs: vi.fn().mockResolvedValue([]),
@@ -29,6 +31,8 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
   const campaignId = "camp-sarvam-1";
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
     mockBatchRepo = {
       create: vi.fn().mockResolvedValue({ id: "batch-1", status: "PROCESSING" }),
       updateRawFileUrl: vi.fn().mockResolvedValue(undefined),
@@ -39,6 +43,8 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
 
     mockCampaignRepo = {
       findByIdWithRelations: vi.fn(),
+      hasLowBalanceStoppedLeads: vi.fn().mockResolvedValue(false),
+      reopenCampaignForNewBatch: vi.fn().mockResolvedValue(true),
       countActiveCampaignsAtTime: vi.fn().mockResolvedValue(0),
       countActiveCampaigns: vi.fn().mockResolvedValue(0),
       updateStatus: vi.fn().mockResolvedValue({ id: campaignId }),
@@ -95,11 +101,11 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
       status: "PROCESSING",
       message: "Your file is being processed. You'll see the leads appear shortly.",
     });
-    expect(mockCampaignRepo.updateStatus).toHaveBeenCalledWith(
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).toHaveBeenCalledWith(
       campaignId,
-      "RUNNING",
-      { completedAt: null },
+      { startedAt: expect.any(Date) },
     );
+    expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
   });
 
   it("throws CampaignNotEligibleForUploadError when Sarvam campaign is CANCELLED", async () => {
@@ -233,5 +239,108 @@ describe("EnqueueBatchUploadUseCase (Phase 1 Lifecycle Guards)", () => {
 
     const result = await useCase.execute(input);
     expect(result.status).toBe("PROCESSING");
+  });
+
+  it("reopens a normal COMPLETED Bolna campaign when a new batch is uploaded", async () => {
+    mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
+      id: "camp-bolna-completed",
+      tenantId,
+      provider: "BOLNA",
+      status: "COMPLETED",
+      assistant: { id: "asst-1" },
+      startedAt: new Date("2025-01-01T00:00:00.000Z"),
+    });
+
+    const input = {
+      tenantId,
+      campaignId: "camp-bolna-completed",
+      fileBuffer: Buffer.from("Contact Number\n+919876543210"),
+      fileName: "leads.csv",
+      termsAccepted: true,
+      termsVersion: "1.0",
+      runImmediately: true,
+    };
+
+    await useCase.execute(input);
+
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).toHaveBeenCalledWith(
+      "camp-bolna-completed",
+      { startedAt: null },
+    );
+    expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it("refuses a new batch for an enforcement-stopped campaign", async () => {
+    mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
+      id: "camp-bolna-completed",
+      tenantId,
+      provider: "BOLNA",
+      status: "COMPLETED",
+      assistant: { id: "asst-1" },
+    });
+    mockCampaignRepo.hasLowBalanceStoppedLeads.mockResolvedValue(true);
+
+    const input = {
+      tenantId,
+      campaignId: "camp-bolna-completed",
+      fileBuffer: Buffer.from("Contact Number\n+919876543210"),
+      fileName: "leads.csv",
+      termsAccepted: true,
+      termsVersion: "1.0",
+      runImmediately: true,
+    };
+
+    await expect(useCase.execute(input)).rejects.toThrow(
+      CampaignStoppedForLowBalanceError,
+    );
+    expect(mockBatchRepo.create).not.toHaveBeenCalled();
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).not.toHaveBeenCalled();
+  });
+
+  it("Upload + Run now reopens a completed campaign and queues the new batch for execution", async () => {
+    mockCampaignRepo.findByIdWithRelations.mockResolvedValue({
+      id: "camp-bolna-completed",
+      tenantId,
+      provider: "BOLNA",
+      status: "COMPLETED",
+      assistant: { id: "asst-1" },
+      startedAt: new Date("2025-01-01T00:00:00.000Z"),
+    });
+
+    await useCase.execute({
+      tenantId,
+      campaignId: "camp-bolna-completed",
+      fileBuffer: Buffer.from("Contact Number\n+919876543210"),
+      fileName: "leads.csv",
+      termsAccepted: true,
+      termsVersion: "1.0",
+      runImmediately: true,
+    });
+
+    expect(mockBatchRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        campaignId: "camp-bolna-completed",
+        fileName: "leads.csv",
+      }),
+    );
+    expect(mockCampaignRepo.reopenCampaignForNewBatch).toHaveBeenCalledWith(
+      "camp-bolna-completed",
+      { startedAt: null },
+    );
+    expect(mockCampaignRepo.updateStatus).not.toHaveBeenCalled();
+
+    const queue = vi.mocked(getQueue)("batch-processing");
+    expect(queue.add).toHaveBeenCalledWith(
+      "process-batch",
+      expect.objectContaining({
+        batchId: "batch-1",
+        tenantId,
+        campaignId: "camp-bolna-completed",
+        runImmediately: true,
+        scheduledAt: expect.any(String),
+      }),
+      expect.objectContaining({ jobId: "batch:batch-1" }),
+    );
   });
 });

@@ -7,6 +7,8 @@ import type {
   CreateAggregateCallData,
   UpdateAggregateCallData,
 } from "../../application/interfaces/sarvam-webhook-repository.interface";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
+import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
 
 const aggregateCallSelect = {
   id: true,
@@ -415,42 +417,46 @@ export class PrismaSarvamWebhookRepository implements ISarvamWebhookRepository {
     });
   }
 
-  async recalculateCampaignStats(campaignId: string): Promise<void> {
-    const batches = await this.client.leadBatch.findMany({
-      where: { campaignId, isDeleted: false },
-      select: { status: true },
+  async markCampaignRunningIfActive(campaignId: string): Promise<boolean> {
+    // Atomic start: a webhook that read DRAFT/SCHEDULED before enforcement
+    // finalized the campaign must not reopen it. RUNNING is intentionally
+    // excluded because starting is a no-op for an already running campaign and
+    // we must not overwrite its original startedAt.
+    const result = await this.client.campaign.updateMany({
+      where: {
+        id: campaignId,
+        status: { in: ["DRAFT", "SCHEDULED"] },
+      },
+      data: { status: "RUNNING", startedAt: new Date() },
     });
+    return result.count > 0;
+  }
 
-    const statuses = batches.map((b) => b.status);
+  async settleCampaignIfActive(
+    campaignId: string,
+    status: "COMPLETED" | "FAILED",
+    completedAt: Date,
+  ): Promise<boolean> {
+    const result = await this.client.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status, completedAt },
+    });
+    return result.count > 0;
+  }
 
-    const hasActiveBatches = statuses.some(
-      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-    );
+  async recalculateCampaignStats(campaignId: string): Promise<void> {
+    const statuses = await this.getAllBatchStatuses(campaignId);
+    const decision = decideCampaignStatusFromBatches(statuses);
 
-    let campaignStatusUpdate: {
-      status?: "COMPLETED" | "FAILED";
-      completedAt?: Date;
-    } = {};
-
-    if (statuses.length > 0 && !hasActiveBatches) {
-      const allTerminal = statuses.every(
-        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
+    if (decision.action === "settle") {
+      await this.settleCampaignIfActive(
+        campaignId,
+        decision.status,
+        new Date(),
       );
-
-      if (allTerminal) {
-        const allFailed = statuses.every((s) => s === "FAILED");
-        campaignStatusUpdate = {
-          status: allFailed ? "FAILED" : "COMPLETED",
-          completedAt: new Date(),
-        };
-      }
-    }
-
-    if (Object.keys(campaignStatusUpdate).length > 0) {
-      await this.client.campaign.update({
-        where: { id: campaignId },
-        data: campaignStatusUpdate,
-      });
     }
   }
 

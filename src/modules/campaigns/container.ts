@@ -28,21 +28,31 @@ import type { Logger } from "../../shared/logging/logger.interface";
 import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
 import type { ISarvamCampaignClient } from "./infrastructure/clients/sarvam-campaign.client";
 import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import { CampaignNotifications } from "./application/services/campaign-notifications";
+import { PrismaTenantNameRepository } from "../batches/infrastructure/repositories/prisma-tenant-name.repository";
+import type {
+  IDiscordEventsPublisher,
+} from "../../shared/config/external/notifications/discordevents-publisher";
+import { noopDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import { CallingWindowService } from "./application/services/calling-window.service";
 
 export interface CampaignModuleDeps {
   logger: Logger;
   voiceProviderService?: ITenantVoiceProviderService;
   sarvamCampaignClient?: ISarvamCampaignClient;
   sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  eventPublisher?: IDiscordEventsPublisher;
 }
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
   repository: PrismaCampaignRepository;
+  notifications: CampaignNotifications;
   useCases: {
     controlSarvamCampaign?: ControlSarvamCampaignUseCase;
     syncSarvamCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+    callingWindow: CallingWindowService;
   };
 }
 
@@ -51,7 +61,17 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const batchRepo = new PrismaBatchRepository();
   const planRepo = new PrismaPlanRepository();
   const walletRepo = new PrismaWalletRepository();
+  const tenantNameRepo = new PrismaTenantNameRepository();
   const log = deps?.logger?.child({ module: "campaign" });
+
+  // Internal Discord notifications are optional and best-effort. Without a
+  // publisher (e.g. in unit tests) the noop keeps campaign flows inert.
+  const campaignNotifications = new CampaignNotifications({
+    findCampaign: (campaignId) => campaignRepo.findByIdGlobal(campaignId),
+    getTenantName: (tenantId) => tenantNameRepo.getNameById(tenantId),
+    publisher: deps?.eventPublisher ?? noopDiscordEventsPublisher,
+    logger: log,
+  });
 
   const listCampaigns = new ListCampaignsUseCase(campaignRepo);
   const getCampaign = new GetCampaignUseCase(campaignRepo);
@@ -90,6 +110,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     campaignRepo,
     batchRepo,
     log,
+    campaignNotifications,
   );
   const updateCampaign = new UpdateCampaignUseCase(
     campaignRepo,
@@ -124,6 +145,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
           deps.sarvamCampaignClient,
           deps.sarvamEncryptionService,
           log,
+          campaignNotifications,
         )
       : undefined;
 
@@ -134,6 +156,7 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
     deps?.sarvamCampaignClient,
     deps?.sarvamEncryptionService,
     log,
+    campaignNotifications,
   );
 
   const getActiveSarvamCampaigns = new GetActiveSarvamCampaignsUseCase(
@@ -143,9 +166,11 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
 
   return {
     repository: campaignRepo,
+    notifications: campaignNotifications,
     useCases: {
       controlSarvamCampaign,
       syncSarvamCampaignLifecycle,
+      callingWindow: new CallingWindowService(campaignRepo),
     },
     tenantController: new TenantCampaignController(
       listCampaigns,

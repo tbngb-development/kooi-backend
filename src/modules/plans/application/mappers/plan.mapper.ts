@@ -40,7 +40,8 @@ export function toPlanVersionResponse(v: PlanVersion): PlanVersionResponse {
     integrations: v.integrations,
     supportTier: v.supportTier,
 
-    lowBalanceThreshold: v.lowBalanceThreshold,
+    creditLimit: v.creditLimit,
+    warningThreshold: v.warningThreshold,
     includedBalance: v.includedBalance,
     bonusValidityDays: v.bonusValidityDays,
 

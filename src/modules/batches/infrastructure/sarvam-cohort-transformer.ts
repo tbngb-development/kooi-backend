@@ -1,4 +1,7 @@
-import { normalizePhoneNumber } from "../../leads/domain/rules/phone.rules";
+import {
+  isIndianPhone,
+  normalizePhoneNumber,
+} from "../../leads/domain/rules/phone.rules";
 import type { LeadRow } from "../../leads/infrastructure/leadParser";
 import { serializeCsv } from "../../../shared/utils/csv";
 import type {
@@ -89,7 +92,7 @@ export class SarvamCohortTransformer {
     for (let leadIndex = 0; leadIndex < leads.length; leadIndex++) {
       const lead = leads[leadIndex];
       const normalizedPhone = normalizePhoneNumber(lead.phone);
-      if (!normalizedPhone.startsWith("+91")) {
+      if (!isIndianPhone(normalizedPhone)) {
         continue;
       }
 

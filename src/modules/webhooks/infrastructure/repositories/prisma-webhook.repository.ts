@@ -19,6 +19,7 @@ import type {
   CallHistoryItem,
   RetryConfig,
 } from "../../../../shared/types/bolna.types";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 
 const callSelectFields = {
   id: true,
@@ -348,6 +349,42 @@ export class PrismaWebhookRepository implements WebhookRepository {
         ...(status === "FAILED" && timestamp && { completedAt: timestamp }),
       },
     });
+  }
+
+  async markCampaignRunningIfActive(
+    campaignId: string,
+    startedAt?: Date,
+  ): Promise<boolean> {
+    // Atomic guard: enforcement may have finalized the campaign between the
+    // webhook being accepted and this write. A plain read-then-update would
+    // still resurrect a COMPLETED/FAILED campaign, so filter on status in the
+    // same UPDATE statement.
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        status: { in: ["DRAFT", "SCHEDULED", "RUNNING"] },
+      },
+      data: {
+        status: "RUNNING",
+        ...(startedAt && { startedAt }),
+      },
+    });
+    return result.count > 0;
+  }
+
+  async settleCampaignIfActive(
+    campaignId: string,
+    status: "COMPLETED" | "FAILED",
+    completedAt: Date,
+  ): Promise<boolean> {
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status, completedAt },
+    });
+    return result.count > 0;
   }
 
   async incrementTerminalStats(

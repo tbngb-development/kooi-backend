@@ -396,6 +396,119 @@ describe("Admin Campaign Update UseCase & Controller", () => {
     });
   });
 
+  describe("Sarvam Campaign Variable Updates", () => {
+    const sarvamAgentId = "00000000-0000-4000-8000-000000000001";
+
+    const sarvamAgentWithVariables = {
+      id: sarvamAgentId,
+      name: "Sarvam Sales Agent",
+      appId: "app-1",
+      appVersion: 1,
+      attemptsPerSecond: 10,
+      agentVariables: [
+        {
+          key: "project_name",
+          dataType: "string",
+          inputType: "text",
+          required: true,
+          defaultValue: "",
+          description: null,
+          isTenantVisible: true,
+          isTenantEditable: true,
+        },
+        {
+          key: "budget",
+          dataType: "string",
+          inputType: "text",
+          required: true,
+          defaultValue: "",
+          description: null,
+          isTenantVisible: true,
+          isTenantEditable: true,
+        },
+      ],
+      connectionConfigs: {},
+      retryConfig: { max_retries: 0 },
+      allowTenantVisible: true,
+      status: "ACTIVE",
+      apiKey: {
+        id: "key-1",
+        tenantId: "tenant-abc",
+        apiKeyEncrypted: "enc:test",
+        workspaceId: "ws-1",
+        organizationId: "org-1",
+        isActive: true,
+      },
+      overrides: [{ variableOverrides: { budget: "₹50L" } }],
+    };
+
+    beforeEach(() => {
+      mockCampaignRepo.findById = vi.fn().mockResolvedValue({
+        ...sampleCampaign,
+        provider: "SARVAM",
+        sarvamAgentId,
+        assistantId: undefined,
+        variables: {
+          project_name: "Old Project",
+          custom_note: "old custom value",
+        },
+      });
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi
+        .fn()
+        .mockResolvedValue(sarvamAgentWithVariables);
+      mockCampaignRepo.update = vi.fn().mockImplementation((_t, _c, data) =>
+        Promise.resolve({
+          ...sampleCampaign,
+          provider: "SARVAM",
+          sarvamAgentId,
+          ...data,
+        }),
+      );
+    });
+
+    it("should persist tenant-created variables and applied overrides for Sarvam campaigns", async () => {
+      await updateCampaignUseCase.execute({
+        tenantId: "tenant-abc",
+        campaignId: "campaign-123",
+        variables: {
+          project_name: "New Project",
+          custom_note: "new custom value",
+        },
+      });
+
+      expect(mockCampaignRepo.update).toHaveBeenCalledWith(
+        "tenant-abc",
+        "campaign-123",
+        expect.objectContaining({
+          variables: {
+            project_name: "New Project",
+            custom_note: "new custom value",
+            budget: "₹50L",
+          },
+        }),
+      );
+    });
+
+    it("should reject Sarvam variable updates when a required variable is missing", async () => {
+      mockCampaignRepo.findSarvamAgentWithApiKey = vi.fn().mockResolvedValue({
+        ...sarvamAgentWithVariables,
+        overrides: [],
+      });
+
+      await expect(
+        updateCampaignUseCase.execute({
+          tenantId: "tenant-abc",
+          campaignId: "campaign-123",
+          variables: {
+            project_name: "New Project",
+          },
+        }),
+      ).rejects.toThrow(MissingRequiredVariablesError);
+
+      expect(mockCampaignRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe("AdminCampaignController.update presentation handling", () => {
     it("should return HTTP 200 with 'Campaign updated successfully' message", async () => {
       const mockUseCase = {
@@ -446,6 +559,52 @@ describe("Admin Campaign Update UseCase & Controller", () => {
 
       // Verify updateDraft alias delegates to update
       expect(controller.updateDraft).toBe(controller.update);
+    });
+
+    it("should forward sarvamAgentId to the update use case", async () => {
+      const sarvamAgentId = "00000000-0000-4000-8000-000000000001";
+      const mockUseCase = {
+        execute: vi.fn().mockResolvedValue({
+          ...sampleCampaign,
+          provider: "SARVAM",
+          sarvamAgentId,
+        }),
+      };
+
+      const controller = new AdminCampaignController(
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        mockUseCase as any,
+      );
+
+      const req = {
+        params: { id: "campaign-123" },
+        query: { tenantId: "tenant-abc" },
+        body: {
+          sarvamAgentId,
+          variables: { project_name: "New Project" },
+        },
+      } as unknown as Request;
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await controller.update(req, res, vi.fn());
+
+      expect(mockUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: "tenant-abc",
+          campaignId: "campaign-123",
+          sarvamAgentId,
+          variables: { project_name: "New Project" },
+        }),
+      );
     });
   });
 });

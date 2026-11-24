@@ -18,14 +18,19 @@ const server = app.listen(env.port, () => {
 
   try {
     container.wallet.schedulers.bonusExpiry.start();
+    container.wallet.schedulers.creditEnforcementReconciler.start();
     container.plans.schedulers.trialExpiry.start();
     container.batches.schedulers.batchProcessing.start();
+    container.batches.schedulers.callingWindow.start();
     container.bolnaApiKeys.schedulers.agentClone.start();
     container.auth.schedulers.refreshTokenCleanup.start();
     container.classifier.schedulers.classifierExtraction.start();
     container.payments.schedulers.paymentReconciliation.start();
+    container.teamInvitations.schedulers.invitationExpiry.start();
+    container.teamInvitations.workers.invitationEmail.start();
     container.calls.schedulers.sarvamRecording?.start();
     container.discordOutboxRelay.start();
+    container.emailOutboxRelay.start();
     logger.info("Background schedulers started");
   } catch (err) {
     logger.error("Failed to start schedulers", err);
@@ -36,14 +41,19 @@ const server = app.listen(env.port, () => {
 function gracefulShutdown(signal: string): void {
   logger.info("Graceful shutdown initiated", { signal });
   container.wallet.schedulers.bonusExpiry.stop();
+  container.wallet.schedulers.creditEnforcementReconciler.stop();
   container.plans.schedulers.trialExpiry.stop();
   container.batches.schedulers.batchProcessing.stop();
+  container.batches.schedulers.callingWindow.stop();
   container.bolnaApiKeys.schedulers.agentClone.stop();
   container.auth.schedulers.refreshTokenCleanup.stop();
   container.classifier.schedulers.classifierExtraction.stop();
   container.payments.schedulers.paymentReconciliation.stop();
+  void container.teamInvitations.schedulers.invitationExpiry.stop();
+  void container.teamInvitations.workers.invitationEmail.stop();
   container.calls.schedulers.sarvamRecording?.stop();
   container.discordOutboxRelay.stop();
+  container.emailOutboxRelay.stop();
   server.close(() => {
     logger.info("Process terminated");
     process.exit(0);

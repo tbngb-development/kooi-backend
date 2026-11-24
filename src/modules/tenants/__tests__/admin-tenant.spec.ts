@@ -105,6 +105,7 @@ describe("Admin Tenant Management (Module 1 - Overview)", () => {
         totalRechargedAmountPaisa: 600000,
         customerChargedPaisa: 150000,
         platformCostPaisa: 90000,
+        providerCostUsdCents: 1234.56,
       },
       calls: {
         total: 1200,

@@ -39,6 +39,7 @@ model Tenant {
 
   classifierResults ClassifierCallResult[]
   memberships   TenantUser[]
+  invitations   Invitation[]
   voiceProvider VoiceProvider  @default(BOLNA)
   bolnaApiKeyId String?
   bolnaApiKey   BolnaApiKey?   @relation(fields: [bolnaApiKeyId], references: [id])
@@ -54,6 +55,7 @@ model Tenant {
   apiKeys       TenantApiKey[]
   sarvamApiKey  SarvamApiKey?
   sarvamAgentOverrides SarvamAgentTenantOverride[]
+  walletIncidentState WalletIncidentState?
 
   @@index([email])
 }
@@ -123,6 +125,38 @@ enum TenantRole {
   OWNER
   ADMIN
   USER
+}
+
+// Team membership invitations (distinct from TenantInvite, which is the
+// platform-admin workspace/onboarding invite).
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model Invitation {
+  id               String           @id @default(uuid())
+  tenantId         String
+  email            String
+  role             TenantRole
+  tokenHash        String           @unique
+  status           InvitationStatus @default(PENDING)
+  invitedById      String
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  lastSentAt       DateTime?
+  sendCount        Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([email])
 }
 
 model PlatformAdmin {
@@ -248,6 +282,7 @@ model LeadBatch {
   retryConfig       Json?
   scheduledAt       DateTime?
   bolnaScheduledAt  DateTime?
+  windowPausedAt    DateTime?
 
   termsAccepted   Boolean   @default(false)
   termsAcceptedAt DateTime?
@@ -579,7 +614,10 @@ model PlanVersion {
   contactLimit          Int?
   validityDays          Int?
 
+  /// Deprecated since U-01: use creditLimit. Kept for one release (D-06).
   lowBalanceThreshold Int  @default(10000)
+  creditLimit         Int  @default(10000)
+  warningThreshold    Int  @default(50000)
   includedBalance     Int  @default(0)
   bonusValidityDays   Int?
 
@@ -732,6 +770,36 @@ model WalletTransaction {
   @@index([tenantId, createdAt])
   @@index([walletId, createdAt])
   @@index([sourceType, sourceId])
+}
+
+/// U-03: durable, singleton low-balance incident per tenant.
+/// OPEN = detected, RESOLVED = balance recovered, BLOCKED = enforcement applied.
+enum WalletIncidentStatus {
+  OPEN
+  BLOCKED
+  RESOLVED
+}
+
+model WalletIncidentState {
+  id                  String                @id @default(uuid())
+  tenantId            String                @unique
+  state               WalletIncidentStatus  @default(OPEN)
+  triggerBalancePaisa Int
+  detectedAt          DateTime              @default(now())
+  warningSentAt       DateTime?
+  enforcementSentAt   DateTime?
+  /// U-04: lease timestamp so concurrent/retried enforcements cannot double-stop.
+  enforcementStartedAt DateTime?
+  providerActions     Json                  @default("[]")
+  /// Derived singleton key: wallet-incident:${tenantId}
+  idempotencyKey      String                @unique
+  resolvedAt          DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, state])
 }
 
 enum RechargeStatus {
@@ -1426,4 +1494,32 @@ model DiscordEventOutbox {
   publishedAt DateTime?
 
   @@index([publishedAt, createdAt])
+}
+
+/// U-08: durable email delivery with retries, backoff and a DLQ.
+enum EmailOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  RETRYING
+  DEAD
+}
+
+model EmailOutbox {
+  id                String            @id @default(uuid())
+  idempotencyKey    String            @unique
+  toEmail           String
+  subject           String
+  html              String
+  status            EmailOutboxStatus @default(PENDING)
+  attempts          Int               @default(0)
+  providerMessageId String?
+  lastError         String?
+  lastErrorName     String?
+  nextAttemptAt     DateTime          @default(now())
+  sentAt            DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([status, nextAttemptAt])
 }

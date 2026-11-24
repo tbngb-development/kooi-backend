@@ -56,15 +56,22 @@ export function normalizePhoneNumber(
 }
 
 /**
- * Checks if a normalized or sanitized phone number is a valid Indian number:
- * - 10 digits (domestic without +91)
- * - 12 digits starting with 91 / +91
+ * Checks if a phone number is an importable Indian mobile number:
+ * - 10 domestic digits starting with 6-9
+ * - 12 digits starting with 91, or +91 followed by the 10-digit mobile
+ *
+ * A leading "+" makes the value international, so only the explicit +91
+ * form is Indian. This prevents numbers like +6587792911 from being
+ * misclassified as Indian just because they have 10 digits after "+".
  */
 export function isIndianPhone(phone: string): boolean {
   if (!phone) return false;
-  const digits = phone.replace("+", "");
-  if (digits.length === 10) return true;
-  if (digits.length === 12 && digits.startsWith("91")) return true;
-  return false;
+  const trimmed = phone.trim();
+
+  if (trimmed.startsWith("+")) {
+    return /^\+91[6-9]\d{9}$/.test(trimmed);
+  }
+
+  return /^(?:91)?[6-9]\d{9}$/.test(trimmed);
 }
 

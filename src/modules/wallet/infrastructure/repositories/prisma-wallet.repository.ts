@@ -399,41 +399,91 @@ export class PrismaWalletRepository implements WalletRepository {
     const cashBalance = wallet?.cashBalance ?? 0;
     const bonusBalance = wallet?.bonusBalance ?? 0;
 
-    // 1. Total positive credits added, strictly excluding RECHARGE
-    const creditsAddedAgg = await prisma.walletTransaction.aggregate({
-      where: {
-        tenantId,
-        NOT: { sourceType: "RECHARGE" },
-        OR: [
-          { cashDelta: { gt: 0 } },
-          { bonusDelta: { gt: 0 } },
-        ],
-      },
-      _sum: {
-        cashDelta: true,
-        bonusDelta: true,
-      },
-    });
+    const [
+      creditsAddedAgg,
+      purchasedCreditsAgg,
+      debitsAgg,
+      callDebitsAgg,
+      otherDebitsAgg,
+      bonusExpiryAgg,
+    ] = await Promise.all([
+      // Positive non-recharge credits: bonuses, refunds and manual adjustments.
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          NOT: { sourceType: "RECHARGE" },
+          OR: [{ cashDelta: { gt: 0 } }, { bonusDelta: { gt: 0 } }],
+        },
+        _sum: {
+          cashDelta: true,
+          bonusDelta: true,
+        },
+      }),
+      // Purchased credits actually added to cash by successful top-ups.
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          sourceType: "RECHARGE",
+          cashDelta: { gt: 0 },
+        },
+        _sum: {
+          cashDelta: true,
+        },
+      }),
+      // Legacy all-debit total, kept for API compatibility.
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          type: "DEBIT",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          type: "DEBIT",
+          sourceType: "CALL",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          type: "DEBIT",
+          NOT: { sourceType: "CALL" },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      prisma.walletTransaction.aggregate({
+        where: {
+          tenantId,
+          type: "BONUS_EXPIRY",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+    ]);
 
     const cashAdded = Math.max(creditsAddedAgg._sum.cashDelta ?? 0, 0);
     const bonusAdded = Math.max(creditsAddedAgg._sum.bonusDelta ?? 0, 0);
-    const totalCreditsAddedPaisa = cashAdded + bonusAdded;
-
-    // 2. Total credits used: All-time wallet debit activity (type = 'DEBIT')
-    const debitsAgg = await prisma.walletTransaction.aggregate({
-      where: {
-        tenantId,
-        type: "DEBIT",
-      },
-      _sum: {
-        amount: true,
-      },
-    });
-    const totalCreditsUsedPaisa = debitsAgg._sum.amount ?? 0;
 
     return {
-      totalCreditsAddedPaisa,
-      totalCreditsUsedPaisa,
+      totalCreditsAddedPaisa: cashAdded + bonusAdded,
+      totalCreditsUsedPaisa: debitsAgg._sum.amount ?? 0,
+      totalPurchasedCreditsPaisa: Math.max(
+        purchasedCreditsAgg._sum.cashDelta ?? 0,
+        0,
+      ),
+      totalCallSpendPaisa: callDebitsAgg._sum.amount ?? 0,
+      totalOtherDebitsPaisa: otherDebitsAgg._sum.amount ?? 0,
+      totalBonusExpiredPaisa: bonusExpiryAgg._sum.amount ?? 0,
       cashBalance,
       bonusBalance,
     };

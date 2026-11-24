@@ -87,6 +87,7 @@ export interface TenantStatsResult {
       totalRechargedAmountPaisa: number;
       customerChargedPaisa: number;
       platformCostPaisa: number;
+      providerCostUsdCents: number;
     };
     calls: {
       total: number;

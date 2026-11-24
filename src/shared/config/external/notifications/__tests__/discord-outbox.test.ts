@@ -146,6 +146,32 @@ describe("DiscordOutboxRelay", () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it("extracts and logs response status and error when HTTP rejection occurs", async () => {
+    vi.mocked(outbox.findPending).mockResolvedValueOnce([
+      { id: "outbox-1", event },
+    ]);
+    const axiosError = Object.assign(new Error("Request failed with status code 400"), {
+      response: {
+        status: 400,
+        data: { error: "Event data contains sensitive content" },
+      },
+    });
+    vi.mocked(sender.publishOrThrow).mockRejectedValueOnce(axiosError);
+
+    await makeRelay().tick();
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "Discord outbox delivery deferred",
+      axiosError,
+      expect.objectContaining({
+        action: "notification.relay_deferred",
+        eventId: event.eventId,
+        status: 400,
+        responseError: "Event data contains sensitive content",
+      }),
+    );
+  });
+
   it("does not read the outbox when disabled", async () => {
     await makeRelay(false).tick();
 

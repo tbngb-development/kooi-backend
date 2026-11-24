@@ -38,7 +38,7 @@ interface SeedPlanData {
   integrations: IntegrationTier;
   supportTier: SupportTier;
 
-  lowBalanceThreshold: number;
+  creditLimit: number;
   includedBalance: number;
   bonusValidityDays: number | null;
 }
@@ -73,7 +73,7 @@ const seedPlansData: SeedPlanData[] = [
     integrations: "NONE",
     supportTier: "STANDARD",
 
-    lowBalanceThreshold: 10000, // ₹100
+    creditLimit: 10000, // ₹100
     includedBalance: 50000, // ₹500
     bonusValidityDays: 5,
   },
@@ -106,7 +106,7 @@ const seedPlansData: SeedPlanData[] = [
     integrations: "BASIC",
     supportTier: "STANDARD",
 
-    lowBalanceThreshold: 20000, // ₹200
+    creditLimit: 20000, // ₹200
     includedBalance: 200000, // ₹2,000
     bonusValidityDays: 10,
   },
@@ -139,7 +139,7 @@ const seedPlansData: SeedPlanData[] = [
     integrations: "API_SELECTED",
     supportTier: "PRIORITY",
 
-    lowBalanceThreshold: 50000, // ₹500
+    creditLimit: 50000, // ₹500
     includedBalance: 500000, // ₹5,000
     bonusValidityDays: 15,
   },
@@ -172,7 +172,7 @@ const seedPlansData: SeedPlanData[] = [
     integrations: "CUSTOM",
     supportTier: "SLA",
 
-    lowBalanceThreshold: 500000, // ₹5,000
+    creditLimit: 500000, // ₹5,000
     includedBalance: 0,
     bonusValidityDays: null,
   },
@@ -242,7 +242,7 @@ async function seedPlans(): Promise<void> {
         integrations: item.integrations,
         supportTier: item.supportTier,
 
-        lowBalanceThreshold: item.lowBalanceThreshold,
+        creditLimit: item.creditLimit,
         includedBalance: item.includedBalance,
         bonusValidityDays: item.bonusValidityDays,
 

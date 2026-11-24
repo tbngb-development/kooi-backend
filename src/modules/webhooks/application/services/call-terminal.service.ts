@@ -5,7 +5,10 @@ import type {
 import type { WebhookCallPayload } from "../dto/webhook.dto";
 import type { CallLifecycleService } from "./call-lifecycle.service";
 import type { CallHistoryItem } from "../../../../shared/types/bolna.types";
-import { evaluateCallRetry } from "../../domain/rules/call-retry.rules";
+import {
+  evaluateCallRetry,
+  getBolnaEventAttempt,
+} from "../../domain/rules/call-retry.rules";
 import { isTerminalCallStatus } from "../../domain/rules/call-state-machine.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
@@ -34,22 +37,12 @@ export class CallTerminalService {
     const executionId =
       payload?.id ??
       payload?.execution_id ??
-      payload?.run_id ??
       call.bolnaCallId ??
       "unknown";
 
-    let attemptNumber = historyList.length + 1;
-    if (
-      payload?.batch_run_details?.retried !== undefined &&
-      payload.batch_run_details.retried !== null
-    ) {
-      attemptNumber = Math.max(attemptNumber, payload.batch_run_details.retried + 1);
-    } else if (
-      payload?.retry_count !== undefined &&
-      payload.retry_count !== null
-    ) {
-      attemptNumber = Math.max(attemptNumber, payload.retry_count + 1);
-    }
+    const attemptNumber = payload
+      ? Math.max(historyList.length + 1, getBolnaEventAttempt(payload))
+      : historyList.length + 1;
 
     const existingIdx = historyList.findIndex(
       (h) =>

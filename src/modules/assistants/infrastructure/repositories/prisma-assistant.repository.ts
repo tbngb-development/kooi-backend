@@ -69,6 +69,7 @@ export class PrismaAssistantRepository implements AssistantRepository {
                   name: true,
                   slug: true,
                   icon: true,
+                  allowedCallingHours: true,
                 },
               },
             },
@@ -223,6 +224,8 @@ export class PrismaAssistantRepository implements AssistantRepository {
               id: assistant.platformAgent.industryPack.id,
               name: assistant.platformAgent.industryPack.name,
               slug: assistant.platformAgent.industryPack.slug,
+              allowedCallingHours:
+                assistant.platformAgent.industryPack.allowedCallingHours ?? null,
             }
           : null,
       },

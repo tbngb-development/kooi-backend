@@ -3,6 +3,7 @@ import type { ITenantVoiceProviderService } from "../tenants/application/service
 
 import { PrismaCallRepository } from "./infrastructure/repositories/prisma-call.repository";
 import { ListCallsUseCase } from "./application/use-cases/list-calls.use-case";
+import { ExportCallsUseCase } from "./application/use-cases/export-calls.use-case";
 import { GetCallUseCase } from "./application/use-cases/get-call.use-case";
 import { GetCallTranscriptUseCase } from "./application/use-cases/get-call-transcript.use-case";
 import { GetCallStatsUseCase } from "./application/use-cases/get-call-stats.use-case";
@@ -75,6 +76,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
   const phoneNumberRepo = new PrismaPhoneNumberRepository();
   const log = deps.logger.child({ module: "call" });
   const listCalls = new ListCallsUseCase(callRepo);
+  const exportCalls = new ExportCallsUseCase(callRepo);
   const getCall = new GetCallUseCase(callRepo);
   const getTranscript = new GetCallTranscriptUseCase(callRepo);
   const getStats = new GetCallStatsUseCase(callRepo);
@@ -180,6 +182,7 @@ export function buildCallModule(deps: CallModuleDeps): CallModule {
       archiveCall,
       quickDialCall,
       stopCall,
+      exportCalls,
     ),
     adminController: new AdminCallController(
       listCalls,

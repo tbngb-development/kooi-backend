@@ -13,6 +13,7 @@ import type {
   ProcessingSarvamBatchRecord,
   BatchListItem,
   PendingLeadRow,
+  ActiveWindowBatch,
 } from "../../application/interfaces/batch-repository.interface";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import {
@@ -23,6 +24,9 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { getBatchExecutionMetricsMap } from "../../../campaigns/infrastructure/queries/lead-execution-metrics.query";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
+import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
+import { selectCarryForwardLeads } from "../../domain/rules/carry-forward.rules";
 
 export class PrismaBatchRepository implements BatchRepository {
   private async getBatchMetricsMap(
@@ -336,6 +340,7 @@ export class PrismaBatchRepository implements BatchRepository {
       cohortResult?: Record<string, unknown> | null;
       scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
+      windowPausedAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData> {
     const { cohortResult, ...rest } = data;
@@ -498,6 +503,81 @@ export class PrismaBatchRepository implements BatchRepository {
     }));
   }
 
+  async findCarryForwardLeads(
+    batchId: string,
+    windowEndAt: Date,
+  ): Promise<PendingLeadRow[]> {
+    const leads = await prisma.lead.findMany({
+      where: {
+        batchId,
+        doNotCall: false,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        metadata: true,
+        status: true,
+        calls: {
+          where: { isDeleted: false },
+          select: { status: true, createdAt: true },
+        },
+      },
+    });
+
+    return selectCarryForwardLeads(
+      leads.map((lead) => ({
+        ...lead,
+        status: String(lead.status),
+        metadata: (lead.metadata as Record<string, unknown> | null) ?? null,
+        calls: lead.calls.map((call) => ({
+          status: String(call.status),
+          createdAt: call.createdAt,
+        })),
+      })),
+      windowEndAt,
+    );
+  }
+
+  async findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]> {
+    const batches = await prisma.leadBatch.findMany({
+      where: {
+        isDeleted: false,
+        status: { in: ["RUNNING", "SCHEDULED"] },
+        windowPausedAt: null,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        campaignId: true,
+        bolnaBatchId: true,
+        status: true,
+        scheduledAt: true,
+      },
+    });
+
+    return batches.map((batch) => ({
+      id: batch.id,
+      tenantId: batch.tenantId,
+      campaignId: batch.campaignId,
+      bolnaBatchId: batch.bolnaBatchId,
+      status: batch.status,
+      scheduledAt: batch.scheduledAt,
+    }));
+  }
+
+  async markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean> {
+    const result = await prisma.leadBatch.updateMany({
+      where: { id: batchId, windowPausedAt: null },
+      data: { windowPausedAt: pausedAt, status: "STOPPED" },
+    });
+
+    return result.count > 0;
+  }
+
   async reassignCampaignLeadsToBatch(
     campaignId: string,
     batchId: string,
@@ -542,6 +622,18 @@ export class PrismaBatchRepository implements BatchRepository {
     return result.count;
   }
 
+  async reassignLeadsByIdsToBatch(
+    leadIds: string[],
+    newBatchId: string,
+  ): Promise<number> {
+    if (leadIds.length === 0) return 0;
+    const result = await prisma.lead.updateMany({
+      where: { id: { in: leadIds }, doNotCall: false, isDeleted: false },
+      data: { batchId: newBatchId, status: "PENDING", stoppedReason: null },
+    });
+    return result.count;
+  }
+
   async resetActiveLeadsToPending(batchId: string): Promise<number> {
     const result = await prisma.lead.updateMany({
       where: { batchId, status: "PENDING" },
@@ -570,42 +662,20 @@ export class PrismaBatchRepository implements BatchRepository {
   }
 
   async recalculateCampaignStats(campaignId: string): Promise<void> {
-    const batches = await prisma.leadBatch.findMany({
-      where: { campaignId, isDeleted: false },
-      select: { status: true },
+    const statuses = await this.getAllBatchStatuses(campaignId);
+    const decision = decideCampaignStatusFromBatches(statuses);
+
+    if (decision.action !== "settle") {
+      return;
+    }
+
+    await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status: decision.status, completedAt: new Date() },
     });
-
-    const statuses = batches.map((b) => b.status);
-
-    const hasActiveBatches = statuses.some(
-      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-    );
-
-    let campaignStatusUpdate: {
-      status?: "COMPLETED" | "FAILED";
-      completedAt?: Date;
-    } = {};
-
-    if (statuses.length > 0 && !hasActiveBatches) {
-      const allTerminal = statuses.every(
-        (s) => s === "COMPLETED" || s === "STOPPED" || s === "FAILED",
-      );
-
-      if (allTerminal) {
-        const allFailed = statuses.every((s) => s === "FAILED");
-        campaignStatusUpdate = {
-          status: allFailed ? "FAILED" : "COMPLETED",
-          completedAt: new Date(),
-        };
-      }
-    }
-
-    if (Object.keys(campaignStatusUpdate).length > 0) {
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: campaignStatusUpdate,
-      });
-    }
   }
 
   async findExistingPhones(
@@ -797,6 +867,7 @@ export class PrismaBatchRepository implements BatchRepository {
       retryConfig: unknown;
       scheduledAt: Date | null;
       bolnaScheduledAt: Date | null;
+      windowPausedAt?: Date | null;
       termsAccepted: boolean;
       termsAcceptedAt: Date | null;
       termsVersion: string | null;
@@ -835,6 +906,7 @@ export class PrismaBatchRepository implements BatchRepository {
       retryConfig: (batch.retryConfig as RetryConfig | null) ?? undefined,
       scheduledAt: batch.scheduledAt,
       bolnaScheduledAt: batch.bolnaScheduledAt,
+      windowPausedAt: batch.windowPausedAt ?? null,
       totalLeads: counts?.totalLeads ?? 0,
       calledLeads: counts?.calledLeads ?? 0,
       completedLeads: counts?.completedLeads ?? 0,

@@ -287,6 +287,15 @@ describe("Sarvam Call Execution Identity, Retry Handling, and Lifecycle", () => 
         }
       }),
 
+      markCampaignRunningIfActive: vi.fn().mockImplementation(async (cId: string) => {
+        const campaign = campaignStore.get(cId);
+        if (!campaign || (campaign.status !== "DRAFT" && campaign.status !== "SCHEDULED")) {
+          return false;
+        }
+        campaignStore.set(cId, { ...campaign, status: "RUNNING" as CampaignStatus });
+        return true;
+      }),
+
       recalculateCampaignStats: vi.fn().mockResolvedValue(undefined),
       findSarvamAgentForTenant: vi.fn().mockResolvedValue(null),
       getCallAnalysis: vi.fn().mockResolvedValue(null),

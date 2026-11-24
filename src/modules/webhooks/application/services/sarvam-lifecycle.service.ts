@@ -1,9 +1,10 @@
-import type { BatchStatus, CampaignStatus, CallStatus } from "@prisma/client";
+import type { BatchStatus, CallStatus } from "@prisma/client";
 import type {
   ISarvamWebhookRepository,
   SarvamAttemptHistoryEntry,
 } from "../interfaces/sarvam-webhook-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { CampaignStatusReconciler } from "../../../campaigns/application/services/campaign-status-reconciler.service";
 
 export interface ReconcileSarvamLifecycleInput {
   tenantId: string;
@@ -13,10 +14,16 @@ export interface ReconcileSarvamLifecycleInput {
 }
 
 export class SarvamLifecycleService {
+  private readonly statusReconciler: CampaignStatusReconciler;
+
   constructor(
     private readonly repo: ISarvamWebhookRepository,
     private readonly logger?: Logger,
-  ) {}
+    statusReconciler?: CampaignStatusReconciler,
+  ) {
+    this.statusReconciler =
+      statusReconciler ?? new CampaignStatusReconciler(repo, logger);
+  }
 
   /**
    * Reconciles batch and campaign lifecycle after a call attempt has been recorded.
@@ -67,7 +74,14 @@ export class SarvamLifecycleService {
     ) {
       if (!isCampaignTerminalOrPaused) {
         await this.repo.updateBatchStatus(batchId, "RUNNING");
-        await this.repo.updateCampaignStatus(campaignId, "RUNNING");
+        const started = await this.repo.markCampaignRunningIfActive(campaignId);
+        if (!started) {
+          this.logger?.warn("Ignored campaign start on finalized campaign", {
+            action: "webhook.sarvam.campaign_start_ignored",
+            campaignId,
+            batchId,
+          });
+        }
       }
     }
 
@@ -198,52 +212,21 @@ export class SarvamLifecycleService {
       totalCalls,
     });
 
-    // 5. Reconcile Campaign lifecycle across all its batches
-    const allBatchStatuses = await this.repo.getAllBatchStatuses(campaignId);
-    if (allBatchStatuses.length === 0) {
-      return;
-    }
+    // 5. Reconcile Campaign lifecycle across all its batches using the same
+    // decision rule as the Bolna finalizers. CANCELLED, COMPLETED and expired
+    // campaigns already returned above; the atomic settle guard also protects
+    // against a concurrent finalization.
+    await this.statusReconciler.reconcile(campaignId);
 
-    // Check if any active batches remain (RUNNING, SCHEDULED, PROCESSING)
-    const hasActiveBatches = allBatchStatuses.some(
-      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-    );
-
-    if (hasActiveBatches) {
-      return;
-    }
-
-    // Filter out unstarted CREATED batches if any exist
-    const executedBatches = allBatchStatuses.filter((s) => s !== "CREATED");
-    if (executedBatches.length > 0) {
-      // Note: CANCELLED, COMPLETED, and expired campaigns are already returned early above
-      const allBatchesFailed = executedBatches.every((s) => s === "FAILED");
-      const finalCampaignStatus: CampaignStatus = allBatchesFailed
-        ? "FAILED"
-        : "COMPLETED";
-
-      await this.repo.updateCampaignStatus(
+    try {
+      await this.repo.recalculateCampaignStats(campaignId);
+    } catch (statsErr) {
+      this.logger?.warn("Failed to recalculate campaign stats", {
+        action: "sarvam_lifecycle.stats_recalc_error",
         campaignId,
-        finalCampaignStatus,
-        new Date(),
-      );
-
-      this.logger?.info("Sarvam campaign marked as finished", {
-        action: "sarvam_lifecycle.campaign_finished",
-        campaignId,
-        finalCampaignStatus,
+        error:
+          statsErr instanceof Error ? statsErr.message : String(statsErr),
       });
-
-      try {
-        await this.repo.recalculateCampaignStats(campaignId);
-      } catch (statsErr) {
-        this.logger?.warn("Failed to recalculate campaign stats", {
-          action: "sarvam_lifecycle.stats_recalc_error",
-          campaignId,
-          error:
-            statsErr instanceof Error ? statsErr.message : String(statsErr),
-        });
-      }
     }
   }
 

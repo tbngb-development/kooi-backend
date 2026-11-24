@@ -5,6 +5,7 @@ import type { BatchRepository } from "../../../batches/application/interfaces/ba
 import type { ISarvamCampaignClient } from "../../infrastructure/clients/sarvam-campaign.client";
 import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { CampaignNotifications } from "../services/campaign-notifications";
 import { mapSarvamCampaignStatusToKooi } from "../../domain/rules/sarvam-status-mapper";
 
 export interface SyncSarvamCampaignLifecycleResult {
@@ -15,6 +16,7 @@ export interface SyncSarvamCampaignLifecycleResult {
 
 export class SyncSarvamCampaignLifecycleUseCase {
   private readonly log?: Logger;
+  private readonly notifications?: CampaignNotifications;
 
   constructor(
     private readonly campaignRepo: CampaignRepository,
@@ -22,8 +24,10 @@ export class SyncSarvamCampaignLifecycleUseCase {
     private readonly sarvamCampaignClient: ISarvamCampaignClient,
     private readonly sarvamEncryptionService: ISarvamApiKeyEncryptionService,
     logger?: Logger,
+    notifications?: CampaignNotifications,
   ) {
     this.log = logger?.child({ component: "SyncSarvamCampaignLifecycleUseCase" });
+    this.notifications = notifications;
   }
 
   async execute(): Promise<SyncSarvamCampaignLifecycleResult> {
@@ -197,6 +201,29 @@ export class SyncSarvamCampaignLifecycleUseCase {
                       : String(statsErr),
                 },
               );
+            }
+
+            // Notify internal ops channel on first completion (non-fatal).
+            if (
+              effectiveKooiStatus === "COMPLETED" &&
+              campaign.status !== "COMPLETED" &&
+              this.notifications
+            ) {
+              try {
+                await this.notifications.publishCompleted(
+                  campaign.id,
+                  extra?.completedAt ?? new Date(),
+                );
+              } catch (notifyErr) {
+                this.log?.error(
+                  "failed to publish campaign.completed event",
+                  notifyErr,
+                  {
+                    action: "notification.publish_failed",
+                    campaignId: campaign.id,
+                  },
+                );
+              }
             }
           }
 

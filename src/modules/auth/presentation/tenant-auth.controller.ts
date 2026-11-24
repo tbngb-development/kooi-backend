@@ -5,12 +5,10 @@ import type {
   SelectTenantBody,
   RefreshTokensBody,
   LogoutBody,
-  CreateInviteBody,
-  AcceptInviteBody,
   SendRegisterOtpBody,
   VerifyRegisterOtpBody,
 } from "./auth.schema";
-import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
+import type { AuthRequest } from "../../../shared/types";
 import { AuthMapper } from "./auth.mapper";
 import { sendSuccess } from "../../../shared/utils/response";
 import { HttpStatus } from "../../../shared/constants/http-status";
@@ -27,8 +25,6 @@ import { type LoginUseCase } from "../application/use-cases/login.use-case";
 import { type SelectTenantUseCase } from "../application/use-cases/select-tenant.use-case";
 import { type RefreshTokensUseCase } from "../application/use-cases/refresh-tokens.use-case";
 import { type GetProfileUseCase } from "../application/use-cases/get-profile.use-case";
-import { type CreateInviteUseCase } from "../application/use-cases/create-invite.use-case";
-import { type AcceptInviteUseCase } from "../application/use-cases/accept-invite.use-case";
 import { type LogoutUseCase } from "../application/use-cases/logout.use-case";
 // Add imports
 import type { ForgotPasswordUseCase } from "../application/use-cases/forgot-password.use-case";
@@ -55,8 +51,6 @@ export class TenantAuthController {
     private readonly selectTenantUseCase: SelectTenantUseCase,
     private readonly refreshTokensUseCase: RefreshTokensUseCase,
     private readonly getProfileUseCase: GetProfileUseCase,
-    private readonly createInviteUseCase: CreateInviteUseCase,
-    private readonly acceptInviteUseCase: AcceptInviteUseCase,
     private readonly logoutUseCase: LogoutUseCase,
     private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
     private readonly verifyForgotPasswordOtpUseCase: VerifyForgotPasswordOtpUseCase,
@@ -204,49 +198,6 @@ export class TenantAuthController {
       const authReq = req as AuthRequest;
       const output = await this.getProfileUseCase.execute(authReq.user.userId);
       sendSuccess(res, AuthMapper.toProfileResponse(output), HttpStatus.OK);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  createInvite = async (
-    req: Request<unknown, unknown, CreateInviteBody>,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const context = (req as AuthRequest).user as TenantAuthContext;
-      const output = this.createInviteUseCase.execute({
-        tenantId: context.tenantId,
-        email: req.body.email,
-        role: req.body.role,
-        inviterId: context.userId,
-      });
-      sendSuccess(res, AuthMapper.toInviteResponse(output), HttpStatus.CREATED);
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  acceptInvite = async (
-    req: Request<unknown, unknown, AcceptInviteBody>,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> => {
-    try {
-      const output = await this.acceptInviteUseCase.execute(req.body);
-      this.setTokenCookies(
-        res,
-        output.accessToken,
-        output.refreshToken,
-        output.accessTokenExpiresIn,
-        output.refreshTokenExpiresIn,
-      );
-      sendSuccess(
-        res,
-        AuthMapper.toAcceptInviteResponse(output),
-        HttpStatus.CREATED,
-      );
     } catch (err) {
       next(err);
     }

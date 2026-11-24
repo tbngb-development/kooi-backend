@@ -166,6 +166,15 @@ export interface CampaignRepository {
     campaignId: string,
   ): Promise<CampaignEntityData | null>;
 
+  /** Agent-supplied calling window used when the campaign has no override. */
+  getCallingWindowContext?(
+    tenantId: string,
+    campaignId: string,
+  ): Promise<{
+    industryCallingHours?: unknown;
+    sarvamSchedule?: unknown;
+  }>;
+
   findByIdGlobal(campaignId: string): Promise<CampaignEntityData | null>;
 
   findByIdWithRelations(
@@ -210,6 +219,22 @@ export interface CampaignRepository {
     status: CampaignStatus,
     extra?: { startedAt?: Date | null; completedAt?: Date | null },
   ): Promise<CampaignEntityData>;
+
+  /**
+   * True when credit enforcement marked any lead LOW_BALANCE. Such a campaign
+   * is permanently terminal and must never be reopened by new batch work.
+   */
+  hasLowBalanceStoppedLeads(campaignId: string): Promise<boolean>;
+
+  /**
+   * Atomically reopens a normal COMPLETED/FAILED campaign for explicit new
+   * batch work. Returns false when the guarded UPDATE matched no row, which
+   * means another path already reopened it or made it ineligible.
+   */
+  reopenCampaignForNewBatch(
+    campaignId: string,
+    options?: { startedAt?: Date | null; now?: Date },
+  ): Promise<boolean>;
 
   findActiveSarvamCampaigns(): Promise<ActiveSarvamCampaignRecord[]>;
 

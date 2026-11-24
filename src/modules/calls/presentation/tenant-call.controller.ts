@@ -2,7 +2,12 @@
 
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest, TenantAuthContext } from "../../../shared/types";
-import type { ListCallsQuery, GetCallStatsQuery } from "./call.schema";
+import type {
+  ListCallsQuery,
+  GetCallStatsQuery,
+  ExportCallsQuery,
+} from "./call.schema";
+import { HttpStatus } from "../../../shared/constants/http-status";
 import { sendSuccess } from "../../../shared/utils/response";
 import { param } from "../../../shared/utils/paramHelper";
 import type { ListCallsUseCase } from "../application/use-cases/list-calls.use-case";
@@ -14,6 +19,7 @@ import type { GetAvailableFiltersUseCase } from "../application/use-cases/get-av
 import type { ArchiveCallUseCase } from "../application/use-cases/archive-call.use-case";
 import type { QuickDialCallUseCase } from "../application/use-cases/quick-dial-call.use-case";
 import type { StopCallUseCase } from "../application/use-cases/stop-call.use-case";
+import type { ExportCallsUseCase } from "../application/use-cases/export-calls.use-case";
 import type { QuickDialInput } from "./call.schema";
 
 export class TenantCallController {
@@ -27,6 +33,7 @@ export class TenantCallController {
     private readonly archiveCallUseCase: ArchiveCallUseCase,
     private readonly quickDialCallUseCase: QuickDialCallUseCase,
     private readonly stopCallUseCase: StopCallUseCase,
+    private readonly exportCallsUseCase: ExportCallsUseCase,
   ) {}
 
   list = async (
@@ -56,6 +63,8 @@ export class TenantCallController {
         sortOrder: query.sortOrder,
         page: query.page,
         limit: query.limit,
+        durationCondition: query.durationCondition,
+        durationSeconds: query.durationSeconds,
         dynamicFilters: query.dynamicFilters,
         isDeleted: query.isDeleted,
         goalId: query.goalId,
@@ -68,6 +77,59 @@ export class TenantCallController {
       });
 
       sendSuccess(res, data);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  exportCsv = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = (req as AuthRequest).user as TenantAuthContext;
+      const query = req.query as unknown as ExportCallsQuery;
+
+      const csv = await this.exportCallsUseCase.execute({
+        tenantId,
+        provider: query.provider as any,
+        campaignId: query.campaignId,
+        batchId: query.batchId,
+        agentId: query.agentId,
+        leadId: query.leadId,
+        status: query.status,
+        type: query.type,
+        source: query.source,
+        agentNumber: query.agentNumber,
+        search: query.search,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        sortBy: query.sortBy,
+        sortOrder: query.sortOrder,
+        durationCondition: query.durationCondition,
+        durationSeconds: query.durationSeconds,
+        dynamicFilters: query.dynamicFilters,
+        isDeleted: query.isDeleted,
+        goalId: query.goalId,
+        goalPassed:
+          query.goalPassed === "true"
+            ? true
+            : query.goalPassed === "false"
+              ? false
+              : undefined,
+        timezone: query.timezone,
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.status(HttpStatus.OK);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="calls-export-${stamp}.csv"`,
+      );
+      res.setHeader("Cache-Control", "no-store");
+      res.send(csv);
     } catch (err) {
       next(err);
     }

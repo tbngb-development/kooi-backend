@@ -251,6 +251,7 @@ export class PrismaTenantRepository implements TenantRepository {
           billableSeconds: true,
           chargedAmount: true,
           platformCost: true,
+          cost: true,
         },
       }),
 
@@ -336,6 +337,7 @@ export class PrismaTenantRepository implements TenantRepository {
           totalRechargedAmountPaisa: rechargeSum._sum.amount ?? 0,
           customerChargedPaisa: callAggregates._sum.chargedAmount ?? 0,
           platformCostPaisa: callAggregates._sum.platformCost ?? 0,
+          providerCostUsdCents: callAggregates._sum.cost ?? 0,
         },
         calls: {
           total: totalCalls,

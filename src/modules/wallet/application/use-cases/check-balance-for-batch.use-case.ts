@@ -4,6 +4,7 @@ import { calculateCallCost } from "../../../plans/domain/rules/billing-calculato
 import { InsufficientBalanceError } from "../../domain/errors/wallet.errors";
 import { TenantPlanNotFoundError } from "../../../plans/domain/errors/plan.errors";
 import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
+import { hasExecutableBalance } from "../../domain/rules/wallet-balance.policy";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 const ESTIMATED_AVG_CALL_SEC = 90;
@@ -34,6 +35,20 @@ export class CheckBalanceForBatchUseCase {
     const wallet = await this.walletRepo.ensureWallet(input.tenantId);
     const availableBalance = getEffectiveAvailableBalance(wallet);
 
+    // Hard gate: real, usable funds must be strictly positive. Credit limit is
+    // an estimate only and must never authorize batch execution (U-02).
+    if (!hasExecutableBalance(wallet)) {
+      this.logger.warn("Wallet balance exhausted for batch", {
+        action: "wallet.check_balance_batch",
+        tenantId: input.tenantId,
+        leadCount: input.leadCount,
+        balancePaisa: availableBalance,
+      });
+      throw new InsufficientBalanceError(
+        `Insufficient wallet balance to launch ${input.leadCount} leads. Please recharge before launching or resuming batches.`,
+      );
+    }
+
     const perCall = calculateCallCost({
       durationSec: ESTIMATED_AVG_CALL_SEC,
       perMinuteRate: plan.perMinuteRate,
@@ -43,21 +58,9 @@ export class CheckBalanceForBatchUseCase {
 
     const estimatedCost = perCall.costPaisa * Math.max(input.leadCount, 0);
 
-    const creditLimitPaisa = plan.lowBalanceThreshold ?? 0;
+    // Credit limit only feeds sizing/warning estimates — never the hard gate.
+    const creditLimitPaisa = plan.creditLimit ?? 0;
     const effectivePurchasingPower = availableBalance + creditLimitPaisa;
-
-    if (effectivePurchasingPower <= 0) {
-      this.logger.warn("Wallet credit limit reached for batch", {
-        action: "wallet.check_balance_batch",
-        tenantId: input.tenantId,
-        leadCount: input.leadCount,
-        balancePaisa: availableBalance,
-        creditLimitPaisa,
-      });
-      throw new InsufficientBalanceError(
-        `Wallet credit limit exceeded (balance: ₹${(availableBalance / 100).toFixed(2)}, credit limit: ₹${(creditLimitPaisa / 100).toFixed(2)}). Please recharge before launching or resuming batches.`,
-      );
-    }
 
     const minRequiredPaisa = Math.floor(estimatedCost * 0.5);
 

@@ -33,6 +33,9 @@ import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort
 import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import { PrismaTenantNameRepository } from "./infrastructure/repositories/prisma-tenant-name.repository";
 import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import { CallingWindowService } from "../campaigns/application/services/calling-window.service";
+import { CloseCallingWindowsUseCase } from "./application/use-cases/close-calling-windows.use-case";
+import { CallingWindowScheduler } from "./infrastructure/jobs/calling-window.scheduler";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -41,13 +44,17 @@ export interface BatchModuleDeps {
   sarvamCohortClient?: ISarvamCohortClient;
   sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
   syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+  callingWindowService?: CallingWindowService;
   eventPublisher?: IDiscordEventsPublisher;
 }
 
 export interface BatchModule {
   tenantController: TenantBatchController;
   adminController: AdminBatchController;
-  schedulers: { batchProcessing: BatchProcessingScheduler };
+  schedulers: {
+    batchProcessing: BatchProcessingScheduler;
+    callingWindow: CallingWindowScheduler;
+  };
 }
 
 export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
@@ -81,6 +88,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     bolnaProvider,
     deps.checkBalanceForBatch,
     log,
+    deps.callingWindowService,
   );
   const retryFailedBatch = new RetryFailedBatchUseCase(
     batchRepo,
@@ -121,6 +129,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     log,
     tenantNameRepo,
     deps.eventPublisher,
+    deps.callingWindowService,
   );
 
   const syncCohortLifecycle =
@@ -141,6 +150,18 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     log,
   );
 
+  const closeCallingWindows = new CloseCallingWindowsUseCase(
+    batchRepo,
+    campaignRepo,
+    bolnaProvider,
+    deps.callingWindowService ?? new CallingWindowService(campaignRepo),
+    log,
+  );
+  const callingWindowScheduler = new CallingWindowScheduler(
+    closeCallingWindows,
+    log,
+  );
+
   return {
     tenantController: new TenantBatchController(
       listBatches,
@@ -154,6 +175,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         planRepo,
         deps.checkBalanceForBatch,
         log,
+        deps.callingWindowService,
       ),
       new ScheduleBatchUseCase(
         batchRepo,
@@ -162,6 +184,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         planRepo,
         deps.checkBalanceForBatch,
         log,
+        deps.callingWindowService,
       ),
       stopBatch,
       resumeBatch,
@@ -180,6 +203,9 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       retryFailedBatch,
       updateBatchName,
     ),
-    schedulers: { batchProcessing: batchProcessingScheduler },
+    schedulers: {
+      batchProcessing: batchProcessingScheduler,
+      callingWindow: callingWindowScheduler,
+    },
   };
 }

@@ -14,11 +14,14 @@ import {
   CampaignAlreadyDeletedError,
   CampaignAssistantNotFoundError,
   MissingRequiredVariablesError,
+  InvalidCampaignVariableValueError,
   CampaignRetryConfigImmutableAfterStartError,
   RetryConfigNotAllowedError,
 } from "../../domain/errors/campaign.errors";
 import { PlatformAgentNotFoundError } from "../../../platform-agents/domain/errors/platform-agent.errors";
 import { validateAndCleanVariables } from "../../domain/rules/campaign-variable.rules";
+import { validateSarvamCampaignVariables } from "../../../sarvam-agents/domain/rules/sarvam-variable.rules";
+import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sarvam-agent.mapper";
 import { resolveSarvamCampaignRetry } from "../../../sarvam-agents/domain/rules/sarvam-retry-config.rules";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 
@@ -29,6 +32,7 @@ export interface UpdateCampaignParams {
   description?: string | null;
   platformAgentId?: string;
   assistantId?: string;
+  sarvamAgentId?: string;
   variables?: Record<string, string>;
   defaultRetryConfig?: Record<string, unknown> | null;
 }
@@ -64,6 +68,10 @@ export class UpdateCampaignUseCase {
     let targetAssistantId = campaign.assistantId;
     let isAgentChanged = false;
     let targetAssistant: AssistantWithAgentData | null = null;
+    const targetSarvamAgentId = input.sarvamAgentId ?? campaign.sarvamAgentId;
+    const isSarvamAgentChanged = Boolean(
+      input.sarvamAgentId && input.sarvamAgentId !== campaign.sarvamAgentId,
+    );
 
     if (input.assistantId && input.assistantId !== campaign.assistantId) {
       targetAssistant = await this.campaignRepo.findAssistantWithAgent(
@@ -92,7 +100,7 @@ export class UpdateCampaignUseCase {
     // 3. Validate and clean variables if variables provided or agent changed
     let cleanedVariables: Record<string, string> | undefined = undefined;
 
-    if (input.variables !== undefined || isAgentChanged) {
+    if (input.variables !== undefined || isAgentChanged || isSarvamAgentChanged) {
       if (!targetAssistant && targetAssistantId) {
         targetAssistant = await this.campaignRepo.findAssistantWithAgent(
           tenantId,
@@ -100,20 +108,18 @@ export class UpdateCampaignUseCase {
         );
       }
 
+      const currentVariables =
+        (campaign.variables as Record<string, string> | null) ?? {};
+      const variablesToValidate =
+        input.variables !== undefined
+          ? isAgentChanged || isSarvamAgentChanged
+            ? input.variables
+            : { ...currentVariables, ...input.variables }
+          : currentVariables;
+
       if (targetAssistant) {
-        const requiredVariables = targetAssistant.platformAgent.requiredVariables;
-        const currentVariables =
-          (campaign.variables as Record<string, string> | null) ?? {};
-
-        const variablesToValidate =
-          input.variables !== undefined
-            ? isAgentChanged
-              ? input.variables
-              : { ...currentVariables, ...input.variables }
-            : currentVariables;
-
         const { cleaned, missing } = validateAndCleanVariables(
-          requiredVariables,
+          targetAssistant.platformAgent.requiredVariables,
           variablesToValidate,
         );
 
@@ -122,6 +128,37 @@ export class UpdateCampaignUseCase {
         }
 
         cleanedVariables = cleaned;
+      } else if (targetSarvamAgentId) {
+        const sarvamAgent = await this.campaignRepo.findSarvamAgentWithApiKey(
+          tenantId,
+          targetSarvamAgentId,
+        );
+
+        if (sarvamAgent) {
+          const sarvamMapper = new SarvamAgentMapper();
+          const tenantOverrides =
+            (sarvamAgent.overrides?.[0]?.variableOverrides as Record<
+              string,
+              string
+            >) ?? {};
+
+          const { cleaned, missing, invalidValues } =
+            validateSarvamCampaignVariables(
+              sarvamMapper.parseAgentVariables(sarvamAgent.agentVariables),
+              variablesToValidate,
+              tenantOverrides,
+            );
+
+          if (missing.length > 0) {
+            throw new MissingRequiredVariablesError(missing);
+          }
+
+          if (invalidValues.length > 0) {
+            throw new InvalidCampaignVariableValueError(invalidValues);
+          }
+
+          cleanedVariables = cleaned;
+        }
       }
     }
 
@@ -197,6 +234,7 @@ export class UpdateCampaignUseCase {
       ...(input.name !== undefined && { name: input.name.trim() }),
       ...(input.description !== undefined && { description: input.description }),
       ...(isAgentChanged && { assistantId: targetAssistantId }),
+      ...(isSarvamAgentChanged && { sarvamAgentId: targetSarvamAgentId }),
       ...(cleanedVariables !== undefined && { variables: cleanedVariables }),
       ...(input.defaultRetryConfig !== undefined && {
         defaultRetryConfig: resolvedDefaultRetryConfig,

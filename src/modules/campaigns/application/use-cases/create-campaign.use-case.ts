@@ -11,6 +11,7 @@ import type {
 } from "../../infrastructure/clients/sarvam-campaign.client";
 import type { ISarvamApiKeyEncryptionService } from "../../../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import type { CreateCampaignInput } from "../dto/campaign.dto";
+import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
 import {
   CampaignAssistantNotFoundError,
   CampaignAssistantRequiredError,
@@ -30,6 +31,7 @@ import { SarvamAgentMapper } from "../../../sarvam-agents/application/mappers/sa
 import { validateSarvamCampaignVariables } from "../../../sarvam-agents/domain/rules/sarvam-variable.rules";
 import { resolveSarvamCampaignRetry } from "../../../sarvam-agents/domain/rules/sarvam-retry-config.rules";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import type { CampaignNotifications } from "../services/campaign-notifications";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
 import { env } from "../../../../shared/config/env";
 
@@ -41,6 +43,7 @@ export class CreateCampaignUseCase {
     private readonly sarvamCampaignClient?: ISarvamCampaignClient,
     private readonly sarvamEncryptionService?: ISarvamApiKeyEncryptionService,
     private readonly logger?: Logger,
+    private readonly notifications?: CampaignNotifications,
   ) {}
 
   async execute(tenantId: string, input: CreateCampaignInput) {
@@ -91,15 +94,16 @@ export class CreateCampaignUseCase {
     }
 
     // ── 4. Provider-Specific Logic ──
+    let campaign: CampaignEntityData;
     if (selectedProvider === "BOLNA") {
-      return this.createBolnaCampaign(
+      campaign = await this.createBolnaCampaign(
         tenantId,
         input,
         selectedProvider,
         finalBolnaRetryConfig,
       );
     } else if (selectedProvider === "SARVAM") {
-      return this.createSarvamCampaign(
+      campaign = await this.createSarvamCampaign(
         tenantId,
         input,
         selectedProvider,
@@ -107,6 +111,24 @@ export class CreateCampaignUseCase {
       );
     } else {
       throw new Error(`Unsupported voice provider: ${selectedProvider}`);
+    }
+
+    // Notify internal ops channel (non-fatal — Discord is a notification
+    // surface only and must never block campaign creation).
+    await this.publishCreated(campaign);
+
+    return campaign;
+  }
+
+  private async publishCreated(campaign: CampaignEntityData): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      await this.notifications.publishCreated(campaign);
+    } catch (err) {
+      this.logger?.error("failed to publish campaign.created event", err, {
+        action: "notification.publish_failed",
+        campaignId: campaign.id,
+      });
     }
   }
 

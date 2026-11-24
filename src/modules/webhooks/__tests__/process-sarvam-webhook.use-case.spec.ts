@@ -164,6 +164,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
       upsertCallGoalResults: vi.fn().mockResolvedValue(undefined),
       markCallGoalPassed: vi.fn().mockResolvedValue(undefined),
       updateCampaignStatus: vi.fn().mockResolvedValue(undefined),
+      markCampaignRunningIfActive: vi.fn().mockResolvedValue(true),
     } as unknown as ISarvamWebhookRepository;
 
     mockLogger = {
@@ -521,7 +522,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
       const result = await useCase.execute(basePayload);
 
       expect(result.status).toBe("SUCCESS");
-      expect(mockRepo.updateCampaignStatus).toHaveBeenCalledWith(campaignId, "RUNNING");
+      expect(mockRepo.markCampaignRunningIfActive).toHaveBeenCalledWith(campaignId);
     });
 
     it("transitions campaign from DRAFT to RUNNING on first valid call webhook event even when call outcome is failed", async () => {
@@ -548,7 +549,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
       const result = await useCase.execute(failedPayload);
 
       expect(result.status).toBe("SUCCESS");
-      expect(mockRepo.updateCampaignStatus).toHaveBeenCalledWith(campaignId, "RUNNING");
+      expect(mockRepo.markCampaignRunningIfActive).toHaveBeenCalledWith(campaignId);
     });
 
     it("does not re-transition campaign if campaign is already in RUNNING status", async () => {
@@ -568,6 +569,33 @@ describe("ProcessSarvamWebhookUseCase", () => {
       expect(result.status).toBe("SUCCESS");
       // updateCampaignStatus was not called for DRAFT transition
       expect(mockRepo.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(mockRepo.markCampaignRunningIfActive).not.toHaveBeenCalled();
+    });
+
+    it("leaves a finalized campaign terminal when the guarded start loses the race", async () => {
+      vi.mocked(mockCorrelationService.correlate).mockResolvedValueOnce({
+        ...defaultCorrelationSuccess,
+        data: {
+          ...defaultCorrelationSuccess.data,
+          campaign: {
+            ...defaultCorrelationSuccess.data.campaign,
+            status: "DRAFT" as any,
+          },
+        },
+      });
+      vi.mocked(mockRepo.markCampaignRunningIfActive).mockResolvedValueOnce(false);
+
+      const result = await useCase.execute(basePayload);
+
+      expect(result.status).toBe("SUCCESS");
+      expect(mockRepo.markCampaignRunningIfActive).toHaveBeenCalledWith(campaignId);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        "Ignored campaign start on finalized campaign",
+        expect.objectContaining({
+          action: "webhook.sarvam.campaign_start_ignored",
+          campaignId,
+        }),
+      );
     });
 
     it("does not transition campaign on duplicate idempotent webhook event", async () => {
@@ -602,6 +630,7 @@ describe("ProcessSarvamWebhookUseCase", () => {
 
       expect(result.status).toBe("IDEMPOTENT_IGNORED");
       expect(mockRepo.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(mockRepo.markCampaignRunningIfActive).not.toHaveBeenCalled();
     });
   });
 });

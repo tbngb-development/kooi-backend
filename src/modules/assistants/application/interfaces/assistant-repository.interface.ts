@@ -37,6 +37,7 @@ export interface AssistantWithPlatformAgent {
       id: string;
       name: string;
       slug: string;
+      allowedCallingHours?: unknown;
     } | null;
   };
 }

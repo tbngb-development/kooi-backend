@@ -44,6 +44,12 @@ import type {
   DiscordEvent,
 } from "../../../../shared/config/external/notifications/discordevents-publisher";
 import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../../application/services/new-dial-window.guard";
 
 export interface BatchJobData {
   batchId: string;
@@ -76,6 +82,7 @@ export class BatchProcessingWorker {
     logger?: Logger,
     private readonly tenantNameRepo?: TenantNameRepository,
     private readonly notifications: IDiscordEventsPublisher = noopDiscordEventsPublisher,
+    private readonly callingWindowService?: CallingWindowService,
   ) {
     this.log = logger?.child({ component: "BatchProcessingWorker" });
     this.sarvamCohortTransformer = new SarvamCohortTransformer();
@@ -320,6 +327,26 @@ export class BatchProcessingWorker {
         return;
       }
 
+      // Explicit work on an existing campaign must not proceed when that
+      // campaign has become permanently terminal (cancelled, ended, or stopped
+      // by credit enforcement) while the upload was queued.
+      try {
+        await assertCampaignAcceptsNewBatch(
+          this.campaignRepo,
+          tenantId,
+          campaignId,
+          campaign,
+        );
+      } catch (err) {
+        await this.failBatch(
+          tenantId,
+          batchId,
+          campaignId,
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+
       if (!campaign.assistant) {
         await this.failBatch(
           tenantId,
@@ -403,8 +430,32 @@ export class BatchProcessingWorker {
       let localScheduledAt: Date | null = null;
 
       const targetScheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+      const wantsDial = targetScheduledDate || runImmediately;
+      let dialBlockedByWindow = false;
 
-      if (targetScheduledDate || runImmediately) {
+      if (wantsDial) {
+        try {
+          await assertNewDialAllowed(
+            this.callingWindowService,
+            tenantId,
+            campaignId,
+            targetScheduledDate ?? new Date(),
+          );
+        } catch (err) {
+          // Keep the parsed batch staged (CREATED) instead of scheduling new
+          // dials outside the calling window. The tenant can retry later.
+          dialBlockedByWindow = true;
+          this.log?.warn("New dials blocked by calling window; batch left unscheduled", {
+            action: "batch.worker.calling_window_blocked",
+            batchId,
+            tenantId,
+            campaignId,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      if (wantsDial && !dialBlockedByWindow) {
         const scheduleTimeISO = toBolnaISO(targetScheduledDate ?? new Date());
         const scheduleRes = await this.bolnaProvider.scheduleBatch(
           tenantId,
@@ -430,6 +481,25 @@ export class BatchProcessingWorker {
         return;
       }
 
+      const campaignForFinalize = await this.campaignRepo.findByIdWithRelations(
+        tenantId,
+        campaignId,
+      );
+      if (!campaignForFinalize) {
+        this.log?.warn("Campaign deleted before finalize update, exiting", {
+          batchId,
+          campaignId,
+        });
+        return;
+      }
+
+      const { needsReopen } = await assertCampaignAcceptsNewBatch(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        campaignForFinalize,
+      );
+
       await this.batchRepo.update(batchId, {
         name: finalCheck.name || bolnaFileName.replace(/\.csv$/, ""),
         fileName: finalCheck.fileName?.startsWith("batch-manual-")
@@ -443,10 +513,18 @@ export class BatchProcessingWorker {
 
       await this.batchRepo.recalculateCampaignStats(campaignId);
 
-      if (runImmediately && campaign.status === "DRAFT") {
+      if (finalStatus === "RUNNING" && campaignForFinalize.status === "DRAFT") {
         await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
           startedAt: new Date(),
         });
+      } else {
+        await reopenCampaignForNewBatchIfNeeded(
+          this.campaignRepo,
+          tenantId,
+          campaignId,
+          needsReopen,
+          campaignForFinalize.startedAt ? null : new Date(),
+        );
       }
 
       await this.batchRepo.updateProgress(batchId, "FINALIZING", 100);
@@ -678,12 +756,17 @@ export class BatchProcessingWorker {
     const isCampaignEnded =
       isCampaignExpired ||
       campaignBeforeUpload.sarvamStatus?.toLowerCase() === "ended";
-    const isCampaignTerminal =
-      isCampaignEnded || campaignBeforeUpload.status === "CANCELLED";
 
-    if (isCampaignTerminal) {
+    try {
+      await assertCampaignAcceptsNewBatch(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        campaignBeforeUpload,
+      );
+    } catch (err) {
       this.log?.warn(
-        "Aborting Sarvam cohort upload: campaign expired or reached terminal state",
+        "Aborting Sarvam cohort upload: campaign is not eligible for new batch work",
         {
           action: "batch.worker.sarvam_upload_aborted",
           batchId,
@@ -691,6 +774,7 @@ export class BatchProcessingWorker {
           status: campaignBeforeUpload.status,
           isCampaignExpired,
           isCampaignEnded,
+          reason: err instanceof Error ? err.message : String(err),
         },
       );
 
@@ -787,6 +871,28 @@ export class BatchProcessingWorker {
       campaignId,
     );
 
+    let needsCampaignReopen = false;
+    if (freshCampaign) {
+      try {
+        needsCampaignReopen = (
+          await assertCampaignAcceptsNewBatch(
+            this.campaignRepo,
+            tenantId,
+            campaignId,
+            freshCampaign,
+          )
+        ).needsReopen;
+      } catch (err) {
+        await this.failBatch(
+          tenantId,
+          batchId,
+          campaignId,
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+    }
+
     let hasAvailableSlot = true;
     if (freshCampaign?.sarvamAgentId && this.campaignRepo.countActiveCampaignsForAgent) {
       const activeCount = await this.campaignRepo.countActiveCampaignsForAgent(
@@ -816,8 +922,8 @@ export class BatchProcessingWorker {
         !freshCampaign?.startTimestamp ||
         new Date(freshCampaign.startTimestamp).getTime() <= Date.now();
 
-      if (freshCampaign?.status === "RUNNING") {
-        finalStatus = "RUNNING";
+      if (freshCampaign?.status === "RUNNING" || needsCampaignReopen) {
+        finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
       } else if (freshCampaign?.status === "DRAFT" && isStartTimeReached) {
         finalStatus = hasAvailableSlot ? "RUNNING" : "SCHEDULED";
       } else if (freshCampaign?.status === "DRAFT" && !isStartTimeReached) {
@@ -862,6 +968,14 @@ export class BatchProcessingWorker {
       await this.campaignRepo.updateStatus(campaignId, nextCampaignStatus, {
         ...(nextCampaignStatus === "RUNNING" ? { startedAt: new Date() } : {}),
       });
+    } else if (freshCampaign) {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        needsCampaignReopen,
+        freshCampaign.startedAt ? null : new Date(),
+      );
     }
 
     await this.batchRepo.recalculateCampaignStats(campaignId);

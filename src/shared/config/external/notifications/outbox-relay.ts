@@ -61,9 +61,18 @@ export class DiscordOutboxRelay {
             eventId: item.event.eventId,
           });
         } catch (error) {
+          const responseData = (error as { response?: { data?: unknown; status?: number } })
+            ?.response?.data;
+          const status = (error as { response?: { status?: number } })?.response
+            ?.status;
           this.deps.logger.error("Discord outbox delivery deferred", error, {
             action: "notification.relay_deferred",
             eventId: item.event.eventId,
+            status,
+            responseError:
+              typeof responseData === "object" && responseData && "error" in responseData
+                ? (responseData as { error: unknown }).error
+                : responseData,
           });
         }
       }

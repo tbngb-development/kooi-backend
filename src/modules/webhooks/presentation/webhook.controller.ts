@@ -21,18 +21,20 @@ export class WebhookController {
     req: Request<unknown, unknown, WebhookCallPayload>,
     res: Response,
   ): Promise<void> => {
-    // Stateless response received immediately to prevent timeout blocks
-    res.json({ received: true });
-    this.logger?.debug("sarvam webhook payload", {
-      data: req.body
-    })
+    this.logger?.debug("Bolna webhook payload received", {
+      action: "webhook.bolna.received",
+    });
 
     try {
       await this.processCallWebhook.execute(req.body);
+      res.json({ received: true });
     } catch (err) {
       this.logger?.error("Per-call webhook processing error", err, {
         action: "webhook.call.processing_error",
       });
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Webhook processing failed" });
+      }
     }
   };
 

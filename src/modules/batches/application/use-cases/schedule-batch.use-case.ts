@@ -7,7 +7,10 @@ import {
   BatchOperationError,
   BatchNoBolnaIdError,
 } from "../../domain/errors/batch.errors";
-import { CampaignNotFoundError } from "../../../campaigns/domain/errors/campaign.errors";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   toBolnaISO,
   parseBolnaScheduledTime,
@@ -16,6 +19,8 @@ import { ScheduledCampaignConflictError } from "../../../plans/domain/errors/pla
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../services/new-dial-window.guard";
 
 export class ScheduleBatchUseCase {
   constructor(
@@ -25,6 +30,7 @@ export class ScheduleBatchUseCase {
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
+    private readonly callingWindowService?: CallingWindowService,
   ) {}
 
   async execute(
@@ -58,9 +64,19 @@ export class ScheduleBatchUseCase {
       throw new BatchOperationError("Scheduled time must be in the future.");
     }
 
-    // 2. Validate campaign
-    const campaign = await this.campaignRepo.findById(tenantId, campaignId);
-    if (!campaign) throw new CampaignNotFoundError();
+    await assertNewDialAllowed(
+      this.callingWindowService,
+      tenantId,
+      campaignId,
+      targetDate,
+    );
+
+    // 2. Validate campaign and remember whether a guarded reopen is required.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
+      tenantId,
+      campaignId,
+    );
 
     // 3. Enforce maxActiveCampaigns with Time-Window Overlap Guard
     const activePlan = await this.planRepo.getActivePlanForTenant(tenantId);
@@ -124,6 +140,14 @@ export class ScheduleBatchUseCase {
       await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
         startedAt: new Date(),
       });
+    } else {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        needsReopen,
+        campaign.startedAt ? null : new Date(),
+      );
     }
 
     this.logger?.info("Batch scheduled", {

@@ -9,6 +9,7 @@ import {
   SarvamAgentMaxActiveCampaignsError,
 } from "../../domain/errors/campaign.errors";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
+import type { CampaignNotifications } from "../services/campaign-notifications";
 
 export interface UpdateCampaignStatusInput {
   tenantId: string;
@@ -22,6 +23,7 @@ export class UpdateCampaignStatusUseCase {
     private readonly campaignRepo: CampaignRepository,
     private readonly batchRepo: BatchRepository,
     private readonly logger?: Logger,
+    private readonly notifications?: CampaignNotifications,
   ) {}
 
   async execute(input: UpdateCampaignStatusInput): Promise<CampaignEntityData> {
@@ -106,6 +108,25 @@ export class UpdateCampaignStatusUseCase {
       cascadeToBatches,
       cascadedBatchesCount,
     });
+
+    // Notify internal ops channel on first completion (non-fatal).
+    if (
+      status === "COMPLETED" &&
+      campaign.status !== "COMPLETED" &&
+      this.notifications
+    ) {
+      try {
+        await this.notifications.publishCompleted(
+          campaignId,
+          updated.completedAt ?? extra.completedAt ?? new Date(),
+        );
+      } catch (err) {
+        this.logger?.error("failed to publish campaign.completed event", err, {
+          action: "notification.publish_failed",
+          campaignId,
+        });
+      }
+    }
 
     return updated;
   }

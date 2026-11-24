@@ -1,17 +1,25 @@
+import prisma from "../../shared/config/database/prisma";
 import { PrismaWalletRepository } from "./infrastructure/repositories/prisma-wallet.repository";
+import { PrismaWalletIncidentStateRepository } from "./infrastructure/repositories/prisma-wallet-incident-state.repository";
+import { PrismaCampaignStopAdapter } from "./infrastructure/adapters/prisma-campaign-stop.adapter";
 import type { WalletRepository } from "./application/interfaces/wallet-repository.interface";
+import type { WalletIncidentStateRepository } from "./application/interfaces/wallet-incident-state-repository.interface";
 import type { PlanRepository } from "../plans/application/interfaces/plan-repository.interface";
-import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
+import type { IEmailOutboxRepository } from "../../shared/config/external/email/outbox-repository.types";
 import type { Logger } from "../../shared/logging/logger.interface";
 import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import type { IBolnaClientFactory } from "../../shared/config/external/bolna/bolna-client.factory";
+import type { ISarvamCampaignClient } from "../campaigns/infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 
 import { TenantWalletController } from "./presentation/tenant-wallet.controller";
 import { AdminWalletController } from "./presentation/admin-wallet.controller";
 
 import { CheckBalanceForBatchUseCase } from "./application/use-cases/check-balance-for-batch.use-case";
 import { CheckLowBalanceUseCase } from "./application/use-cases/check-low-balance.use-case";
-import { StopBatchesOnInsufficientBalanceUseCase } from "./application/use-cases/stop-batches-on-insufficient-balance.use-case";
+import { CreditEnforcementOrchestrator } from "./application/use-cases/credit-enforcement-orchestrator";
+import { CreditEnforcementReconciler } from "./application/services/credit-enforcement-reconciler";
 import { GetWalletUseCase } from "./application/use-cases/get-wallet.use-case";
 import { ListTransactionsUseCase } from "./application/use-cases/list-transactions.use-case";
 import { GetWalletSummaryUseCase } from "./application/use-cases/get-wallet-summary.use-case";
@@ -28,14 +36,18 @@ import {
 
 export interface WalletModuleDeps {
   planRepository: PlanRepository;
-  bolnaClientFactory: IBolnaClientFactory;
   email: IEmailService;
+  emailOutboxRepository: IEmailOutboxRepository;
   logger: Logger;
   eventPublisher: IDiscordEventsPublisher;
+  bolnaClientFactory: IBolnaClientFactory;
+  sarvamCampaignClient: Pick<ISarvamCampaignClient, "updateStatus">;
+  sarvamEncryptionService: Pick<ISarvamApiKeyEncryptionService, "decrypt">;
 }
 
 export interface WalletModule {
   repository: WalletRepository;
+  incidentRepository: WalletIncidentStateRepository;
   tenantController: TenantWalletController;
   adminController: AdminWalletController;
   guards: {
@@ -45,18 +57,20 @@ export interface WalletModule {
     debitWalletForCall: DebitWalletForCallUseCase;
     checkBalanceForBatch: CheckBalanceForBatchUseCase;
     checkLowBalance: CheckLowBalanceUseCase;
-    stopBatchesOnInsufficientBalance: StopBatchesOnInsufficientBalanceUseCase;
+    creditEnforcement: CreditEnforcementOrchestrator;
     adjustWallet: AdjustWalletUseCase;
     getWallet: GetWalletUseCase;
     expireBonusCredits: ExpireBonusCreditsUseCase;
   };
   schedulers: {
     bonusExpiry: BonusExpiryScheduler;
+    creditEnforcementReconciler: CreditEnforcementReconciler;
   };
 }
 
 export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
   const repository = new PrismaWalletRepository();
+  const incidentRepository = new PrismaWalletIncidentStateRepository();
   const log = deps.logger.child({ module: "wallet" });
 
   const getWallet = new GetWalletUseCase(repository);
@@ -68,16 +82,49 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
   const checkLowBalance = new CheckLowBalanceUseCase(
     repository,
     deps.planRepository,
-    deps.email,
+    incidentRepository,
+    deps.emailOutboxRepository,
     log,
     deps.eventPublisher,
   );
-  const stopBatches = new StopBatchesOnInsufficientBalanceUseCase(
-    repository,
-    deps.planRepository,
-    deps.bolnaClientFactory,
-    log,
-  );
+
+  const creditEnforcement = new CreditEnforcementOrchestrator({
+    incidents: incidentRepository,
+    wallets: repository,
+    providers: new PrismaCampaignStopAdapter({
+      bolnaClientFactory: deps.bolnaClientFactory,
+      sarvamCampaignClient: deps.sarvamCampaignClient,
+      sarvamEncryptionService: deps.sarvamEncryptionService,
+      logger: log,
+    }),
+    emailOutbox: deps.emailOutboxRepository,
+    tenantEmail: async (tenantId: string) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { email: true },
+      });
+      return tenant?.email ?? null;
+    },
+    adminEmails: async () => {
+      const admins = await prisma.platformAdmin.findMany({
+        where: { user: { is: { isActive: true } } },
+        select: { user: { select: { email: true } } },
+      });
+      return admins.map((admin) => admin.user.email);
+    },
+    logger: log,
+  });
+
+  const creditEnforcementReconciler = new CreditEnforcementReconciler({
+    incidents: incidentRepository,
+    orchestrator: creditEnforcement,
+    logger: log,
+    enabled: true,
+    pollMs: 30_000,
+    batchSize: 25,
+    leaseMs: 60_000,
+  });
+
   const checkBalanceForBatch = new CheckBalanceForBatchUseCase(
     repository,
     deps.planRepository,
@@ -87,7 +134,7 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
     repository,
     deps.planRepository,
     checkLowBalance,
-    stopBatches,
+    creditEnforcement,
     log,
   );
 
@@ -107,6 +154,7 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
 
   return {
     repository,
+    incidentRepository,
     tenantController: new TenantWalletController(
       getWallet,
       listTransactions,
@@ -125,13 +173,14 @@ export function buildWalletModule(deps: WalletModuleDeps): WalletModule {
       debitWalletForCall,
       checkBalanceForBatch,
       checkLowBalance,
-      stopBatchesOnInsufficientBalance: stopBatches,
+      creditEnforcement,
       adjustWallet,
       getWallet,
       expireBonusCredits,
     },
     schedulers: {
       bonusExpiry: bonusExpiryScheduler,
+      creditEnforcementReconciler,
     },
   };
 }

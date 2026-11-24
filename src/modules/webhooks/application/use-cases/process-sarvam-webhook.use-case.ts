@@ -471,18 +471,29 @@ export class ProcessSarvamWebhookUseCase {
 
         // 10b. Transition Campaign from DRAFT to RUNNING on first valid call webhook event regardless of call outcome
         if (campaign.status === "DRAFT") {
-          await txRepo.updateCampaignStatus(campaign.id, "RUNNING");
-          campaign.status = "RUNNING";
-          this.logger?.info(
-            "Campaign transitioned from DRAFT to RUNNING on first webhook event",
-            {
-              action: "webhook.sarvam.campaign_started",
+          const started = await txRepo.markCampaignRunningIfActive(campaign.id);
+          if (!started) {
+            // Enforcement may have finalized the campaign after correlation
+            // read DRAFT; never reopen it from a late attempt webhook.
+            this.logger?.warn("Ignored campaign start on finalized campaign", {
+              action: "webhook.sarvam.campaign_start_ignored",
               campaignId: campaign.id,
               tenantId,
               attemptId: p.attempt_id,
-              callStatus: aggregateCallStatus,
-            },
-          );
+            });
+          } else {
+            campaign.status = "RUNNING";
+            this.logger?.info(
+              "Campaign transitioned from DRAFT to RUNNING on first webhook event",
+              {
+                action: "webhook.sarvam.campaign_started",
+                campaignId: campaign.id,
+                tenantId,
+                attemptId: p.attempt_id,
+                callStatus: aggregateCallStatus,
+              },
+            );
+          }
         }
 
         // 11. Trigger automatic recording retrieval if completed + connected with interaction_id

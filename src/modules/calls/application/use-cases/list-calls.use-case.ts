@@ -27,6 +27,8 @@ export class ListCallsUseCase {
       sortOrder: input.sortOrder,
       page: input.page,
       limit: input.limit,
+      durationCondition: input.durationCondition,
+      durationSeconds: input.durationSeconds,
       dynamicFilters: input.dynamicFilters,
       isDeleted: input.isDeleted,
       goalId: input.goalId,

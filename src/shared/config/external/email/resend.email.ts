@@ -1,6 +1,10 @@
 import { Resend } from "resend";
 import { env } from "../../env";
-import type { IEmailService, SendEmailInput } from "./email.interface";
+import type {
+  EmailSendResult,
+  IEmailService,
+  SendEmailInput,
+} from "./email.interface";
 import type { Logger } from "../../../logging/logger.interface";
 
 export class ResendEmailService implements IEmailService {
@@ -10,18 +14,18 @@ export class ResendEmailService implements IEmailService {
     this.client = env.resend.apiKey ? new Resend(env.resend.apiKey) : null;
   }
 
-  async send(input: SendEmailInput): Promise<void> {
+  async send(input: SendEmailInput): Promise<EmailSendResult> {
     if (!this.client) {
       this.logger?.warn("Resend API key not set — skipping email delivery", {
         action: "email.send_skipped",
         subject: input.subject,
         to: input.to,
       });
-      return;
+      return { messageId: null };
     }
 
     try {
-      await this.client.emails.send({
+      const response = await this.client.emails.send({
         from: env.resend.fromEmail,
         to: input.to,
         subject: input.subject,
@@ -33,6 +37,8 @@ export class ResendEmailService implements IEmailService {
         subject: input.subject,
         to: input.to,
       });
+
+      return { messageId: response.data?.id ?? null };
     } catch (err) {
       // Never break user flows on email failure
       this.logger?.error("Email delivery failed", err, {
@@ -40,6 +46,7 @@ export class ResendEmailService implements IEmailService {
         subject: input.subject,
         to: input.to,
       });
+      return { messageId: null };
     }
   }
 }

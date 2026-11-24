@@ -97,6 +97,16 @@ export class CampaignNotEligibleForUploadError extends AppError {
   }
 }
 
+export class CampaignStoppedForLowBalanceError extends AppError {
+  constructor() {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "This campaign was stopped because the wallet balance reached zero. Create a new campaign to continue calling.",
+      "CAMPAIGN_STOPPED_LOW_BALANCE",
+    );
+  }
+}
+
 export class CampaignExpiredError extends AppError {
   constructor(
     message: string = "This campaign has reached its end time and cannot accept new lead uploads. Please create a new campaign.",

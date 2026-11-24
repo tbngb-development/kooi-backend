@@ -12,8 +12,6 @@ import { LoginUseCase } from "./application/use-cases/login.use-case";
 import { SelectTenantUseCase } from "./application/use-cases/select-tenant.use-case";
 import { RefreshTokensUseCase } from "./application/use-cases/refresh-tokens.use-case";
 import { GetProfileUseCase } from "./application/use-cases/get-profile.use-case";
-import { CreateInviteUseCase } from "./application/use-cases/create-invite.use-case";
-import { AcceptInviteUseCase } from "./application/use-cases/accept-invite.use-case";
 import { LogoutUseCase } from "./application/use-cases/logout.use-case";
 import { ForgotPasswordUseCase } from "./application/use-cases/forgot-password.use-case";
 import { VerifyForgotPasswordOtpUseCase } from "./application/use-cases/verify-forgot-password-otp.use-case";
@@ -31,6 +29,8 @@ import { RefreshTokenCleanupScheduler } from "./infrastructure/jobs/refresh-toke
 export interface AuthModule {
   tenantController: TenantAuthController;
   adminController: AdminAuthController;
+  /** Shared with other modules that need the canonical session issuer. */
+  selectTenantUseCase: SelectTenantUseCase;
   schedulers: {
     refreshTokenCleanup: RefreshTokenCleanupScheduler;
   };
@@ -129,13 +129,6 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       new SelectTenantUseCase(authRepository, tokenService, log),
       new RefreshTokensUseCase(authRepository, tokenService, log),
       new GetProfileUseCase(authRepository),
-      new CreateInviteUseCase(tokenService, log),
-      new AcceptInviteUseCase(
-        authRepository,
-        passwordService,
-        tokenService,
-        log,
-      ),
       logoutUsecase,
       forgotPasswordUseCase,
       verifyForgotPasswordOtpUseCase,
@@ -153,6 +146,12 @@ export function buildAuthModule(deps: AuthModuleDeps): AuthModule {
       verifyForgotPasswordOtpUseCase,
       resetPasswordUseCase,
       changePasswordUseCase,
+    ),
+
+    selectTenantUseCase: new SelectTenantUseCase(
+      authRepository,
+      tokenService,
+      log,
     ),
 
     schedulers: {

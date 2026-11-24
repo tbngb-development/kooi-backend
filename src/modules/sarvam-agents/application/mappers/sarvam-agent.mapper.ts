@@ -320,6 +320,7 @@ export class SarvamAgentMapper {
       status: "ACTIVE",
       allowTenantVisible: agent.allowTenantVisible,
       retryConfig: this.parseRetryConfig(agent.retryConfig),
+      allowedSchedule: this.parseAllowedSchedule(agent.allowedSchedule),
       createdAt: agent.createdAt.toISOString(),
       updatedAt: agent.updatedAt.toISOString(),
     };
@@ -388,6 +389,7 @@ export class SarvamAgentMapper {
       audioRecordings,
       status: "ACTIVE",
       retryConfig: this.parseRetryConfig(agent.retryConfig),
+      allowedSchedule: this.parseAllowedSchedule(agent.allowedSchedule),
       welcomeMessage: {
         defaultMessage: agentWelcome.defaultMessage,
         customMessage,
