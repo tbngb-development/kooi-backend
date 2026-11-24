@@ -1,4 +1,4 @@
-import type { PlatformAgentType } from "@prisma/client";
+import type { PlatformAgentType, AgentGender } from "@prisma/client";
 import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
 
 export interface RegisterAssistantInput {
@@ -31,6 +31,7 @@ export interface GetAssistantOutput {
       name: string;
       slug: string;
       type: PlatformAgentType;
+      gender?: AgentGender | null;
       welcomeMessage: string | null;
       description: string | null;
       category: string | null;
@@ -39,6 +40,7 @@ export interface GetAssistantOutput {
         id: string;
         name: string;
         slug: string;
+        allowedCallingHours?: unknown;
       } | null;
     };
   };

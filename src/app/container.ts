@@ -13,6 +13,16 @@ import {
   type IBolnaClientFactory,
 } from "../shared/config/external/bolna/bolna-client.factory";
 import { ResendEmailService } from "../shared/config/external/email/resend.email";
+import { ResendIdempotentEmailSender } from "../shared/config/external/email/resend-outbox-email.sender";
+import { EmailOutboxRelay } from "../shared/config/external/email/outbox-relay";
+import { PrismaEmailOutboxRepository } from "../shared/config/external/email/outbox-repository";
+import {
+  HttpDiscordEventsPublisher,
+  type IDiscordEventsPublisher,
+} from "../shared/config/external/notifications/discordevents-publisher";
+import { OutboxDiscordEventsPublisher } from "../shared/config/external/notifications/outbox-publisher";
+import { DiscordOutboxRelay } from "../shared/config/external/notifications/outbox-relay";
+import { PrismaDiscordOutboxRepository } from "../shared/config/external/notifications/outbox-repository";
 import { RedisOtpService } from "../modules/auth/infrastructure/services/redis-otp.service";
 
 // Module container builders
@@ -29,6 +39,8 @@ import {
   buildCampaignModule,
   type CampaignModule,
 } from "../modules/campaigns/container";
+import { SarvamCampaignClient } from "../modules/campaigns/infrastructure/clients/sarvam-campaign.client";
+import { SarvamCohortClient } from "../modules/batches/infrastructure/clients/sarvam-cohort.client";
 import {
   buildBatchModule,
   type BatchModule,
@@ -46,6 +58,15 @@ import {
 } from "../modules/webhooks/container";
 import { buildPlanModule, type PlanModule } from "../modules/plans/container";
 import {
+  buildSarvamApiKeyModule,
+  type SarvamApiKeyModule,
+} from "../modules/sarvam-api-keys/container";
+import {
+  buildSarvamAgentModule,
+  type SarvamAgentModule,
+} from "../modules/sarvam-agents/container";
+import { env } from "../shared/config/env";
+import {
   buildBolnaApiKeyModule,
   type BolnaApiKeyModule,
 } from "../modules/bolna-api-keys/container";
@@ -61,6 +82,10 @@ import {
   buildInviteModule,
   type InviteModule,
 } from "../modules/invites/container";
+import {
+  buildTeamInvitationModule,
+  type TeamInvitationModule,
+} from "../modules/team-invitations/container";
 import {
   buildPlatformAgentModule,
   type PlatformAgentModule,
@@ -121,6 +146,7 @@ export interface AppContainer {
   wallet: WalletModule;
   payments: PaymentModule;
   invites: InviteModule;
+  teamInvitations: TeamInvitationModule;
   platformAgents: PlatformAgentModule;
   extractions: ExtractionModule;
   industryPacks: IndustryPackModule;
@@ -128,7 +154,11 @@ export interface AppContainer {
   phoneNumbers: PhoneNumberModule;
   contact: ContactModule;
   tenantApiKeys: TenantApiKeyModule;
+  sarvamApiKeys: SarvamApiKeyModule;
+  sarvamAgents: SarvamAgentModule;
   tenantApiKeyAuth: TenantApiKeyAuthMiddleware;
+  discordOutboxRelay: DiscordOutboxRelay;
+  emailOutboxRelay: EmailOutboxRelay;
 
   // Backwards compatibility references
   assistantModule: AssistantModule;
@@ -146,11 +176,51 @@ export interface AppContainer {
 export function buildContainer(): AppContainer {
   const logger = createLogger();
 
+  // Discord notification plumbing is shared by every emitting module.
+  const discordHttpPublisher = new HttpDiscordEventsPublisher(
+    env.discordNotifications,
+    logger,
+  );
+  const discordOutboxRepository = new PrismaDiscordOutboxRepository();
+  const discordEventsPublisher: IDiscordEventsPublisher =
+    env.discordNotifications.outboxEnabled
+      ? new OutboxDiscordEventsPublisher(
+          discordOutboxRepository,
+          logger,
+          env.discordNotifications.enabled,
+          env.discordNotifications.environment,
+        )
+      : discordHttpPublisher;
+  const discordOutboxRelay = new DiscordOutboxRelay({
+    outbox: discordOutboxRepository,
+    sender: discordHttpPublisher,
+    logger,
+    enabled:
+      env.discordNotifications.enabled &&
+      env.discordNotifications.outboxEnabled,
+    pollMs: env.discordNotifications.outboxPollMs,
+    batchSize: env.discordNotifications.outboxBatchSize,
+  });
+
   // ── Infrastructure & Shared Drivers ──────────────────────────────────
   const authRepository = new PrismaAuthRepository();
   const tokenService = new JwtTokenService();
   const passwordService = new BcryptPasswordService();
   const email = new ResendEmailService(logger.child({ module: "email" }));
+  const emailOutboxRepository = new PrismaEmailOutboxRepository();
+  const emailOutboxRelay = new EmailOutboxRelay({
+    outbox: emailOutboxRepository,
+    sender: new ResendIdempotentEmailSender(
+      logger.child({ module: "email-outbox" }),
+    ),
+    logger,
+    enabled: env.emailOutbox.enabled,
+    pollMs: env.emailOutbox.pollMs,
+    batchSize: env.emailOutbox.batchSize,
+    maxAttempts: env.emailOutbox.maxAttempts,
+    baseBackoffMs: env.emailOutbox.baseBackoffMs,
+    staleAfterMs: env.emailOutbox.staleAfterMs,
+  });
   const otpService = new RedisOtpService(redis);
   const passwordResetTokenService = new JwtPasswordResetTokenService(redis);
   const emailVerificationTokenService = new JwtEmailVerificationTokenService(redis);
@@ -202,12 +272,26 @@ export function buildContainer(): AppContainer {
 
   const enforcePlan = new EnforcePlanMiddleware(planRepo);
 
+  const sarvamApiKeys = buildSarvamApiKeyModule({
+    encryptionSecret: env.sarvam.encryptionSecret,
+    logger,
+  });
+
+  const sarvamCampaignClient = new SarvamCampaignClient(
+    env.sarvam.apiUrl,
+    logger,
+  );
+
   // 4. Wallet Module
   const wallet = buildWalletModule({
     planRepository: planRepo,
-    bolnaClientFactory,
     email,
+    emailOutboxRepository,
     logger,
+    eventPublisher: discordEventsPublisher,
+    bolnaClientFactory,
+    sarvamCampaignClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
   });
 
   // 5. Plans Module (with wallet and Bolna key auto-assignment for free trial onboarding)
@@ -218,13 +302,14 @@ export function buildContainer(): AppContainer {
     logger,
   });
 
-  // 6. Payments Module
+  // 6. Payments Module — durable outbox for Discord notifications
   const payments = buildPaymentModule({
     walletRepository: wallet.repository,
     planRepository: planRepo,
     autoAssignKey: bolnaApiKeys.useCases.autoAssignKey,
     email,
     logger,
+    paymentEventPublisher: discordEventsPublisher,
   });
 
   // 7. Invites Module
@@ -239,30 +324,20 @@ export function buildContainer(): AppContainer {
     emailService: email,
   });
 
+  // Team invitations — full lifecycle, sharing the canonical session issuer.
+  const teamInvitations = buildTeamInvitationModule({
+    planRepository: plans.repository,
+    authRepository,
+    passwordService,
+    sessionIssuer: auth.selectTenantUseCase,
+    logger,
+  });
+
   // 8. Assistants Module
   const assistants = buildAssistantModule({ bolnaClientFactory });
 
   const classifier = buildClassifierModule({ logger });
   const extractions = buildExtractionModule({ logger });
-
-  const webhooks = buildWebhookModule({
-    debitWalletForCall: wallet.useCases.debitWalletForCall,
-    classifierQueue: classifier.queue,
-    materializeCallExtractions: extractions.useCases.materializeCallExtractions,
-    logger,
-  });
-
-  const calls = buildCallModule({
-    bolnaClientFactory,
-    callWalletGuard: wallet.guards.callWalletGuard,
-    walletRepo: wallet.repository,
-    debitWalletForCall: wallet.useCases.debitWalletForCall,
-    classifierQueue: classifier.queue,
-    processClassifierExtractionUseCase:
-      classifier.useCases.processClassifierExtraction,
-    classifierRepo: classifier.repository,
-    logger,
-  });
 
   const tenantApiKeys = buildTenantApiKeyModule(logger);
 
@@ -270,6 +345,22 @@ export function buildContainer(): AppContainer {
     otpService,
     emailService: email,
     redis,
+    logger,
+    bolnaApiKeyRepository: bolnaApiKeys.repository,
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
+  });
+
+  const calls = buildCallModule({
+    bolnaClientFactory,
+    callWalletGuard: wallet.guards.callWalletGuard,
+    voiceProviderService: tenants.voiceProviderService,
+    walletRepo: wallet.repository,
+    debitWalletForCall: wallet.useCases.debitWalletForCall,
+    classifierQueue: classifier.queue,
+    processClassifierExtractionUseCase:
+      classifier.useCases.processClassifierExtraction,
+    classifierRepo: classifier.repository,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
     logger,
   });
 
@@ -279,21 +370,59 @@ export function buildContainer(): AppContainer {
     logger,
   );
 
+  const authenticate = new AuthenticateMiddleware(tokenService, authRepository);
+  const authorize = new AuthorizeMiddleware();
+
+  const sarvamAgents = buildSarvamAgentModule({
+    sarvamApiKeyRepository: sarvamApiKeys.repository,
+    authenticate,
+    authorize,
+    logger,
+  });
+
+  const sarvamCohortClient = new SarvamCohortClient(env.sarvam.apiUrl, logger?.child({ component: "SarvamCohortClient" }));
+
+  const campaigns = buildCampaignModule({
+    logger,
+    voiceProviderService: tenants.voiceProviderService,
+    sarvamCampaignClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+    eventPublisher: discordEventsPublisher,
+  });
+
+  // Built after campaigns so lifecycle notifications can be shared with the
+  // webhook reconciliation services.
+  const webhooks = buildWebhookModule({
+    debitWalletForCall: wallet.useCases.debitWalletForCall,
+    creditEnforcement: wallet.useCases.creditEnforcement,
+    classifierQueue: classifier.queue,
+    materializeCallExtractions: extractions.useCases.materializeCallExtractions,
+    campaignNotifications: campaigns.notifications,
+    logger,
+  });
+
+  const batches = buildBatchModule({
+    bolnaClientFactory,
+    checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
+    logger,
+    sarvamCohortClient,
+    sarvamEncryptionService: sarvamApiKeys.encryptionService,
+    syncCampaignLifecycle: campaigns.useCases.syncSarvamCampaignLifecycle,
+    callingWindowService: campaigns.useCases.callingWindow,
+    eventPublisher: discordEventsPublisher,
+  });
+
   return {
     logger,
     auth,
     assistants,
     tenants,
-    campaigns: buildCampaignModule({ logger }),
-    batches: buildBatchModule({
-      bolnaClientFactory,
-      checkBalanceForBatch: wallet.useCases.checkBalanceForBatch,
-      logger,
-    }),
+    campaigns,
+    batches,
     leads: buildLeadModule(),
     calls,
     dashboard: buildDashboardModule(),
-    users: buildUserModule({ passwordService }),
+    users: buildUserModule(),
     webhooks,
 
     platformAgents,
@@ -305,19 +434,24 @@ export function buildContainer(): AppContainer {
     wallet,
     payments,
     invites,
+    teamInvitations,
     classifier,
     phoneNumbers: buildPhoneNumberModule({ logger }),
     contact: buildContactModule(logger),
     tenantApiKeys,
+    sarvamApiKeys,
+    sarvamAgents,
     tenantApiKeyAuth: tenantApiKeys.authMiddleware,
+    discordOutboxRelay,
+    emailOutboxRelay,
 
     // Aliased references preserving clean DI architecture
     assistantModule: assistants,
     platformAgentModule: platformAgents,
     bolnaApiKeyModule: bolnaApiKeys,
 
-    authenticate: new AuthenticateMiddleware(tokenService, authRepository),
-    authorize: new AuthorizeMiddleware(),
+    authenticate,
+    authorize,
     enforcePlan,
     enforceTenantVerification,
     bolnaClientFactory,

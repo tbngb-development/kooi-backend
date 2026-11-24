@@ -62,6 +62,8 @@ describe("Admin Wallet Module — Unit Tests", () => {
       findWalletsWithExpiredBonus: vi.fn(),
       expireBonus: vi.fn(),
       findTransactionByIdempotencyKey: vi.fn(),
+      getTransactionSummary: vi.fn(),
+      findTransactionByIdAndTenant: vi.fn(),
     };
 
     mockLogger = {

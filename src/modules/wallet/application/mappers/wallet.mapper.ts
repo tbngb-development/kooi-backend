@@ -2,6 +2,7 @@ import type { Wallet, WalletTransaction } from "@prisma/client";
 import type {
   WalletResponse,
   WalletTransactionResponse,
+  WalletTransactionDetailResponse,
 } from "../dto/wallet.dto";
 import { getEffectiveAvailableBalance } from "../../domain/rules/bonus-first-deduction.rules";
 
@@ -45,5 +46,15 @@ export function toWalletTransactionResponse(
     sourceId: tx.sourceId,
     createdBy: tx.createdBy ?? null,
     createdAt: tx.createdAt.toISOString(),
+  };
+}
+
+export function toWalletTransactionDetailResponse(
+  tx: WalletTransaction,
+): WalletTransactionDetailResponse {
+  return {
+    ...toWalletTransactionResponse(tx),
+    cashBalanceBefore: tx.cashBalanceAfter - tx.cashDelta,
+    bonusBalanceBefore: tx.bonusBalanceAfter - tx.bonusDelta,
   };
 }

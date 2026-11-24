@@ -39,6 +39,7 @@ export interface GetAssistantOutput {
         id: string;
         name: string;
         slug: string;
+        allowedCallingHours?: unknown;
       } | null;
     };
   };
@@ -99,6 +100,7 @@ export interface AssistantEntityData {
       name: string;
       slug: string;
       icon?: string | null;
+      allowedCallingHours?: unknown;
     } | null;
   } | null;
 }

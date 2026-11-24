@@ -26,6 +26,7 @@ describe("ReconcileStalePaymentsUseCase & Scheduler", () => {
     purpose: "WALLET_TOPUP",
     status: "INITIATED",
     provider: "razorpay",
+    paymentMethod: null,
     razorpayOrderId: orderId,
     razorpayPaymentId: null,
     razorpaySignature: null,
@@ -58,6 +59,8 @@ describe("ReconcileStalePaymentsUseCase & Scheduler", () => {
       findStaleInitiated: vi.fn(),
       listWithTenant: vi.fn(),
       getSummary: vi.fn(),
+      findByIdAndTenantId: vi.fn(),
+      listTenantRecharges: vi.fn(),
     };
 
     mockPayments = {
@@ -120,6 +123,7 @@ describe("ReconcileStalePaymentsUseCase & Scheduler", () => {
       razorpayOrderId: "order_captured_123",
       razorpayPaymentId: "pay_captured_999",
       razorpaySignature: "reconciled_stale_batch",
+      paymentMethod: "upi",
     });
   });
 
@@ -159,6 +163,7 @@ describe("ReconcileStalePaymentsUseCase & Scheduler", () => {
       razorpayOrderId: "order_auth_123",
       razorpayPaymentId: "pay_auth_888",
       razorpaySignature: "reconciled_stale_autocapture",
+      paymentMethod: "card",
     });
   });
 

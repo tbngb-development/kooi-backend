@@ -1,3 +1,5 @@
+import type { VoiceProvider } from "@prisma/client";
+
 export interface TenantEntityData {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface TenantEntityData {
   termsVersion?: string | null;
   workspaceSwitchStatus?: string;
   workspaceSwitchError?: string | null;
+  voiceProvider?: VoiceProvider;
   bolnaApiKeyId?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -42,6 +45,9 @@ export class TenantEntity {
   }
   get verifiedAt(): Date | null | undefined {
     return this.data.verifiedAt;
+  }
+  get voiceProvider(): VoiceProvider {
+    return this.data.voiceProvider ?? "BOLNA";
   }
 
   toPrimitives(): TenantEntityData {

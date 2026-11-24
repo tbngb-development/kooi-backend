@@ -58,6 +58,7 @@ export class PrismaDashboardRepository implements DashboardRepository {
     const { dateFrom, dateTo, campaignId } = filters;
     const callWhere = {
       tenantId,
+      isDeleted: false,
       createdAt: { gte: dateFrom, lte: dateTo },
       ...(campaignId ? { campaignId } : {}),
     };
@@ -72,11 +73,12 @@ export class PrismaDashboardRepository implements DashboardRepository {
       noAnswerCalls,
       spendAgg,
     ] = await Promise.all([
-      prisma.campaign.count({ where: { tenantId } }),
-      prisma.campaign.count({ where: { tenantId, status: "RUNNING" } }),
+      prisma.campaign.count({ where: { tenantId, isDeleted: false } }),
+      prisma.campaign.count({ where: { tenantId, status: "RUNNING", isDeleted: false } }),
       prisma.lead.count({
         where: {
           tenantId,
+          isDeleted: false,
           createdAt: { gte: dateFrom, lte: dateTo },
           ...(campaignId ? { campaignId } : {}),
         },
@@ -129,6 +131,7 @@ export class PrismaDashboardRepository implements DashboardRepository {
         COUNT(*) FILTER (WHERE status = 'NO_ANSWER')::int as no_answer
       FROM "Call"
       WHERE "tenantId" = ${tenantId}
+        AND "isDeleted" = false
         AND "createdAt" >= ${dateFrom}
         AND "createdAt" <= ${dateTo}
         ${campaignFilter(campaignId)}
@@ -204,37 +207,65 @@ export class PrismaDashboardRepository implements DashboardRepository {
     const { dateFrom, dateTo, campaignId } = filters;
     const leadWhere = {
       tenantId,
+      isDeleted: false,
       createdAt: { gte: dateFrom, lte: dateTo },
       ...(campaignId ? { campaignId } : {}),
     };
     const callWhere = {
       tenantId,
+      isDeleted: false,
       createdAt: { gte: dateFrom, lte: dateTo },
       ...(campaignId ? { campaignId } : {}),
     };
 
-    const [totalLeads, calledLeadIds, completedLeadIds] = await Promise.all([
-      prisma.lead.count({ where: leadWhere }),
+    const [totalLeads, calledLeadIds, completedCandidateIds, activeLeadIds] =
+      await Promise.all([
+        prisma.lead.count({ where: leadWhere }),
 
-      prisma.call
-        .findMany({
-          where: callWhere,
-          select: { leadId: true },
-          distinct: ["leadId"],
-        })
-        .then((rows) => new Set(rows.map((r) => r.leadId))),
+        prisma.call
+          .findMany({
+            where: callWhere,
+            select: { leadId: true },
+            distinct: ["leadId"],
+          })
+          .then((rows) => new Set(rows.map((r) => r.leadId).filter(Boolean))),
 
-      prisma.call
-        .findMany({
-          where: { ...callWhere, status: "COMPLETED" },
-          select: { leadId: true },
-          distinct: ["leadId"],
-        })
-        .then((rows) => new Set(rows.map((r) => r.leadId))),
-    ]);
+        prisma.call
+          .findMany({
+            where: { ...callWhere, status: "COMPLETED" },
+            select: { leadId: true },
+            distinct: ["leadId"],
+          })
+          .then((rows) => new Set(rows.map((r) => r.leadId).filter(Boolean))),
+
+        prisma.lead
+          .findMany({
+            where: {
+              ...leadWhere,
+              OR: [
+                { status: { in: ["PENDING", "CALLING"] } },
+                {
+                  calls: {
+                    some: {
+                      status: { in: ["PENDING", "CALLING", "SCHEDULED"] },
+                      isDeleted: false,
+                    },
+                  },
+                },
+              ],
+            },
+            select: { id: true },
+          })
+          .then((rows) => new Set(rows.map((r) => r.id))),
+      ]);
 
     const called = calledLeadIds.size;
-    const completed = completedLeadIds.size;
+    let completed = 0;
+    for (const leadId of completedCandidateIds) {
+      if (!activeLeadIds.has(leadId as string)) {
+        completed++;
+      }
+    }
 
     return {
       totalLeads,

@@ -145,6 +145,7 @@ export class ProcessRazorpayWebhookUseCase {
       razorpayOrderId: paymentDetails.orderId,
       razorpayPaymentId: paymentDetails.paymentId,
       razorpaySignature: webhookSignature,
+      paymentMethod: paymentDetails.method,
     });
 
     this.logger.info("Razorpay webhook processed successfully", {

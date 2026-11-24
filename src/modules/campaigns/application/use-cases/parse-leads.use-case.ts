@@ -29,6 +29,7 @@ import {
   TrialExpiredError,
 } from "../../../plans/domain/errors/plan.errors";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { buildCallingWindowTiming } from "../../../../shared/utils/calling-window";
 
 export class ParseLeadsUseCase {
   constructor(
@@ -46,9 +47,18 @@ export class ParseLeadsUseCase {
     );
 
     if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("parse leads for");
-    }
+
+    const windowContext =
+      (await this.campaignRepo.getCallingWindowContext?.(
+        input.tenantId,
+        input.campaignId,
+      )) ?? {};
+    const timing = buildCallingWindowTiming({
+      campaignSchedule: campaign.allowedSchedule,
+      provider: campaign.provider,
+      industryCallingHours: windowContext.industryCallingHours,
+      sarvamSchedule: windowContext.sarvamSchedule,
+    });
 
     // 1. Fetch active plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -85,8 +95,10 @@ export class ParseLeadsUseCase {
         detectedHeaders: {
           contact_number: headerInfo.hasContactNumber,
           customer_name: headerInfo.hasCustomerName,
+          rawHeaders: headerInfo.rawHeaders,
         },
         estimation: zeroEstimation,
+        timing,
       };
     }
 
@@ -203,8 +215,10 @@ export class ParseLeadsUseCase {
       detectedHeaders: {
         contact_number: headerInfo.hasContactNumber,
         customer_name: headerInfo.hasCustomerName,
+        rawHeaders: headerInfo.rawHeaders,
       },
       estimation,
+      timing,
       trialUsage: activePlan.isTrial
         ? {
             isTrial: true,

@@ -1,7 +1,6 @@
 import { type TenantRole } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import {
-  type CreateUserData,
   type UpdateUserData,
   type UserRepository,
 } from "../../application/interfaces/user-repository.interface";
@@ -41,44 +40,6 @@ export class PrismaUserRepository implements UserRepository {
       name: membership.user.name,
       role: membership.role as TenantRole,
       createdAt: membership.createdAt,
-    };
-  }
-
-  async findByEmail(email: string): Promise<boolean> {
-    const count = await prisma.user.count({ where: { email } });
-    return count > 0;
-  }
-
-  async create(
-    tenantId: string,
-    data: CreateUserData,
-  ): Promise<TenantMemberData> {
-    const result = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          email: data.email,
-          name: data.name,
-          password: data.passwordHash,
-        },
-      });
-
-      const membership = await tx.tenantUser.create({
-        data: {
-          userId: user.id,
-          tenantId,
-          role: data.role,
-        },
-      });
-
-      return { user, membership };
-    });
-
-    return {
-      id: result.user.id,
-      email: result.user.email,
-      name: result.user.name,
-      role: result.membership.role as TenantRole,
-      createdAt: result.membership.createdAt,
     };
   }
 

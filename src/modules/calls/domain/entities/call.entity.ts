@@ -1,11 +1,16 @@
-import { type CallStatus, type CallType, type CallSource } from "@prisma/client";
+import { type CallStatus, type CallType, type CallSource, type VoiceProvider } from "@prisma/client";
 
 export interface CallEntityData {
   id: string;
+  provider?: VoiceProvider | null;
   bolnaCallId: string | null;
+  sarvamAttemptId?: string | null;
+  sarvamInteractionId?: string | null;
+  sarvamUserIdentifier?: string | null;
   tenantId: string;
   campaignId: string | null;
   assistantId?: string | null;
+  sarvamAgentId?: string | null;
   leadId: string;
   batchId: string | null;
   type?: CallType;
@@ -33,6 +38,8 @@ export interface CallEntityData {
   updatedAt: Date;
   isDeleted: boolean;
   deletedAt: Date | null;
+  goalPassed?: boolean;
+  goalResultCount?: number;
 }
 
 export class CallEntity {
@@ -41,8 +48,20 @@ export class CallEntity {
   get id(): string {
     return this.data.id;
   }
+  get provider(): VoiceProvider {
+    return this.data.provider ?? "BOLNA";
+  }
   get bolnaCallId(): string | null {
     return this.data.bolnaCallId;
+  }
+  get sarvamAttemptId(): string | null {
+    return this.data.sarvamAttemptId ?? null;
+  }
+  get sarvamInteractionId(): string | null {
+    return this.data.sarvamInteractionId ?? null;
+  }
+  get sarvamUserIdentifier(): string | null {
+    return this.data.sarvamUserIdentifier ?? null;
   }
   get tenantId(): string {
     return this.data.tenantId;
@@ -52,6 +71,9 @@ export class CallEntity {
   }
   get assistantId(): string | null | undefined {
     return this.data.assistantId;
+  }
+  get sarvamAgentId(): string | null | undefined {
+    return this.data.sarvamAgentId;
   }
   get type(): CallType | undefined {
     return this.data.type;
@@ -94,6 +116,9 @@ export class CallEntity {
   }
   get deletedAt(): Date | null {
     return this.data.deletedAt;
+  }
+  get goalPassed(): boolean {
+    return this.data.goalPassed ?? false;
   }
 
   toPrimitives(): CallEntityData {

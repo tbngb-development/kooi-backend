@@ -3,19 +3,26 @@ import { type WebhookBatchPayload } from "../dto/webhook.dto";
 import { type BatchStatus } from "@prisma/client";
 import { WebhookResolutionError } from "../../domain/errors/webhook.errors";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { CampaignStatusReconciler } from "../../../campaigns/application/services/campaign-status-reconciler.service";
 
 export class ProcessBatchWebhookUseCase {
+  private readonly statusReconciler: CampaignStatusReconciler;
+
   constructor(
     private readonly webhookRepo: WebhookRepository,
     private readonly logger?: Logger,
-  ) {}
+    statusReconciler?: CampaignStatusReconciler,
+  ) {
+    this.statusReconciler =
+      statusReconciler ?? new CampaignStatusReconciler(webhookRepo, logger);
+  }
 
   async execute(payload: WebhookBatchPayload): Promise<void> {
     const bolnaBatchId = payload.batch_id;
-    
+
     const state = (payload.state ?? payload.status)?.toLowerCase();
     this.logger?.warn("batch webhook usecase payload state: ", {state})
-    
+
     this.logger?.warn("batch webhook usecase payload: ", {payload})
     if (!state) return;
     if (!bolnaBatchId) {
@@ -74,38 +81,9 @@ export class ProcessBatchWebhookUseCase {
       }
     }
 
-    // 2. Fetch all batch statuses in this campaign
-    const statuses = await this.webhookRepo.getAllBatchStatuses(
-      leadBatch.campaignId,
-    );
-
-    // 3. Check if there are any batches actively dialing or queued
-    const hasActiveBatches = statuses.some(
-      (s) => s === "RUNNING" || s === "SCHEDULED" || s === "PROCESSING",
-    );
-
-    // 4. If no active batches remain, reconcile campaign status
-    if (!hasActiveBatches) {
-      // Ignore un-dialed "CREATED" batches; focus on batches that actually executed
-      const executedBatches = statuses.filter((s) => s !== "CREATED");
-
-      if (executedBatches.length > 0) {
-        const allFailed = executedBatches.every((s) => s === "FAILED");
-        const finalCampaignStatus = allFailed ? "FAILED" : "COMPLETED";
-
-        await this.webhookRepo.updateCampaignStatus(
-          leadBatch.campaignId,
-          finalCampaignStatus,
-          new Date(),
-        );
-
-        this.logger?.info("Campaign marked as finished from batch webhook", {
-          action: "webhook.batch.campaign_completed",
-          campaignId: leadBatch.campaignId,
-          finalCampaignStatus,
-        });
-      }
-    }
+    // 2. Reconcile campaign status from all batches using the shared rule.
+    // The atomic settle guard keeps terminal campaigns untouched on late webhooks.
+    await this.statusReconciler.reconcile(leadBatch.campaignId);
 
     this.logger?.info("Batch webhook processed", {
       action: "webhook.batch.processed",

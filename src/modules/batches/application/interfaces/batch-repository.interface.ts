@@ -20,6 +20,24 @@ export interface PendingLeadRow {
   metadata: Record<string, unknown> | null;
 }
 
+export interface ProcessingSarvamBatchRecord {
+  id: string;
+  tenantId: string;
+  campaignId: string;
+  sarvamCohortId: string;
+  status: BatchStatus;
+  sarvamStatus: string | null;
+}
+
+export interface ActiveWindowBatch {
+  id: string;
+  tenantId: string;
+  campaignId: string;
+  bolnaBatchId: string | null;
+  status: BatchStatus;
+  scheduledAt: Date | null;
+}
+
 export interface BatchRepository {
   list(
     tenantId: string,
@@ -55,10 +73,14 @@ export interface BatchRepository {
       fileName?: string;
       status?: BatchStatus;
       bolnaBatchId?: string;
+      sarvamCohortId?: string | null;
       originalFileUrl?: string;
       transformedCsvUrl?: string;
+      sarvamStatus?: string | null;
+      cohortResult?: Record<string, unknown> | null;
       scheduledAt?: Date | null;
       bolnaScheduledAt?: Date | null;
+      windowPausedAt?: Date | null;
     },
   ): Promise<LeadBatchEntityData>;
 
@@ -74,6 +96,15 @@ export interface BatchRepository {
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
 
+  findCarryForwardLeads(
+    batchId: string,
+    windowEndAt: Date,
+  ): Promise<PendingLeadRow[]>;
+
+  findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]>;
+
+  markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean>;
+
   reassignCampaignLeadsToBatch(
     campaignId: string,
     batchId: string,
@@ -81,6 +112,11 @@ export interface BatchRepository {
   ): Promise<number>;
 
   reassignLeadsToBatch(oldBatchId: string, newBatchId: string): Promise<number>;
+
+  reassignLeadsByIdsToBatch(
+    leadIds: string[],
+    newBatchId: string,
+  ): Promise<number>;
 
   resetActiveLeadsToPending(batchId: string): Promise<number>;
 
@@ -128,4 +164,12 @@ export interface BatchRepository {
     batchId: string,
   ): Promise<void>;
   restore(tenantId: string, campaignId: string, batchId: string): Promise<void>;
+  findProcessingSarvamBatches(): Promise<ProcessingSarvamBatchRecord[]>;
+  updateSarvamCohortStatus(
+    batchId: string,
+    sarvamStatus: string,
+    kooiStatus?: BatchStatus,
+    cohortResult?: Record<string, unknown> | null,
+    error?: string | null,
+  ): Promise<LeadBatchEntityData>;
 }

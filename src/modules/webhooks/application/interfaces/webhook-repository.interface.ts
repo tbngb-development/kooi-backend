@@ -6,12 +6,17 @@ import {
   type LeadStopReason,
   type CallType,
   type CallSource,
+  type VoiceProvider,
 } from "@prisma/client";
 import type { CallHistoryItem, RetryConfig } from "../../../../shared/types/bolna.types";
 
 export interface ResolvedCallContext {
   id: string;
+  provider: VoiceProvider;
   bolnaCallId: string | null;
+  sarvamAttemptId?: string | null;
+  sarvamInteractionId?: string | null;
+  sarvamUserIdentifier?: string | null;
   tenantId: string;
   campaignId: string | null;
   assistantId?: string | null;
@@ -87,6 +92,7 @@ export interface WebhookRepository {
   ): Promise<{ id: string } | null>;
 
   createCall(data: {
+    provider?: VoiceProvider;
     bolnaCallId: string;
     tenantId: string;
     campaignId?: string | null;
@@ -158,6 +164,29 @@ export interface WebhookRepository {
     status: CampaignStatus,
     completedAt?: Date,
   ): Promise<void>;
+
+  /**
+   * Moves a campaign to RUNNING only while it is still active. A campaign
+   * finalized by credit enforcement (COMPLETED/FAILED) must stay terminal
+   * even when a late in-flight webhook arrives.
+   * Returns true when a row was updated.
+   */
+  markCampaignRunningIfActive(
+    campaignId: string,
+    startedAt?: Date,
+  ): Promise<boolean>;
+
+  /**
+   * Finalizes a campaign only while it is still active. Guards in the same
+   * UPDATE statement prevent a stale finalizer from overwriting a campaign
+   * already finalized by credit enforcement, a manual cancel, or a
+   * concurrent webhook. Returns true when a row was updated.
+   */
+  settleCampaignIfActive?(
+    campaignId: string,
+    status: "COMPLETED" | "FAILED",
+    completedAt: Date,
+  ): Promise<boolean>;
 
   /**
    * Persists the authoritative historical billing snapshot for auditability.

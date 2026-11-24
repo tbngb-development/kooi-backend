@@ -12,16 +12,22 @@ import type {
   LeadStopReason,
   CallType,
   CallSource,
+  VoiceProvider,
 } from "@prisma/client";
 
 import type {
   CallHistoryItem,
   RetryConfig,
 } from "../../../../shared/types/bolna.types";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 
 const callSelectFields = {
   id: true,
+  provider: true,
   bolnaCallId: true,
+  sarvamAttemptId: true,
+  sarvamInteractionId: true,
+  sarvamUserIdentifier: true,
   tenantId: true,
   campaignId: true,
   assistantId: true,
@@ -54,7 +60,11 @@ const callSelectFields = {
 export class PrismaWebhookRepository implements WebhookRepository {
   private toResolvedContext(raw: {
     id: string;
+    provider?: VoiceProvider | null;
     bolnaCallId: string | null;
+    sarvamAttemptId?: string | null;
+    sarvamInteractionId?: string | null;
+    sarvamUserIdentifier?: string | null;
     tenantId: string;
     campaignId: string | null;
     assistantId?: string | null;
@@ -81,6 +91,10 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }): ResolvedCallContext {
     return {
       ...raw,
+      provider: raw.provider ?? "BOLNA",
+      sarvamAttemptId: raw.sarvamAttemptId ?? null,
+      sarvamInteractionId: raw.sarvamInteractionId ?? null,
+      sarvamUserIdentifier: raw.sarvamUserIdentifier ?? null,
       callHistory: (raw.callHistory as CallHistoryItem[]) ?? [],
       retryConfig: (raw.batch?.retryConfig as RetryConfig | null) ?? null,
       campaignDefaultRetryConfig:
@@ -148,6 +162,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }
 
   async createCall(data: {
+    provider?: VoiceProvider | null;
     bolnaCallId: string;
     tenantId: string;
     campaignId?: string | null;
@@ -162,6 +177,7 @@ export class PrismaWebhookRepository implements WebhookRepository {
   }): Promise<ResolvedCallContext> {
     const call = await prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         campaignId: data.campaignId ?? null,
@@ -333,6 +349,42 @@ export class PrismaWebhookRepository implements WebhookRepository {
         ...(status === "FAILED" && timestamp && { completedAt: timestamp }),
       },
     });
+  }
+
+  async markCampaignRunningIfActive(
+    campaignId: string,
+    startedAt?: Date,
+  ): Promise<boolean> {
+    // Atomic guard: enforcement may have finalized the campaign between the
+    // webhook being accepted and this write. A plain read-then-update would
+    // still resurrect a COMPLETED/FAILED campaign, so filter on status in the
+    // same UPDATE statement.
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        status: { in: ["DRAFT", "SCHEDULED", "RUNNING"] },
+      },
+      data: {
+        status: "RUNNING",
+        ...(startedAt && { startedAt }),
+      },
+    });
+    return result.count > 0;
+  }
+
+  async settleCampaignIfActive(
+    campaignId: string,
+    status: "COMPLETED" | "FAILED",
+    completedAt: Date,
+  ): Promise<boolean> {
+    const result = await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        ...activeCampaignGuard(),
+      },
+      data: { status, completedAt },
+    });
+    return result.count > 0;
   }
 
   async incrementTerminalStats(

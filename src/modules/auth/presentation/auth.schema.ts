@@ -58,20 +58,6 @@ export const logoutSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required").optional(),
 });
 
-export const createInviteSchema = z.object({
-  email: emailSchema,
-  role: z.enum(["ADMIN", "USER"], {
-    message: "Role must be ADMIN or USER",
-  }),
-});
-
-export const acceptInviteSchema = z.object({
-  inviteToken: z.string().min(1, "Invite token is required"),
-  email: emailSchema,
-  password: passwordSchema,
-  name: nameSchema,
-});
-
 export const adminLoginSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
@@ -120,8 +106,6 @@ export type LoginBody = z.infer<typeof loginSchema>;
 export type SelectTenantBody = z.infer<typeof selectTenantSchema>;
 export type RefreshTokensBody = z.infer<typeof refreshTokensSchema>;
 export type LogoutBody = z.infer<typeof logoutSchema>;
-export type CreateInviteBody = z.infer<typeof createInviteSchema>;
-export type AcceptInviteBody = z.infer<typeof acceptInviteSchema>;
 export type AdminLoginBody = z.infer<typeof adminLoginSchema>;
 
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>;

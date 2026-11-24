@@ -2,7 +2,10 @@ import {
   cleanCustomerName,
   isValidCustomerName,
 } from "../../leads/domain/rules/name.rules";
-import { normalizePhoneNumber } from "../../leads/domain/rules/phone.rules";
+import {
+  isIndianPhone,
+  normalizePhoneNumber,
+} from "../../leads/domain/rules/phone.rules";
 import {
   NAME_ALIASES,
   PHONE_ALIASES,
@@ -70,7 +73,7 @@ export function transformToBolnaCSV(
   for (const lead of leads) {
     const normalizedPhone = normalizePhoneNumber(lead.phone);
 
-    if (!normalizedPhone.startsWith("+91")) {
+    if (!isIndianPhone(normalizedPhone)) {
       filteredOutCount++;
       continue;
     }

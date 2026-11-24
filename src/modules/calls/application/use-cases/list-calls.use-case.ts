@@ -11,8 +11,10 @@ export class ListCallsUseCase {
 
   async execute(input: ListCallsInput): Promise<PaginatedCallsResult> {
     return this.callRepo.list(input.tenantId, {
+      provider: input.provider,
       campaignId: input.campaignId,
-      assistantId: input.assistantId,
+      batchId: input.batchId,
+      agentId: input.agentId,
       leadId: input.leadId,
       status: input.status,
       type: input.type,
@@ -25,8 +27,12 @@ export class ListCallsUseCase {
       sortOrder: input.sortOrder,
       page: input.page,
       limit: input.limit,
+      durationCondition: input.durationCondition,
+      durationSeconds: input.durationSeconds,
       dynamicFilters: input.dynamicFilters,
       isDeleted: input.isDeleted,
+      goalId: input.goalId,
+      goalPassed: input.goalPassed,
     });
   }
 }

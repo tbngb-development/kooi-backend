@@ -10,7 +10,9 @@ import type { VerifyPaymentUseCase } from "../application/use-cases/verify-payme
 import type { CancelPaymentUseCase } from "../application/use-cases/cancel-payment.use-case";
 import type { GetOrderStatusUseCase } from "../application/use-cases/get-order-status.use-case";
 import type { CreatePlanUpgradeOrderUseCase } from "../application/use-cases/create-plan-upgrade-order.use-case";
-import type { VerifyPaymentInput } from "../application/dto/payment.dto";
+import type { ListTenantPaymentsUseCase } from "../application/use-cases/list-tenant-payments.use-case";
+import type { GetTenantPaymentDetailUseCase } from "../application/use-cases/get-tenant-payment-detail.use-case";
+import type { VerifyPaymentInput, ListTenantPaymentsQuery } from "../application/dto/payment.dto";
 import { AppError } from "../../../shared/errors";
 
 export class TenantPaymentController {
@@ -21,6 +23,8 @@ export class TenantPaymentController {
     private readonly verifyPaymentUseCase: VerifyPaymentUseCase,
     private readonly cancelPaymentUseCase: CancelPaymentUseCase,
     private readonly getOrderStatusUseCase: GetOrderStatusUseCase,
+    private readonly listTenantPaymentsUseCase: ListTenantPaymentsUseCase,
+    private readonly getTenantPaymentDetailUseCase: GetTenantPaymentDetailUseCase,
   ) {}
 
   createOrder = async (
@@ -120,6 +124,42 @@ export class TenantPaymentController {
     try {
       const result = await this.getOrderStatusUseCase.execute(
         param(req, "orderId"),
+      );
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listHistory = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = getTenantContext(req);
+      const query = req.query as unknown as ListTenantPaymentsQuery;
+      const result = await this.listTenantPaymentsUseCase.execute(
+        tenantId,
+        query,
+      );
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getDetail = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { tenantId } = getTenantContext(req);
+      const id = param(req, "id");
+      const result = await this.getTenantPaymentDetailUseCase.execute(
+        id,
+        tenantId,
       );
       sendSuccess(res, result);
     } catch (err) {

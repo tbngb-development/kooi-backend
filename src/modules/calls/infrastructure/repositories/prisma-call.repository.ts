@@ -1,12 +1,13 @@
 // modules/calls/infrastructure/repositories/prisma-call.repository.ts
 
 import prisma from "../../../../shared/config/database/prisma";
-import { type Prisma, type CallStatus } from "@prisma/client";
+import { type Prisma, type CallStatus, type VoiceProvider } from "@prisma/client";
 import type {
   CallRepository,
   ListCallsFilters,
   PaginatedCallsResult,
   DetailedCallResult,
+  CallExportRecord,
   CallTranscriptResult,
   CallStatsFilters,
   CallStatsResult,
@@ -15,130 +16,63 @@ import type {
 import type { AvailableFiltersResponse } from "../../../../shared/types/bolna.types";
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
+export interface RawCallWithAgentRelations {
+  provider?: VoiceProvider | null;
+  assistant?: { id: string; name: string } | null;
+  sarvamAgent?: { id: string; name: string } | null;
+  campaign?: {
+    assistant?: { id: string; name: string } | null;
+    sarvamAgent?: { id: string; name: string } | null;
+  } | null;
+}
+
+export function resolveCallAgent(call: RawCallWithAgentRelations): { id: string; name: string } | null {
+  const provider = call.provider ?? "BOLNA";
+  const rawAgent =
+    provider === "SARVAM"
+      ? (call.sarvamAgent ?? call.campaign?.sarvamAgent ?? null)
+      : (call.assistant ?? call.campaign?.assistant ?? null);
+
+  if (!rawAgent) return null;
+  return {
+    id: rawAgent.id,
+    name: rawAgent.name,
+  };
+}
+
 export class PrismaCallRepository implements CallRepository {
   async list(
     tenantId: string,
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult> {
-    const {
-      campaignId,
-      leadId,
-      status,
-      search,
-      dateFrom,
-      dateTo,
-      sortBy = "duration",
-      sortOrder = "desc",
-      page = 1,
-      limit = 15,
-      isDeleted = false,
-    } = filters;
+    const { campaignId, page = 1, limit = 15 } = filters;
 
     const pageNum = Math.max(1, page);
     const limitNum = Math.max(1, limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: Prisma.CallWhereInput = { tenantId };
-
-    where.isDeleted = isDeleted ?? false;
-
-    if (campaignId) where.campaignId = campaignId;
-    if (filters.assistantId) where.assistantId = filters.assistantId;
-    if (filters.type) where.type = filters.type;
-    if (filters.source) where.source = filters.source;
-    if (filters.agentNumber) where.agentNumber = filters.agentNumber;
-    if (leadId) where.leadId = leadId;
-
-    if (status) {
-      const statuses = status
-        .split(",")
-        .map((s) => s.trim() as CallStatus)
-        .filter(Boolean);
-      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
-    }
-
-    if (dateFrom || dateTo) {
-      where.startedAt = {
-        ...(dateFrom && { gte: new Date(dateFrom) }),
-        ...(dateTo && { lte: new Date(dateTo) }),
-      };
-    }
-
-    if (search) {
-      where.OR = [
-        {
-          lead: {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { phone: { contains: search } },
-            ],
-          },
-        },
-        { agentNumber: { contains: search } },
-      ];
-    }
-
-    const dynamicAndConditions: Prisma.CallWhereInput[] = [];
-
-    if (
-      filters.dynamicFilters &&
-      Object.keys(filters.dynamicFilters).length > 0
-    ) {
-      for (const [dispositionId, objectiveValue] of Object.entries(
-        filters.dynamicFilters,
-      )) {
-        dynamicAndConditions.push({
-          extractionOverview: {
-            some: {
-              dispositionId: dispositionId,
-              objectiveValue,
-            },
-          },
-        });
-      }
-    }
-
-    if (dynamicAndConditions.length > 0) {
-      where.AND = [
-        ...(Array.isArray(where.AND) ? where.AND : []),
-        ...dynamicAndConditions,
-      ];
-    }
-
-    const validSortFields = ["startedAt", "duration", "cost", "createdAt"];
-    const orderField = validSortFields.includes(sortBy) ? sortBy : "startedAt";
-    const orderDir: Prisma.SortOrder = sortOrder === "asc" ? "asc" : "desc";
-
-    const orderBy: Prisma.CallOrderByWithRelationInput[] = (() => {
-      switch (orderField) {
-        case "duration":
-          return [
-            { duration: { sort: orderDir, nulls: "last" } },
-            { createdAt: "desc" },
-          ];
-        case "cost":
-          return [
-            { cost: { sort: orderDir, nulls: "last" } },
-            { createdAt: "desc" },
-          ];
-        case "startedAt":
-          return [
-            { startedAt: { sort: orderDir, nulls: "last" } },
-            { createdAt: "desc" },
-          ];
-        case "createdAt":
-        default:
-          return [{ createdAt: orderDir }];
-      }
-    })();
+    const where = this.buildCallWhere(tenantId, filters);
+    const orderBy = this.buildCallOrderBy(filters);
 
     const [calls, total, overview] = await Promise.all([
       prisma.call.findMany({
         where,
         include: {
           lead: { select: { id: true, name: true, phone: true } },
-          campaign: { select: { id: true, name: true } },
+          campaign: {
+            select: {
+              id: true,
+              name: true,
+              assistant: { select: { id: true, name: true } },
+              sarvamAgent: { select: { id: true, name: true } },
+            },
+          },
           assistant: { select: { id: true, name: true } },
+          sarvamAgent: { select: { id: true, name: true } },
+          batch: { select: { id: true, name: true, fileName: true } },
+          _count: {
+            select: { goalResults: true },
+          },
           extractionOverview: {
             select: {
               dispositionSlug: true,
@@ -168,14 +102,18 @@ export class PrismaCallRepository implements CallRepository {
         take: limitNum,
       }),
       prisma.call.count({ where }),
-      this.getTenantCallOverview(tenantId, campaignId),
+      this.getTenantCallOverview(tenantId, campaignId, filters.batchId),
     ]);
 
     return {
       overview,
       calls: calls.map((c) => ({
         id: c.id,
+        provider: c.provider ?? "BOLNA",
         bolnaCallId: c.bolnaCallId,
+        sarvamAttemptId: c.sarvamAttemptId,
+        sarvamInteractionId: c.sarvamInteractionId,
+        sarvamUserIdentifier: c.sarvamUserIdentifier,
         tenantId: c.tenantId,
         campaignId: c.campaignId,
         assistantId: c.assistantId,
@@ -206,9 +144,18 @@ export class PrismaCallRepository implements CallRepository {
         updatedAt: c.updatedAt,
         isDeleted: c.isDeleted,
         deletedAt: c.deletedAt,
+        goalPassed: c.goalPassed,
+        goalResultCount: (c as any)._count?.goalResults ?? 0,
         lead: c.lead,
-        campaign: c.campaign,
-        assistant: c.assistant,
+        campaign: c.campaign ? { id: c.campaign.id, name: c.campaign.name } : null,
+        agent: resolveCallAgent(c),
+        batch: c.batch
+          ? {
+              id: c.batch.id,
+              name: c.batch.name,
+              fileName: c.batch.fileName,
+            }
+          : null,
         extractionOverview: c.extractionOverview,
         extractionInsights: c.extractionInsights,
       })),
@@ -221,13 +168,188 @@ export class PrismaCallRepository implements CallRepository {
     };
   }
 
+  /** Build the exact same filter predicate used by the paginated listing. */
+  private buildCallWhere(
+    tenantId: string,
+    filters: ListCallsFilters,
+  ): Prisma.CallWhereInput {
+    const {
+      campaignId,
+      leadId,
+      status,
+      search,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      isDeleted = false,
+    } = filters;
+
+    const where: Prisma.CallWhereInput = { tenantId };
+
+    where.isDeleted = isDeleted ?? false;
+
+    if (filters.provider) where.provider = filters.provider;
+    if (campaignId) where.campaignId = campaignId;
+    if (filters.batchId) where.batchId = filters.batchId;
+    if (filters.agentId) {
+      if (filters.provider === "BOLNA") {
+        where.assistantId = filters.agentId;
+      } else if (filters.provider === "SARVAM") {
+        where.sarvamAgentId = filters.agentId;
+      } else {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          {
+            OR: [
+              { assistantId: filters.agentId },
+              { sarvamAgentId: filters.agentId },
+            ],
+          },
+        ];
+      }
+    }
+    if (filters.type) where.type = filters.type;
+    if (filters.source) where.source = filters.source;
+    if (filters.agentNumber) where.agentNumber = filters.agentNumber;
+    if (leadId) where.leadId = leadId;
+
+    if (filters.goalId) {
+      where.goalResults = { some: { campaignGoalId: filters.goalId } };
+    }
+
+    if (filters.goalPassed === true) {
+      where.goalPassed = true;
+    } else if (filters.goalPassed === false) {
+      where.goalPassed = false;
+      where.status = { in: ["COMPLETED", "FAILED", "BUSY", "NO_ANSWER"] };
+      if (!campaignId) {
+        where.campaign = { goals: { some: {} } };
+      }
+    }
+
+    if (status) {
+      const statuses = status
+        .split(",")
+        .map((s) => s.trim() as CallStatus)
+        .filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+    }
+
+    if (dateFrom || dateTo) {
+      where.startedAt = {
+        ...(dateFrom && { gte: new Date(dateFrom) }),
+        ...(dateTo && { lte: new Date(dateTo) }),
+      };
+    }
+
+    if (filters.durationCondition && filters.durationSeconds !== undefined) {
+      where.duration =
+        filters.durationCondition === "gt"
+          ? { gt: filters.durationSeconds }
+          : { lt: filters.durationSeconds };
+    }
+
+    if (search) {
+      where.OR = [
+        {
+          lead: {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { phone: { contains: search } },
+            ],
+          },
+        },
+        { agentNumber: { contains: search } },
+      ];
+    }
+
+    const dynamicAndConditions: Prisma.CallWhereInput[] = [];
+    if (
+      filters.dynamicFilters &&
+      Object.keys(filters.dynamicFilters).length > 0
+    ) {
+      for (const [dispositionId, objectiveValue] of Object.entries(
+        filters.dynamicFilters,
+      )) {
+        dynamicAndConditions.push({
+          extractionOverview: {
+            some: { dispositionId, objectiveValue },
+          },
+        });
+      }
+    }
+
+    if (dynamicAndConditions.length > 0) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        ...dynamicAndConditions,
+      ];
+    }
+
+    return where;
+  }
+
+  private buildCallOrderBy(
+    filters: ListCallsFilters,
+  ): Prisma.CallOrderByWithRelationInput[] {
+    const validSortFields = ["startedAt", "duration", "cost", "createdAt"];
+    const sortBy = filters.sortBy ?? "duration";
+    const orderField = validSortFields.includes(sortBy) ? sortBy : "startedAt";
+    const orderDir: Prisma.SortOrder =
+      filters.sortOrder === "asc" ? "asc" : "desc";
+
+    switch (orderField) {
+      case "duration":
+        return [
+          { duration: { sort: orderDir, nulls: "last" } },
+          { createdAt: "desc" },
+        ];
+      case "cost":
+        return [
+          { cost: { sort: orderDir, nulls: "last" } },
+          { createdAt: "desc" },
+        ];
+      case "startedAt":
+        return [
+          { startedAt: { sort: orderDir, nulls: "last" } },
+          { createdAt: "desc" },
+        ];
+      case "createdAt":
+      default:
+        return [{ createdAt: orderDir }];
+    }
+  }
+
+  async findAllForExport(
+    tenantId: string,
+    filters: ListCallsFilters,
+    limit: number,
+  ): Promise<CallExportRecord[]> {
+    const calls = await prisma.call.findMany({
+      where: this.buildCallWhere(tenantId, filters),
+      include: { lead: { select: { id: true, name: true, phone: true } } },
+      orderBy: this.buildCallOrderBy(filters),
+      take: Math.max(1, limit),
+    });
+
+    return calls.map((call) => ({
+      status: call.status as CallStatus,
+      startedAt: call.startedAt,
+      createdAt: call.createdAt,
+      lead: call.lead,
+    }));
+  }
+
   async getTenantCallOverview(
     tenantId: string,
     campaignId?: string,
+    batchId?: string,
   ): Promise<CallListOverview> {
     const where: Prisma.CallWhereInput = { tenantId, isDeleted: false };
 
     if (campaignId) where.campaignId = campaignId;
+    if (batchId) where.batchId = batchId;
 
     const [
       totalCalls,
@@ -375,6 +497,8 @@ export class PrismaCallRepository implements CallRepository {
             id: true,
             name: true,
             description: true,
+            assistant: { select: { id: true, name: true } },
+            sarvamAgent: { select: { id: true, name: true } },
           },
         },
         assistant: {
@@ -383,11 +507,40 @@ export class PrismaCallRepository implements CallRepository {
             name: true,
           },
         },
+        sarvamAgent: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        batch: {
+          select: {
+            id: true,
+            name: true,
+            fileName: true,
+          },
+        },
         callAnalysis: {
           select: {
             id: true,
             dynamicExtractions: true,
             extractionResult: true,
+            outputVariables: true,
+          },
+        },
+        goalResults: {
+          select: {
+            id: true,
+            campaignGoalId: true,
+            attemptId: true,
+            createdAt: true,
+            campaignGoal: {
+              select: {
+                displayName: true,
+                outputVariableName: true,
+                expectedValue: true,
+              },
+            },
           },
         },
       },
@@ -397,7 +550,11 @@ export class PrismaCallRepository implements CallRepository {
 
     return {
       id: call.id,
+      provider: call.provider ?? "BOLNA",
       bolnaCallId: call.bolnaCallId,
+      sarvamAttemptId: call.sarvamAttemptId,
+      sarvamInteractionId: call.sarvamInteractionId,
+      sarvamUserIdentifier: call.sarvamUserIdentifier,
       tenantId: call.tenantId,
       campaignId: call.campaignId,
       assistantId: call.assistantId,
@@ -429,8 +586,21 @@ export class PrismaCallRepository implements CallRepository {
       isDeleted: call.isDeleted,
       deletedAt: call.deletedAt,
       lead: call.lead,
-      campaign: call.campaign,
-      assistant: call.assistant,
+      campaign: call.campaign
+        ? {
+            id: call.campaign.id,
+            name: call.campaign.name,
+            description: call.campaign.description,
+          }
+        : null,
+      agent: resolveCallAgent(call),
+      batch: call.batch
+        ? {
+            id: call.batch.id,
+            name: call.batch.name,
+            fileName: call.batch.fileName,
+          }
+        : null,
       callAnalysis: call.callAnalysis
         ? {
             id: call.callAnalysis.id,
@@ -438,8 +608,11 @@ export class PrismaCallRepository implements CallRepository {
               .dynamicExtractions as unknown as string,
             extractionResult: call.callAnalysis
               .extractionResult as unknown as string,
+            outputVariables: call.callAnalysis.outputVariables,
           }
         : null,
+      goalPassed: call.goalPassed,
+      goalResults: call.goalResults,
     };
   }
 
@@ -483,12 +656,14 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string,
     filters: CallStatsFilters,
   ): Promise<CallStatsResult> {
-    const { campaignId, leadId } = filters;
+    const { campaignId, leadId, provider, batchId } = filters;
 
     const where: Prisma.CallWhereInput = {
       tenantId,
       isDeleted: false,
+      ...(provider && { provider }),
       ...(campaignId && { campaignId }),
+      ...(batchId && { batchId }),
       ...(leadId && { leadId }),
     };
 
@@ -538,6 +713,7 @@ export class PrismaCallRepository implements CallRepository {
                               select: {
                                 id: true,
                                 name: true,
+                                displayName: true,
                                 slug: true,
                                 isObjective: true,
                                 objectiveOptions: true,
@@ -585,7 +761,7 @@ export class PrismaCallRepository implements CallRepository {
 
         dynamic.push({
           id: disp.id,
-          label: disp.name,
+          label: disp.displayName || disp.name,
           disposition: disp.name,
           category: categoryName,
           options,
@@ -652,9 +828,11 @@ export class PrismaCallRepository implements CallRepository {
     tenantId: string;
     assistantId: string;
     leadId: string;
+    provider?: VoiceProvider;
   }): Promise<void> {
     await prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         assistantId: data.assistantId,
@@ -673,9 +851,11 @@ export class PrismaCallRepository implements CallRepository {
     assistantId: string;
     leadId: string;
     agentNumber: string | null;
+    provider?: VoiceProvider;
   }): Promise<{ id: string }> {
     return prisma.call.create({
       data: {
+        provider: data.provider ?? "BOLNA",
         bolnaCallId: data.bolnaCallId,
         tenantId: data.tenantId,
         assistantId: data.assistantId,

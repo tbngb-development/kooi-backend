@@ -27,6 +27,7 @@ export interface CompletePaymentInput {
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature: string;
+  paymentMethod?: string | null;
 }
 
 export interface CompletePaymentResult {
@@ -70,12 +71,54 @@ export interface RechargeResponse {
   purpose: RechargePurpose;
   status: RechargeStatus;
   provider: string;
+  paymentMethod?: string | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   failureReason: string | null;
   tenantPlanId: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface ListTenantPaymentsQuery {
+  page?: number;
+  limit?: number;
+  status?: RechargeStatus;
+  purpose?: RechargePurpose;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface TenantPaymentResponse {
+  id: string;
+  walletId: string;
+  tenantId: string;
+  amount: number;
+  currency: string;
+  purpose: RechargePurpose;
+  status: RechargeStatus;
+  provider: string;
+  paymentMethod: string | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  failureReason: string | null;
+  tenantPlanId: string | null;
+  targetPlanVersionId: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  tenantPlan?: {
+    id: string;
+    status: string;
+  } | null;
+}
+
+export interface PaginatedTenantPaymentsResponse {
+  items: TenantPaymentResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface PaymentSummaryResponse {

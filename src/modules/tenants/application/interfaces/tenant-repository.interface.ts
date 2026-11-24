@@ -1,6 +1,8 @@
+import type { VoiceProvider } from "@prisma/client";
 import { type TenantEntityData } from "../../domain/tenant.entity";
 
 export interface TenantWithCounts extends TenantEntityData {
+  voiceProvider: VoiceProvider;
   _count: {
     memberships: number;
     campaigns: number;
@@ -55,6 +57,13 @@ export interface TenantWithCounts extends TenantEntityData {
     bolnaConcurrencyCurrent: number | null;
     bolnaProfileFetchedAt: Date | null;
   } | null;
+  sarvamApiKey?: {
+    id: string;
+    workspaceId: string;
+    organizationId: string;
+    isActive: boolean;
+    createdAt: Date;
+  } | null;
 }
 
 export interface TenantStatsResult {
@@ -78,6 +87,7 @@ export interface TenantStatsResult {
       totalRechargedAmountPaisa: number;
       customerChargedPaisa: number;
       platformCostPaisa: number;
+      providerCostUsdCents: number;
     };
     calls: {
       total: number;
@@ -131,6 +141,8 @@ export interface TenantRepository {
       suspensionReason?: string | null;
       suspendedAt?: Date | null;
       suspendedBy?: string | null;
+      voiceProvider?: VoiceProvider;
+      bolnaApiKeyId?: string | null;
     },
   ): Promise<TenantEntityData>;
   getStats(id: string): Promise<TenantStatsResult>;

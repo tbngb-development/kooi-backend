@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import { type CallEntityData } from "../../domain/entities/call.entity";
 import type {
   AvailableFiltersResponse,
@@ -6,8 +7,10 @@ import type {
 import type { CallListOverview } from "../../../campaigns/application/dto/campaign.dto";
 
 export interface ListCallsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
-  assistantId?: string;
+  batchId?: string;
+  agentId?: string;
   leadId?: string;
   status?: string;
   type?: "OUTBOUND" | "INBOUND";
@@ -20,8 +23,20 @@ export interface ListCallsFilters {
   sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
+  durationCondition?: "gt" | "lt";
+  durationSeconds?: number;
   dynamicFilters?: DynamicFilterMap;
   isDeleted?: boolean;
+  goalId?: string;
+  goalPassed?: boolean;
+}
+
+/** Slim call shape used by the contact-list CSV export. */
+export interface CallExportRecord {
+  status: string;
+  startedAt: Date | null;
+  createdAt: Date;
+  lead: { id: string; name: string | null; phone: string } | null;
 }
 
 export interface PaginatedCallsResult {
@@ -37,9 +52,14 @@ export interface PaginatedCallsResult {
         id: string;
         name: string;
       } | null;
-      assistant?: {
+      agent: {
         id: string;
         name: string;
+      } | null;
+      batch?: {
+        id: string;
+        name: string | null;
+        fileName?: string | null;
       } | null;
       extractionOverview: {
         dispositionSlug: string;
@@ -79,15 +99,32 @@ export interface DetailedCallResult extends CallEntityData {
     name: string;
     description: string | null;
   } | null;
-  assistant?: {
+  agent: {
     id: string;
     name: string;
+  } | null;
+  batch?: {
+    id: string;
+    name: string | null;
+    fileName?: string | null;
   } | null;
   callAnalysis: {
     id: string;
     dynamicExtractions: string | null;
     extractionResult: string | null;
+    outputVariables?: unknown;
   } | null;
+  goalResults?: Array<{
+    id: string;
+    campaignGoalId: string;
+    attemptId: string;
+    createdAt: Date;
+    campaignGoal: {
+      displayName: string;
+      outputVariableName: string;
+      expectedValue: string;
+    };
+  }>;
 }
 
 export interface CallTranscriptResult {
@@ -102,7 +139,9 @@ export interface CallTranscriptResult {
 }
 
 export interface CallStatsFilters {
+  provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   leadId?: string;
 }
 
@@ -131,6 +170,13 @@ export interface CallRepository {
     filters: ListCallsFilters,
   ): Promise<PaginatedCallsResult>;
 
+  /** Unpaginated, tenant-scoped fetch using the same filters as `list`. */
+  findAllForExport(
+    tenantId: string,
+    filters: ListCallsFilters,
+    limit: number,
+  ): Promise<CallExportRecord[]>;
+
   findById(tenantId: string, id: string): Promise<DetailedCallResult | null>;
 
   findTranscriptById(
@@ -145,7 +191,11 @@ export interface CallRepository {
 
   getCallCenterStats(tenantId: string): Promise<CallCenterStatsResult>;
 
-  getTenantCallOverview(tenantId: string): Promise<CallListOverview>;
+  getTenantCallOverview(
+    tenantId: string,
+    campaignId?: string,
+    batchId?: string,
+  ): Promise<CallListOverview>;
 
   getAvailableFilters(
     tenantId: string,
@@ -159,6 +209,7 @@ export interface CallRepository {
     assistantId: string;
     leadId: string;
     agentNumber: string | null;
+    provider?: VoiceProvider;
   }): Promise<{ id: string }>;
 
   createInboundCallRecord(data: {
@@ -166,6 +217,7 @@ export interface CallRepository {
     tenantId: string;
     assistantId: string;
     leadId: string;
+    provider?: VoiceProvider;
   }): Promise<void>;
 
   softDelete(callId: string): Promise<void>;

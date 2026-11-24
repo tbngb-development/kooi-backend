@@ -26,6 +26,7 @@ describe("Admin Tenant Management (Module 1 - Overview)", () => {
     termsVersion: "v1.0",
     workspaceSwitchStatus: "IDLE",
     workspaceSwitchError: null,
+    voiceProvider: "BOLNA",
     bolnaApiKeyId: "key-123",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
@@ -104,6 +105,7 @@ describe("Admin Tenant Management (Module 1 - Overview)", () => {
         totalRechargedAmountPaisa: 600000,
         customerChargedPaisa: 150000,
         platformCostPaisa: 90000,
+        providerCostUsdCents: 1234.56,
       },
       calls: {
         total: 1200,

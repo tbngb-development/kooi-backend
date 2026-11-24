@@ -15,29 +15,63 @@ import { PrismaWalletRepository } from "../wallet/infrastructure/repositories/pr
 import { GetCampaignExtractionOverviewUseCase } from "./application/use-cases/get-campaign-extraction-overview.use-case";
 import { GetCampaignExtractionInsightsUseCase } from "./application/use-cases/get-campaign-extraction-insights.use-case";
 import { GetCampaignCallMetricsUseCase } from "./application/use-cases/get-campaign-call-metrics.use-case";
+import { GetCampaignGoalMetricsUseCase } from "./application/use-cases/get-campaign-goal-metrics.use-case";
 import { ArchiveCampaignUseCase } from "./application/use-cases/archive-campaign.use-case";
 import { RestoreCampaignUseCase } from "./application/use-cases/restore-campaign.use-case";
 import { UpdateCampaignStatusUseCase } from "./application/use-cases/update-campaign-status.use-case";
 import { UpdateCampaignUseCase } from "./application/use-cases/update-campaign.use-case";
+import { ControlSarvamCampaignUseCase } from "./application/use-cases/control-sarvam-campaign.use-case";
+import { GetActiveSarvamCampaignsUseCase } from "./application/use-cases/get-active-sarvam-campaigns.use-case";
+import { SyncSarvamCampaignLifecycleUseCase } from "./application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
 import { ParseManualLeadsUseCase } from "./application/use-cases/parse-manual-leads.use-case";
 import type { Logger } from "../../shared/logging/logger.interface";
+import type { ITenantVoiceProviderService } from "../tenants/application/services/tenant-voice-provider.service";
+import type { ISarvamCampaignClient } from "./infrastructure/clients/sarvam-campaign.client";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import { CampaignNotifications } from "./application/services/campaign-notifications";
+import { PrismaTenantNameRepository } from "../batches/infrastructure/repositories/prisma-tenant-name.repository";
+import type {
+  IDiscordEventsPublisher,
+} from "../../shared/config/external/notifications/discordevents-publisher";
+import { noopDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import { CallingWindowService } from "./application/services/calling-window.service";
+
 export interface CampaignModuleDeps {
   logger: Logger;
+  voiceProviderService?: ITenantVoiceProviderService;
+  sarvamCampaignClient?: ISarvamCampaignClient;
+  sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  eventPublisher?: IDiscordEventsPublisher;
 }
 
 export interface CampaignModule {
   tenantController: TenantCampaignController;
   adminController: AdminCampaignController;
+  repository: PrismaCampaignRepository;
+  notifications: CampaignNotifications;
+  useCases: {
+    controlSarvamCampaign?: ControlSarvamCampaignUseCase;
+    syncSarvamCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+    callingWindow: CallingWindowService;
+  };
 }
-
-// modules/campaigns/container.ts
 
 export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const campaignRepo = new PrismaCampaignRepository();
   const batchRepo = new PrismaBatchRepository();
   const planRepo = new PrismaPlanRepository();
   const walletRepo = new PrismaWalletRepository();
+  const tenantNameRepo = new PrismaTenantNameRepository();
   const log = deps?.logger?.child({ module: "campaign" });
+
+  // Internal Discord notifications are optional and best-effort. Without a
+  // publisher (e.g. in unit tests) the noop keeps campaign flows inert.
+  const campaignNotifications = new CampaignNotifications({
+    findCampaign: (campaignId) => campaignRepo.findByIdGlobal(campaignId),
+    getTenantName: (tenantId) => tenantNameRepo.getNameById(tenantId),
+    publisher: deps?.eventPublisher ?? noopDiscordEventsPublisher,
+    logger: log,
+  });
 
   const listCampaigns = new ListCampaignsUseCase(campaignRepo);
   const getCampaign = new GetCampaignUseCase(campaignRepo);
@@ -65,27 +99,83 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
   const getCampaignCallMetrics = new GetCampaignCallMetricsUseCase(
     campaignRepo,
   );
+  const getCampaignGoalMetrics = new GetCampaignGoalMetricsUseCase(
+    campaignRepo,
+  );
 
   const parseManualLeads = new ParseManualLeadsUseCase(parseLeads);
 
-  // Clean dependency injection: repository owns atomic database access
-  const archiveCampaign = new ArchiveCampaignUseCase(campaignRepo);
   const restoreCampaign = new RestoreCampaignUseCase(campaignRepo);
   const updateCampaignStatus = new UpdateCampaignStatusUseCase(
     campaignRepo,
     batchRepo,
     log,
+    campaignNotifications,
   );
   const updateCampaign = new UpdateCampaignUseCase(
+    campaignRepo,
+    log,
+    deps?.sarvamCampaignClient,
+    deps?.sarvamEncryptionService,
+    planRepo,
+  );
+
+  const controlSarvamCampaign =
+    deps?.sarvamCampaignClient && deps?.sarvamEncryptionService
+      ? new ControlSarvamCampaignUseCase(
+          campaignRepo,
+          batchRepo,
+          deps.sarvamCampaignClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
+  const archiveCampaign = new ArchiveCampaignUseCase(
+    campaignRepo,
+    controlSarvamCampaign,
+    log,
+  );
+
+  const syncSarvamCampaignLifecycle =
+    deps?.sarvamCampaignClient && deps?.sarvamEncryptionService
+      ? new SyncSarvamCampaignLifecycleUseCase(
+          campaignRepo,
+          batchRepo,
+          deps.sarvamCampaignClient,
+          deps.sarvamEncryptionService,
+          log,
+          campaignNotifications,
+        )
+      : undefined;
+
+  const createCampaign = new CreateCampaignUseCase(
+    campaignRepo,
+    planRepo,
+    deps?.voiceProviderService,
+    deps?.sarvamCampaignClient,
+    deps?.sarvamEncryptionService,
+    log,
+    campaignNotifications,
+  );
+
+  const getActiveSarvamCampaigns = new GetActiveSarvamCampaignsUseCase(
     campaignRepo,
     log,
   );
 
   return {
+    repository: campaignRepo,
+    notifications: campaignNotifications,
+    useCases: {
+      controlSarvamCampaign,
+      syncSarvamCampaignLifecycle,
+      callingWindow: new CallingWindowService(campaignRepo),
+    },
     tenantController: new TenantCampaignController(
       listCampaigns,
       getCampaign,
-      new CreateCampaignUseCase(campaignRepo, planRepo, log),
+      createCampaign,
       new ParseLeadsUseCase(campaignRepo, batchRepo, planRepo, walletRepo, log),
       getCampaignStats,
       extractVariables,
@@ -94,6 +184,9 @@ export function buildCampaignModule(deps?: CampaignModuleDeps): CampaignModule {
       getCampaignCallMetrics,
       archiveCampaign,
       parseManualLeads,
+      controlSarvamCampaign,
+      getCampaignGoalMetrics,
+      getActiveSarvamCampaigns,
     ),
     adminController: new AdminCampaignController(
       listCampaigns,

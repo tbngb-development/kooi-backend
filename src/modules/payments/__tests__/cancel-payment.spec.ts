@@ -26,6 +26,7 @@ describe("CancelPaymentUseCase", () => {
     purpose: "WALLET_TOPUP",
     status: "INITIATED",
     provider: "razorpay",
+    paymentMethod: null,
     razorpayOrderId: "order_rzp_999",
     razorpayPaymentId: null,
     razorpaySignature: null,
@@ -58,6 +59,8 @@ describe("CancelPaymentUseCase", () => {
       findStaleInitiated: vi.fn(),
       listWithTenant: vi.fn(),
       getSummary: vi.fn(),
+      findByIdAndTenantId: vi.fn(),
+      listTenantRecharges: vi.fn(),
     };
 
     mockPayments = {
@@ -149,6 +152,7 @@ describe("CancelPaymentUseCase", () => {
       razorpayOrderId: "order_rzp_999",
       razorpayPaymentId: "pay_live_captured",
       razorpaySignature: "verified_on_cancel_dismissal",
+      paymentMethod: "upi",
     });
     expect(mockRechargeRepo.markCancelled).not.toHaveBeenCalled();
   });

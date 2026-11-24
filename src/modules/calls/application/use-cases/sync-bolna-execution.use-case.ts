@@ -48,8 +48,8 @@ type DynamicExtractionMap = Record<
   Record<string, DynamicExtractionEntry>
 >;
 
-function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
-  const s = (status ?? "").toLowerCase().trim();
+export function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
+  const s = (status ?? "").toLowerCase().trim().replace(/_/g, "-");
   switch (s) {
     case "completed":
     case "ended":
@@ -58,11 +58,15 @@ function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
     case "busy":
       return "BUSY";
     case "no-answer":
-    case "no_answer":
       return "NO_ANSWER";
     case "failed":
     case "error":
     case "balance-low":
+    // A disconnect is an interrupted call, never a completed/billable one.
+    case "call-disconnected":
+    case "disconnected":
+    case "call-dropped":
+    case "dropped":
       return "FAILED";
     case "stopped":
     case "canceled":
@@ -73,11 +77,25 @@ function mapBolnaStatusToCallStatus(status?: string | null): CallStatus {
     case "ringing":
       return "CALLING";
     case "scheduled":
-    case "re-scheduled":
+    case "rescheduled":
       return "SCHEDULED";
+    // Fail closed: an unrecognised provider status is never billable. Only the
+    // explicit completed cases above may resolve to COMPLETED.
     default:
-      return "COMPLETED";
+      return "FAILED";
   }
+}
+
+/**
+ * Billing eligibility for the Bolna reconciliation path. Only an explicitly
+ * completed call with a positive duration may be debited; disconnected, failed
+ * and unrecognised statuses are never billable regardless of reported duration.
+ */
+export function isBillableSyncCall(
+  status: CallStatus,
+  durationSec: number,
+): boolean {
+  return status === "COMPLETED" && durationSec > 0;
 }
 
 function mapCallStatusToLeadStatus(
@@ -204,7 +222,7 @@ export class SyncBolnaExecutionUseCase {
       if (bolnaBatchId && recipientPhone) {
         const batch = await prisma.leadBatch.findFirst({
           where: { bolnaBatchId },
-          select: { id: true, tenantId: true, campaignId: true },
+          select: { id: true, tenantId: true, campaignId: true, provider: true },
         });
 
         if (batch) {
@@ -220,6 +238,7 @@ export class SyncBolnaExecutionUseCase {
           if (lead) {
             callRecord = await prisma.call.create({
               data: {
+                provider: batch.provider ?? "BOLNA",
                 bolnaCallId: execution.id,
                 tenantId: batch.tenantId,
                 campaignId: batch.campaignId,
@@ -229,6 +248,7 @@ export class SyncBolnaExecutionUseCase {
               },
               select: {
                 id: true,
+                provider: true,
                 bolnaCallId: true,
                 tenantId: true,
                 campaignId: true,
@@ -370,8 +390,14 @@ export class SyncBolnaExecutionUseCase {
       },
     });
 
-    // 9. Debit wallet atomically with integer double-entry ledger tracking (if billable duration > 0)
-    if (this.debitWalletForCall && duration > 0) {
+    // 9. Debit wallet atomically with integer double-entry ledger tracking.
+    // Only an explicitly COMPLETED call with a positive duration is billable —
+    // disconnected/failed/unknown statuses must never post a debit even when
+    // the provider reports a duration.
+    if (
+      this.debitWalletForCall &&
+      isBillableSyncCall(verifiedCallStatus, duration)
+    ) {
       try {
         const debitResult = await this.debitWalletForCall.execute({
           tenantId: callRecord.tenantId,

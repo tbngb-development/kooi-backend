@@ -8,7 +8,14 @@ export const updateWorkspaceSchema = z.object({
 export const adminUpdateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
-  suspensionReason: z.string().trim().min(5, "Suspension reason must be at least 5 characters").max(500).optional(),
+  suspensionReason: z
+    .string()
+    .trim()
+    .min(5, "Suspension reason must be at least 5 characters")
+    .max(500)
+    .optional(),
+  voiceProvider: z.enum(["BOLNA", "SARVAM"]).optional(),
+  bolnaApiKeyId: z.string().min(1, "Bolna API Key ID cannot be empty").nullable().optional(),
 });
 
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceSchema>;

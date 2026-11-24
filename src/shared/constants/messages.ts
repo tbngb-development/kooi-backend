@@ -80,6 +80,17 @@ export const InviteMessages = {
   EMAIL_MISMATCH: "Email does not match invite",
 } as const;
 
+/** Team invitation workflow (distinct from platform-owner invites). */
+export const TeamInviteMessages = {
+  CREATED: "Invitation sent",
+  RESENT: "Invitation resent",
+  LISTED: "Invitations retrieved",
+  REVOKED: "Invitation revoked",
+  SEATS: "Seat usage retrieved",
+  PREVIEW: "Invitation details retrieved",
+  ACCEPTED: "Invitation accepted",
+} as const;
+
 export const WalletMessages = {
   INSUFFICIENT_BALANCE: "Insufficient wallet balance. Please recharge.",
   LOW_BALANCE: "Wallet balance is below threshold",

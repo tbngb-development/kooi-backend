@@ -4,6 +4,8 @@ import type { IBolnaClientFactory } from "../../../../shared/config/external/bol
 import { evaluateCreditLimit } from "../../domain/rules/credit-limit.rules";
 import prisma from "../../../../shared/config/database/prisma";
 import type { Logger } from "../../../../shared/logging/logger.interface";
+import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
+import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 
 export class StopBatchesOnInsufficientBalanceUseCase {
   constructor(
@@ -33,7 +35,7 @@ export class StopBatchesOnInsufficientBalanceUseCase {
         bonusBalance: wallet.bonusBalance,
         bonusExpiresAt: wallet.bonusExpiresAt,
       },
-      creditLimitPaisa: plan.lowBalanceThreshold,
+      creditLimitPaisa: plan.creditLimit,
       perMinuteRatePaisa: plan.perMinuteRate,
       inFlightCallCount,
     });
@@ -55,10 +57,20 @@ export class StopBatchesOnInsufficientBalanceUseCase {
       batchCount: runningBatches.length,
     });
 
-    const bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
+    let bolnaClient: any = null;
+    if (runningBatches.some((b) => Boolean(b.bolnaBatchId))) {
+      try {
+        bolnaClient = await this.bolnaClientFactory.forTenant(input.tenantId);
+      } catch (bolnaFactoryErr) {
+        this.logger.warn("Could not instantiate Bolna client during batch stop", {
+          error: bolnaFactoryErr,
+          tenantId: input.tenantId,
+        });
+      }
+    }
 
     for (const batch of runningBatches) {
-      if (batch.bolnaBatchId) {
+      if (batch.bolnaBatchId && bolnaClient) {
         try {
           await bolnaClient.batches.stop(batch.bolnaBatchId);
         } catch (bolnaErr) {
@@ -123,30 +135,28 @@ export class StopBatchesOnInsufficientBalanceUseCase {
       }
     }
 
-    // 7. Update campaign status if all batches are terminal
+    // 7. Reconcile campaign status with the shared batch-based rule. The
+    // atomic guard preserves a campaign already finalized by another path.
     const campaignIds = [...new Set(runningBatches.map((b) => b.campaignId))];
 
     for (const campaignId of campaignIds) {
-      const statuses = await prisma.leadBatch.findMany({
-        where: { campaignId },
+      const batchRows = await prisma.leadBatch.findMany({
+        where: { campaignId, isDeleted: false },
         select: { status: true },
       });
-
-      const allTerminal = statuses.every(
-        (s) =>
-          s.status === "COMPLETED" ||
-          s.status === "STOPPED" ||
-          s.status === "FAILED",
+      const decision = decideCampaignStatusFromBatches(
+        batchRows.map((b) => b.status),
       );
 
-      if (allTerminal) {
-        const allFailed = statuses.every((s) => s.status === "FAILED");
-        await prisma.campaign.update({
-          where: { id: campaignId },
-          data: {
-            status: allFailed ? "FAILED" : "COMPLETED",
-            completedAt: new Date(),
+      if (decision.action === "settle") {
+        await prisma.campaign.updateMany({
+          where: {
+            id: campaignId,
+            ...activeCampaignGuard(new Date(), {
+              allowLowBalanceMarked: true,
+            }),
           },
+          data: { status: decision.status, completedAt: new Date() },
         });
       }
     }

@@ -62,3 +62,30 @@ export class VerificationOtpMaxAttemptsError extends AppError {
     );
   }
 }
+
+export class MissingVoiceProviderCredentialError extends AppError {
+  constructor(
+    provider: string,
+    message = `No valid ${provider} API Key credential associated with this tenant.`,
+  ) {
+    super(HttpStatus.BAD_REQUEST, message, "MISSING_VOICE_PROVIDER_CREDENTIAL");
+  }
+}
+
+export class InactiveVoiceProviderCredentialError extends AppError {
+  constructor(
+    provider: string,
+    message = `The associated ${provider} API Key credential is inactive.`,
+  ) {
+    super(HttpStatus.BAD_REQUEST, message, "INACTIVE_VOICE_PROVIDER_CREDENTIAL");
+  }
+}
+
+export class InvalidVoiceProviderError extends AppError {
+  constructor(
+    provider: string,
+    message = `Invalid or unsupported voice provider: ${provider}. Supported providers are BOLNA and SARVAM.`,
+  ) {
+    super(HttpStatus.BAD_REQUEST, message, "INVALID_VOICE_PROVIDER");
+  }
+}

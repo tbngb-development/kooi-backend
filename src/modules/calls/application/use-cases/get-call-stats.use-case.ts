@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import {
   type CallRepository,
   type CallStatsResult,
@@ -5,7 +6,9 @@ import {
 
 export interface GetCallStatsInput {
   tenantId: string;
+  provider?: VoiceProvider;
   campaignId?: string;
+  batchId?: string;
   leadId?: string;
 }
 
@@ -14,7 +17,9 @@ export class GetCallStatsUseCase {
 
   async execute(input: GetCallStatsInput): Promise<CallStatsResult> {
     return this.callRepo.getStats(input.tenantId, {
+      provider: input.provider,
       campaignId: input.campaignId,
+      batchId: input.batchId,
       leadId: input.leadId,
     });
   }

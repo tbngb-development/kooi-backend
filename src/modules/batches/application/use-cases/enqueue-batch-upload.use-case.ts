@@ -4,11 +4,20 @@ import type { PlanRepository } from "../../../plans/application/interfaces/plan-
 import type { FileStorageProvider } from "../../../../shared/config/external/storage/file-storage.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import type { CreateBatchInput } from "../dto/batch.dto";
+import type { TenantNameRepository } from "../interfaces/tenant-name-repository.interface";
+import type {
+  IDiscordEventsPublisher,
+  DiscordEvent,
+} from "../../../../shared/config/external/notifications/discordevents-publisher";
+import { noopDiscordEventsPublisher } from "../../../../shared/config/external/notifications/discordevents-publisher";
 import {
   CampaignNotFoundError,
-  CampaignFailedError,
   MaxActiveCampaignsReachedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   EmptyFileError,
   BatchOperationError,
@@ -37,21 +46,26 @@ export class EnqueueBatchUploadUseCase {
     private readonly planRepo: PlanRepository,
     private readonly storage: FileStorageProvider,
     logger?: Logger,
+    private readonly tenantNameRepo?: TenantNameRepository,
+    private readonly notifications: IDiscordEventsPublisher = noopDiscordEventsPublisher,
   ) {
     this.log = logger?.child({ component: "EnqueueBatchUpload" });
   }
 
   async execute(input: CreateBatchInput): Promise<EnqueueBatchResult> {
-    // 1. Validate campaign
-    const campaign = await this.campaignRepo.findByIdWithRelations(
+    // 1. Validate campaign and decide whether an explicit reopen is needed.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
       input.tenantId,
       input.campaignId,
     );
-    if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("upload to");
+    if (campaign.provider === "SARVAM") {
+      if (!campaign.sarvamAgentId && !campaign.sarvamAgent) {
+        throw new CampaignNotFoundError();
+      }
+    } else {
+      if (!campaign.assistant) throw new CampaignNotFoundError();
     }
-    if (!campaign.assistant) throw new CampaignNotFoundError();
 
     // 2. Validate active plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -160,6 +174,7 @@ export class EnqueueBatchUploadUseCase {
       name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       fileName: input.fileName,
       totalLeads: 0,
       retryConfig: input.retryConfig,
@@ -167,6 +182,25 @@ export class EnqueueBatchUploadUseCase {
       termsAcceptedAt: new Date(),
       termsVersion: input.termsVersion,
     });
+
+    // Explicit new batch work reopens a normal terminal campaign only through
+    // the atomic guard. Enforcement-stopped and cancelled campaigns were
+    // rejected above.
+    const reopened = await reopenCampaignForNewBatchIfNeeded(
+      this.campaignRepo,
+      input.tenantId,
+      campaign.id,
+      needsReopen,
+      campaign.startedAt ? null : new Date(),
+    );
+    if (reopened) {
+      this.log?.info("Reactivated campaign on new batch upload", {
+        action: "campaign.reactivate",
+        campaignId: campaign.id,
+        previousStatus: campaign.status,
+        newStatus: "RUNNING",
+      });
+    }
 
     // Auto-generate standardized batch name if not explicitly provided
     const sequenceNumber = await this.batchRepo.getBatchSequenceNumber(
@@ -192,6 +226,8 @@ export class EnqueueBatchUploadUseCase {
     await this.batchRepo.updateRawFileUrl(batch.id, rawFileUrl);
 
     // 8. Enqueue the heavy processing job
+    const resolvedScheduledAt = input.scheduledAt ?? (input.runImmediately ? new Date().toISOString() : null);
+
     await queue.add(
       "process-batch",
       {
@@ -200,7 +236,7 @@ export class EnqueueBatchUploadUseCase {
         campaignId: input.campaignId,
         rawFileUrl,
         fileName: finalFileName,
-        scheduledAt: input.scheduledAt ?? null,
+        scheduledAt: resolvedScheduledAt,
         runImmediately: input.runImmediately ?? false,
         retryConfig: input.retryConfig ?? null,
         termsVersion: input.termsVersion,
@@ -210,6 +246,10 @@ export class EnqueueBatchUploadUseCase {
         priority: 1,
       },
     );
+
+    // Notify internal ops channel (non-fatal — Discord is a notification
+    // surface only and must never block a batch upload).
+    await this.publishBatchUploaded(batch, resolvedName, campaign);
 
     this.log?.info("Batch enqueued for processing", {
       action: "batch.enqueue",
@@ -226,5 +266,56 @@ export class EnqueueBatchUploadUseCase {
       message:
         "Your file is being processed. You'll see the leads appear shortly.",
     };
+  }
+
+  /**
+   * Emits the v1 `batch.uploaded` event. Only operational allow-listed fields
+   * are included — no phone numbers, CSV contents, or raw file URLs. The
+   * deterministic eventId lets the notification service dedupe replays.
+   */
+  private async publishBatchUploaded(
+    batch: { id: string; createdAt?: Date },
+    batchName: string,
+    campaign: {
+      id: string;
+      tenantId: string;
+      name?: string | null;
+      provider?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const tenantName =
+        (await this.tenantNameRepo?.getNameById(campaign.tenantId)) ??
+        campaign.tenantId;
+
+      const event: DiscordEvent = {
+        eventId: `batch.uploaded:${batch.id}:created`,
+        eventType: "batch.uploaded",
+        eventVersion: 1,
+        occurredAt: (batch.createdAt ?? new Date()).toISOString(),
+        tenantId: campaign.tenantId,
+        source: "kooi-backend",
+        data: {
+          tenantName,
+          tenantId: campaign.tenantId,
+          campaignId: campaign.id,
+          campaignName: campaign.name || campaign.id,
+          batchId: batch.id,
+          batchName,
+          status: "PROCESSING",
+          provider: campaign.provider === "SARVAM" ? "SARVAM" : "BOLNA",
+          dashboardPath: `/campaigns/${campaign.id}/batches`,
+        },
+      };
+
+      await this.notifications.publish(event);
+    } catch (error) {
+      this.log?.error("failed to publish batch.uploaded event", error, {
+        action: "notification.publish_failed",
+        tenantId: campaign.tenantId,
+        campaignId: campaign.id,
+        batchId: batch.id,
+      });
+    }
   }
 }

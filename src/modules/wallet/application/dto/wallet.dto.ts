@@ -31,6 +31,11 @@ export interface WalletTransactionResponse {
   createdAt: string;
 }
 
+export interface WalletTransactionDetailResponse extends WalletTransactionResponse {
+  cashBalanceBefore: number;
+  bonusBalanceBefore: number;
+}
+
 export interface ListTransactionsQuery {
   page?: number;
   limit?: number;
@@ -38,6 +43,8 @@ export interface ListTransactionsQuery {
   sourceType?: WalletTxSourceType;
   startDate?: string;
   endDate?: string;
+  search?: string;
+  excludeRecharge?: boolean;
 }
 
 export interface PaginatedTransactionsResponse {
@@ -46,4 +53,15 @@ export interface PaginatedTransactionsResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface WalletTransactionSummaryResponse {
+  totalCreditsAddedPaisa: number;
+  totalCreditsUsedPaisa: number;
+  totalPurchasedCreditsPaisa: number;
+  totalCallSpendPaisa: number;
+  totalOtherDebitsPaisa: number;
+  totalBonusExpiredPaisa: number;
+  cashBalance: number;
+  bonusBalance: number;
 }

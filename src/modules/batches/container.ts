@@ -27,17 +27,34 @@ import { EnqueueManualBatchUploadUseCase } from "./application/use-cases/enqueue
 import { PrismaPhoneNumberRepository } from "../phone-numbers/infrastructure/repositories/prisma-phone-number.repository";
 import { RetryFailedBatchUseCase } from "./application/use-cases/retry-failed-batch.use-case";
 import { UpdateBatchNameUseCase } from "./application/use-cases/update-batch-name.use-case";
+import { SyncSarvamCohortLifecycleUseCase } from "./application/use-cases/sync-sarvam-cohort-lifecycle.use-case";
+import type { SyncSarvamCampaignLifecycleUseCase } from "../campaigns/application/use-cases/sync-sarvam-campaign-lifecycle.use-case";
+import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort-client.interface";
+import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
+import { PrismaTenantNameRepository } from "./infrastructure/repositories/prisma-tenant-name.repository";
+import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
+import { CallingWindowService } from "../campaigns/application/services/calling-window.service";
+import { CloseCallingWindowsUseCase } from "./application/use-cases/close-calling-windows.use-case";
+import { CallingWindowScheduler } from "./infrastructure/jobs/calling-window.scheduler";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
   checkBalanceForBatch?: CheckBalanceForBatchUseCase;
   logger?: Logger;
+  sarvamCohortClient?: ISarvamCohortClient;
+  sarvamEncryptionService?: ISarvamApiKeyEncryptionService;
+  syncCampaignLifecycle?: SyncSarvamCampaignLifecycleUseCase;
+  callingWindowService?: CallingWindowService;
+  eventPublisher?: IDiscordEventsPublisher;
 }
 
 export interface BatchModule {
   tenantController: TenantBatchController;
   adminController: AdminBatchController;
-  schedulers: { batchProcessing: BatchProcessingScheduler };
+  schedulers: {
+    batchProcessing: BatchProcessingScheduler;
+    callingWindow: CallingWindowScheduler;
+  };
 }
 
 export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
@@ -50,8 +67,15 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
   const bolnaProvider = new BolnaBatchProviderImpl(deps.bolnaClientFactory);
   const planRepo = new PrismaPlanRepository();
   const phoneNumberRepo = new PrismaPhoneNumberRepository();
+  const tenantNameRepo = new PrismaTenantNameRepository();
   const listBatches = new ListBatchesUseCase(batchRepo, campaignRepo);
-  const getBatch = new GetBatchUseCase(batchRepo);
+  const getBatch = new GetBatchUseCase(
+    batchRepo,
+    campaignRepo,
+    deps.sarvamCohortClient,
+    deps.sarvamEncryptionService,
+    log,
+  );
   const getBatchStats = new GetBatchStatsUseCase(batchRepo);
   const archiveBatch = new ArchiveBatchUseCase(batchRepo);
   const restoreBatch = new RestoreBatchUseCase(batchRepo);
@@ -64,6 +88,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     bolnaProvider,
     deps.checkBalanceForBatch,
     log,
+    deps.callingWindowService,
   );
   const retryFailedBatch = new RetryFailedBatchUseCase(
     batchRepo,
@@ -83,6 +108,8 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     planRepo,
     storage,
     log,
+    tenantNameRepo,
+    deps.eventPublisher,
   );
 
   const enqueueManualBatchUpload = new EnqueueManualBatchUploadUseCase(
@@ -96,10 +123,44 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     planRepo,
     bolnaProvider,
     phoneNumberRepo,
+    deps.sarvamCohortClient,
+    deps.sarvamEncryptionService,
+    storage,
+    log,
+    tenantNameRepo,
+    deps.eventPublisher,
+    deps.callingWindowService,
+  );
+
+  const syncCohortLifecycle =
+    deps.sarvamCohortClient && deps.sarvamEncryptionService
+      ? new SyncSarvamCohortLifecycleUseCase(
+          batchRepo,
+          campaignRepo,
+          deps.sarvamCohortClient,
+          deps.sarvamEncryptionService,
+          log,
+        )
+      : undefined;
+
+  const batchProcessingScheduler = new BatchProcessingScheduler(
+    worker,
+    deps.syncCampaignLifecycle,
+    syncCohortLifecycle,
     log,
   );
 
-  const batchProcessingScheduler = new BatchProcessingScheduler(worker, log);
+  const closeCallingWindows = new CloseCallingWindowsUseCase(
+    batchRepo,
+    campaignRepo,
+    bolnaProvider,
+    deps.callingWindowService ?? new CallingWindowService(campaignRepo),
+    log,
+  );
+  const callingWindowScheduler = new CallingWindowScheduler(
+    closeCallingWindows,
+    log,
+  );
 
   return {
     tenantController: new TenantBatchController(
@@ -114,6 +175,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         planRepo,
         deps.checkBalanceForBatch,
         log,
+        deps.callingWindowService,
       ),
       new ScheduleBatchUseCase(
         batchRepo,
@@ -122,6 +184,7 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
         planRepo,
         deps.checkBalanceForBatch,
         log,
+        deps.callingWindowService,
       ),
       stopBatch,
       resumeBatch,
@@ -140,6 +203,9 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
       retryFailedBatch,
       updateBatchName,
     ),
-    schedulers: { batchProcessing: batchProcessingScheduler },
+    schedulers: {
+      batchProcessing: batchProcessingScheduler,
+      callingWindow: callingWindowScheduler,
+    },
   };
 }

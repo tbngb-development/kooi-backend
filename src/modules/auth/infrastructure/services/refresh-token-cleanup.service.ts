@@ -7,7 +7,7 @@ export class RefreshTokenCleanupService {
     private readonly logger: Logger,
   ) {}
 
-  async cleanup(olderThanDays = 30): Promise<number> {
+  async cleanup(olderThanDays = 1): Promise<number> {
     const deleted = await this.authRepository.cleanupOrphanedAndExpiredTokenFamilies(olderThanDays);
     this.logger.info("Executed family-aware refresh token cleanup", {
       action: "auth.refresh_token_cleanup",

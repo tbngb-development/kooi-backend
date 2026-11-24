@@ -54,7 +54,8 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
     validityDays: 14,
     includedBalance: 5000,
     bonusValidityDays: 14,
-    lowBalanceThreshold: 5000,
+    creditLimit: 5000,
+    warningThreshold: 50000,
     maxActiveCampaigns: 5,
     maxLeadsPerBatch: 100,
     maxAgents: 2,
@@ -138,7 +139,7 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
   describe("SelectPlanUseCase", () => {
     it("should activate a trial plan immediately upon selection", async () => {
       vi.mocked(mockPlanRepo.findById).mockResolvedValue(trialPlan as any);
-      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion);
+      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion as any);
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue(null);
 
       const activatedDate = new Date();
@@ -189,7 +190,7 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
 
     it("should handle Bolna key auto-assignment failure gracefully without aborting activation", async () => {
       vi.mocked(mockPlanRepo.findById).mockResolvedValue(trialPlan as any);
-      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion);
+      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion as any);
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue(null);
       vi.mocked(mockAutoAssignKey.execute).mockRejectedValue(new Error("No Bolna keys available"));
 
@@ -219,7 +220,7 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
 
     it("should be idempotent when selecting the same already active trial plan version", async () => {
       vi.mocked(mockPlanRepo.findById).mockResolvedValue(trialPlan as any);
-      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion);
+      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion as any);
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         status: "ACTIVE",
         planVersionId: trialVersion.id,
@@ -253,7 +254,7 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
 
     it("should throw TenantPlanAlreadyActiveError if another plan is already active", async () => {
       vi.mocked(mockPlanRepo.findById).mockResolvedValue(trialPlan as any);
-      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion);
+      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(trialVersion as any);
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue({
         status: "ACTIVE",
         planVersionId: "ver-other-different",
@@ -274,7 +275,7 @@ describe("Trial Plan Selection & Onboarding Activation", () => {
 
     it("should preserve PENDING_PAYMENT selection for paid plans without activating", async () => {
       vi.mocked(mockPlanRepo.findById).mockResolvedValue(paidPlan as any);
-      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(paidVersion);
+      vi.mocked(mockPlanRepo.findLatestPublishedVersion).mockResolvedValue(paidVersion as any);
       vi.mocked(mockPlanRepo.getActivePlanForTenant).mockResolvedValue(null);
 
       vi.mocked(mockPlanRepo.selectPlan).mockResolvedValue({

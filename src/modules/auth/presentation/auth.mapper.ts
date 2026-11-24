@@ -1,10 +1,6 @@
 import type { RegisterTenantOwnerOutput } from "../application/dto/register.dto";
 import type { LoginOutput } from "../application/dto/login.dto";
 import type { SelectTenantOutput } from "../application/dto/select-tenant.dto";
-import type {
-  CreateInviteOutput,
-  AcceptInviteOutput,
-} from "../application/dto/invite.dto";
 import type { ProfileOutput } from "../application/use-cases/get-profile.use-case";
 
 // ── Response contract types (tokens removed — delivered via httpOnly cookies) ──
@@ -32,17 +28,6 @@ export interface RefreshResponse {
 export interface ProfileResponse {
   user: ProfileOutput["user"];
   memberships: ProfileOutput["memberships"];
-}
-
-export interface InviteResponse {
-  inviteToken: string;
-  inviteUrl: string;
-  expiresAt: string;
-}
-
-export interface AcceptInviteResponse {
-  user: AcceptInviteOutput["user"];
-  membership: AcceptInviteOutput["membership"];
 }
 
 // ── Mappers ────────────────────────────────────────────────────────────────
@@ -85,20 +70,4 @@ export class AuthMapper {
     };
   }
 
-  static toInviteResponse(output: CreateInviteOutput): InviteResponse {
-    return {
-      inviteToken: output.inviteToken,
-      inviteUrl: output.inviteUrl,
-      expiresAt: output.expiresAt,
-    };
-  }
-
-  static toAcceptInviteResponse(
-    output: AcceptInviteOutput,
-  ): AcceptInviteResponse {
-    return {
-      user: output.user,
-      membership: output.membership,
-    };
-  }
 }

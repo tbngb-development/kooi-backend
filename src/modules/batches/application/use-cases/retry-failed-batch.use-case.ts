@@ -5,7 +5,7 @@ import type { BatchRepository } from "../interfaces/batch-repository.interface";
 import type { CampaignRepository } from "../../../campaigns/application/interfaces/campaign-repository.interface";
 import type { ResumeBatchUseCase } from "./resume-batch.use-case";
 import { BatchNotFoundError } from "../../domain/errors/batch.errors";
-import { CampaignNotFoundError } from "../../../campaigns/domain/errors/campaign.errors";
+import { assertCampaignAcceptsNewBatch } from "../../../campaigns/application/services/campaign-new-batch-guard";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 
 export interface RetryFailedBatchResult {
@@ -32,9 +32,12 @@ export class RetryFailedBatchUseCase {
     campaignId: string,
     batchId: string,
   ): Promise<RetryFailedBatchResult> {
-    // 1. Verify campaign exists
-    const campaign = await this.campaignRepo.findById(tenantId, campaignId);
-    if (!campaign) throw new CampaignNotFoundError();
+    // 1. Verify campaign exists and is eligible for this explicit retry.
+    await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
+      tenantId,
+      campaignId,
+    );
 
     // 2. Verify batch exists
     const batch = await this.batchRepo.findById(tenantId, campaignId, batchId);

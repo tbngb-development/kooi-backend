@@ -5,10 +5,13 @@ import type { FileStorageProvider } from "../../../../shared/config/external/sto
 import type { CreateBatchInput, CreateBatchOutput } from "../dto/batch.dto";
 import {
   CampaignNotFoundError,
-  CampaignFailedError,
   MaxActiveCampaignsReachedError,
   RetryConfigNotAllowedError,
 } from "../../../campaigns/domain/errors/campaign.errors";
+import {
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   EmptyFileError,
   NoValidIndianPhonesError,
@@ -60,16 +63,18 @@ export class CreateBatchUseCase {
     // ── 0. Workspace Migration Freeze Guard ─────────────────────
     await assertTenantNotFrozen(input.tenantId);
 
-    // 1. Validate campaign
-    const campaign = await this.campaignRepo.findByIdWithRelations(
+    // 1. Validate campaign and remember whether a guarded reopen is required.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
       input.tenantId,
       input.campaignId,
     );
-    if (!campaign) throw new CampaignNotFoundError();
-    if (campaign.status === "FAILED") {
-      throw new CampaignFailedError("upload to");
-    }
     if (!campaign.assistant) throw new CampaignNotFoundError();
+    if (campaign.provider === "SARVAM") {
+      throw new BatchOperationError(
+        "Batch execution for SARVAM campaigns is not supported in Phase 1.",
+      );
+    }
 
     // 2. Fetch active tenant plan
     const activePlan = await this.planRepo.getActivePlanForTenant(
@@ -217,6 +222,7 @@ export class CreateBatchUseCase {
       name: input.name ?? null,
       campaignId: input.campaignId,
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       fileName: input.fileName,
       totalLeads: newLeads.length,
       retryConfig: resolvedRetryConfig,
@@ -335,16 +341,26 @@ export class CreateBatchUseCase {
       bolnaScheduledAt,
     });
 
-    // 16. If running immediately, flip campaign status to RUNNING (DRAFT campaigns only)
+    // 16. Preserve the DRAFT start path; reopen a normal terminal campaign
+    // only for this explicit new batch.
     if (input.runImmediately && campaign.status === "DRAFT") {
       await this.campaignRepo.updateStatus(input.campaignId, "RUNNING", {
         startedAt: new Date(),
       });
+    } else {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        input.tenantId,
+        input.campaignId,
+        needsReopen,
+        campaign.startedAt ? null : new Date(),
+      );
     }
 
     this.logger?.info("Batch created", {
       action: "batch.create",
       tenantId: input.tenantId,
+      provider: campaign.provider ?? "BOLNA",
       campaignId: input.campaignId,
       batchId: batch.id,
       bolnaBatchId,

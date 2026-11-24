@@ -1,6 +1,10 @@
 import type { PlanRepository } from "../../../plans/application/interfaces/plan-repository.interface";
 import type { AutoAssignKeyUseCase } from "../../../bolna-api-keys/application/use-cases/auto-assign-key.use-case";
 import type { IEmailService } from "../../../../shared/config/external/email/email.interface";
+import type {
+  IDiscordEventsPublisher,
+  DiscordEvent,
+} from "../../../../shared/config/external/notifications/discordevents-publisher";
 import type { WalletRepository } from "../../../wallet/application/interfaces/wallet-repository.interface";
 import type { RechargeRepository } from "../interfaces/recharge-repository.interface";
 import type { TenantEmailRepository } from "../interfaces/tenant-email-repository.interface";
@@ -31,6 +35,7 @@ export class CompletePaymentUseCase {
     private readonly email: IEmailService,
     private readonly tenantEmailRepo: TenantEmailRepository,
     private readonly logger: Logger,
+    private readonly notifications: IDiscordEventsPublisher,
   ) {}
 
   async execute(input: CompletePaymentInput): Promise<CompletePaymentResult> {
@@ -60,6 +65,7 @@ export class CompletePaymentUseCase {
       recharge.id,
       input.razorpayPaymentId,
       input.razorpaySignature,
+      input.paymentMethod,
     );
 
     if (!updated) {
@@ -93,6 +99,10 @@ export class CompletePaymentUseCase {
       recharge.purpose,
     );
 
+    // 7. Notify internal ops channel (non-fatal — Discord is a notification
+    //    surface only and must never block payment completion).
+    await this.publishPaymentCompleted(recharge, updated, input);
+
     this.logger.info("Payment completed", {
       action: "payment.complete",
       orderId: input.razorpayOrderId,
@@ -108,6 +118,53 @@ export class CompletePaymentUseCase {
       rechargeId: recharge.id,
       purpose: recharge.purpose,
     };
+  }
+
+  /**
+   * Emits the v1 `payment.completed` event. Only operational allow-listed
+   * fields are included — no phone numbers, CSVs, transcripts, or file URLs.
+   * Deterministic eventId lets the notification service dedupe replays.
+   */
+  private async publishPaymentCompleted(
+    recharge: Recharge,
+    updated: Recharge,
+    input: CompletePaymentInput,
+  ): Promise<void> {
+    try {
+      const tenantName =
+        (await this.tenantEmailRepo.getNameById(recharge.tenantId)) ??
+        recharge.tenantId;
+
+      const event: DiscordEvent = {
+        eventId: `payment.completed:${recharge.id}:success`,
+        eventType: "payment.completed",
+        eventVersion: 1,
+        occurredAt: (updated.completedAt ?? new Date()).toISOString(),
+        tenantId: recharge.tenantId,
+        source: "kooi-backend",
+        data: {
+          tenantName,
+          tenantId: recharge.tenantId,
+          rechargeId: recharge.id,
+          razorpayOrderId: input.razorpayOrderId,
+          razorpayPaymentId: input.razorpayPaymentId,
+          amountPaisa: recharge.amount,
+          currency: recharge.currency,
+          purpose: recharge.purpose,
+          paymentMethod:
+            updated.paymentMethod ?? input.paymentMethod ?? undefined,
+          dashboardPath: "/billing",
+        },
+      };
+
+      await this.notifications.publish(event);
+    } catch (error) {
+      this.logger.error("failed to publish payment.completed event", error, {
+        action: "notification.publish_failed",
+        tenantId: recharge.tenantId,
+        rechargeId: recharge.id,
+      });
+    }
   }
 
   // ── Private Helpers ────────────────────────────────────────────
@@ -196,7 +253,7 @@ export class CompletePaymentUseCase {
         targetBalance: "BONUS",
         description: `Plan bonus — ${effectiveTerms.planName}`,
         sourceType: "PLAN_BONUS",
-        sourceId: recharge.tenantPlanId!,
+        sourceId: recharge.tenantPlanId ? recharge.tenantPlanId : undefined,
         idempotencyKey: `plan_bonus:${recharge.tenantId}:${effectiveTerms.planVersionId}`,
         createdBy: "razorpay-webhook",
         bonusExpiresAt,

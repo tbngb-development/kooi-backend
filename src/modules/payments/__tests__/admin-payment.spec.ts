@@ -385,6 +385,7 @@ describe("Admin Payment Module — Unit Tests", () => {
         purpose: "WALLET_TOPUP",
         status: "SUCCESS",
         provider: "razorpay",
+        paymentMethod: null,
         razorpayOrderId: "order_mapped_111",
         razorpayPaymentId: "pay_mapped_222",
         razorpaySignature: "sig_mapped_333",

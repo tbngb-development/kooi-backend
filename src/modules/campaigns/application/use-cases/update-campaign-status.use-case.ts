@@ -4,8 +4,12 @@ import type { CampaignStatus } from "@prisma/client";
 import type { CampaignRepository } from "../interfaces/campaign-repository.interface";
 import type { BatchRepository } from "../../../batches/application/interfaces/batch-repository.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
-import { CampaignNotFoundError } from "../../domain/errors/campaign.errors";
+import {
+  CampaignNotFoundError,
+  SarvamAgentMaxActiveCampaignsError,
+} from "../../domain/errors/campaign.errors";
 import type { CampaignEntityData } from "../../domain/entities/campaign.entity";
+import type { CampaignNotifications } from "../services/campaign-notifications";
 
 export interface UpdateCampaignStatusInput {
   tenantId: string;
@@ -19,6 +23,7 @@ export class UpdateCampaignStatusUseCase {
     private readonly campaignRepo: CampaignRepository,
     private readonly batchRepo: BatchRepository,
     private readonly logger?: Logger,
+    private readonly notifications?: CampaignNotifications,
   ) {}
 
   async execute(input: UpdateCampaignStatusInput): Promise<CampaignEntityData> {
@@ -28,6 +33,24 @@ export class UpdateCampaignStatusUseCase {
     const campaign = await this.campaignRepo.findById(tenantId, campaignId);
     if (!campaign) {
       throw new CampaignNotFoundError();
+    }
+
+    // 1.5 Enforce active campaign capacity when manually activating a Sarvam campaign
+    if (
+      status === "RUNNING" &&
+      campaign.status !== "RUNNING" &&
+      campaign.provider === "SARVAM" &&
+      campaign.sarvamAgentId
+    ) {
+      const activeCount = this.campaignRepo.countActiveCampaignsForAgent
+        ? await this.campaignRepo.countActiveCampaignsForAgent(
+            campaign.sarvamAgentId,
+            campaign.id,
+          )
+        : 0;
+      if (activeCount >= 5) {
+        throw new SarvamAgentMaxActiveCampaignsError();
+      }
     }
 
     // 2. Prepare timestamp updates
@@ -85,6 +108,25 @@ export class UpdateCampaignStatusUseCase {
       cascadeToBatches,
       cascadedBatchesCount,
     });
+
+    // Notify internal ops channel on first completion (non-fatal).
+    if (
+      status === "COMPLETED" &&
+      campaign.status !== "COMPLETED" &&
+      this.notifications
+    ) {
+      try {
+        await this.notifications.publishCompleted(
+          campaignId,
+          updated.completedAt ?? extra.completedAt ?? new Date(),
+        );
+      } catch (err) {
+        this.logger?.error("failed to publish campaign.completed event", err, {
+          action: "notification.publish_failed",
+          campaignId,
+        });
+      }
+    }
 
     return updated;
   }

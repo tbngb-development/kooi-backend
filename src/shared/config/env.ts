@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { resolveAppEnvironment } from "./external/notifications/discord-environment";
 
 dotenv.config();
 
@@ -48,14 +49,62 @@ export const env = {
     bolnaInboundAuthToken: process.env.BOLNA_INBOUND_AUTH_TOKEN ?? "",
   },
 
+  sarvam: {
+    apiUrl: process.env.SARVAM_API_URL || "https://apps.sarvam.ai",
+    costPerMinutePaisa: parseInt(process.env.SARVAM_COST_PER_MINUTE_PAISA || "0", 10),
+    encryptionSecret: requireEnv("SARVAM_KEY_ENCRYPTION_SECRET"),
+    webhookSecret:
+      process.env.SARVAM_WEBHOOK_SECRET ||
+      "kooi-sarvam-secret",
+  },
+
   webhook: {
     baseUrl: process.env.WEBHOOK_BASE_URL || "",
     webhookSecret: process.env.WEBHOOK_SECRET || "",
   },
 
+  // Backend -> Discord notification service (separate from provider webhooks).
+  discordNotifications: {
+    serviceUrl:
+      process.env.DISCORD_NOTIFICATION_SERVICE_URL || "http://localhost:3005",
+    // Must equal the notification service's KOOI_WEBHOOK_SECRET.
+    webhookSecret: process.env.DISCORD_WEBHOOK_SECRET || "",
+    timeoutMs: Number(process.env.DISCORD_NOTIFICATION_TIMEOUT_MS) || 3000,
+    enabled: process.env.DISCORD_NOTIFICATIONS_ENABLED === "true",
+    // Deployment label stamped on every event ( development |
+    // staging | production). Derived from APP_ENV, then NODE_ENV.
+    environment: resolveAppEnvironment(
+      process.env.APP_ENV,
+      process.env.NODE_ENV,
+    ),
+    // Durable publication: envelopes are written to the outbox and relayed.
+    outboxEnabled: process.env.DISCORD_OUTBOX_ENABLED !== "false",
+    outboxPollMs: Number(process.env.DISCORD_OUTBOX_POLL_MS) || 5000,
+    outboxBatchSize: Number(process.env.DISCORD_OUTBOX_BATCH_SIZE) || 50,
+  },
+
   resend: {
     apiKey: process.env.RESEND_API_KEY || "",
     fromEmail: process.env.RESEND_FROM_EMAIL || "noreply@localhost",
+  },
+
+  // Team invitation email transport.
+  // 'auto' logs the accept link in development and uses Resend otherwise.
+  teamInvites: {
+    emailMode: (process.env.TEAM_INVITE_EMAIL_MODE || "auto") as
+      | "auto"
+      | "console"
+      | "resend",
+  },
+
+  // U-08: durable email delivery. Empty outboxes make enabling harmless.
+  emailOutbox: {
+    enabled: process.env.EMAIL_OUTBOX_ENABLED !== "false",
+    pollMs: Number(process.env.EMAIL_OUTBOX_POLL_MS) || 5000,
+    batchSize: Number(process.env.EMAIL_OUTBOX_BATCH_SIZE) || 20,
+    maxAttempts: Number(process.env.EMAIL_OUTBOX_MAX_ATTEMPTS) || 3,
+    baseBackoffMs: Number(process.env.EMAIL_OUTBOX_BASE_BACKOFF_MS) || 1000,
+    staleAfterMs: Number(process.env.EMAIL_OUTBOX_STALE_AFTER_MS) || 60_000,
   },
 
   contact: {

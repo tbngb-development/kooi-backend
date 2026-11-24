@@ -20,6 +20,7 @@ import { buildAdminBatchRoutes } from "../modules/batches/presentation/admin-bat
 import { buildAdminPlanRoutes } from "../modules/plans/presentation/admin-plan.routes";
 import { buildTenantPlanRoutes } from "../modules/plans/presentation/tenant-plan.routes";
 import { buildAdminBolnaApiKeyRoutes } from "../modules/bolna-api-keys/presentation/admin-bolna-api-key.routes";
+import { buildAdminSarvamApiKeyRoutes } from "../modules/sarvam-api-keys/presentation/admin-sarvam-api-key.routes";
 import { buildTenantPaymentRoutes } from "../modules/payments/presentation/tenant-payment.routes";
 import { buildTenantWalletRoutes } from "../modules/wallet/presentation/tenant-wallet.routes";
 import {
@@ -40,6 +41,13 @@ import { buildTenantPhoneNumberRoutes } from "../modules/phone-numbers/presentat
 import { buildTenantContactRoutes } from "../modules/contact/presentation/contact.routes";
 import { buildPublicContactRoutes } from "../modules/contact/presentation/public-contact.routes";
 import { buildTenantApiKeyRoutes } from "../modules/tenant-api-keys/presentation/tenant-api-key.routes";
+import { buildTenantInvitationRoutes } from "../modules/team-invitations/presentation/tenant-invitation.routes";
+import { buildPublicInvitationRoutes } from "../modules/team-invitations/presentation/public-invitation.routes";
+import {
+  teamInviteWriteLimiter,
+  teamInvitePreviewLimiter,
+  teamInviteAcceptLimiter,
+} from "../shared/middleware/rate-limiters";
 
 export function buildRoutes(c: AppContainer): Router {
   const router = Router();
@@ -56,7 +64,7 @@ export function buildRoutes(c: AppContainer): Router {
   // ── Tenant API v1 (Scoped workspace actions) ─────────────────────────────
   router.use(
     "/v1/auth",
-    buildTenantAuthRoutes(c.auth.tenantController, c.authenticate, c.authorize),
+    buildTenantAuthRoutes(c.auth.tenantController, c.authenticate),
   );
 
   router.use(
@@ -80,6 +88,8 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/assistants",
     buildTenantAssistantRoutes(c.assistants.tenantController, c.authenticate),
   );
+  router.use("/v1/sarvam-agents", c.sarvamAgents.buildTenantRoutes());
+
   router.use(
     "/v1/campaigns",
     buildTenantCampaignRoutes(
@@ -132,6 +142,30 @@ export function buildRoutes(c: AppContainer): Router {
       c.authorize,
     ),
   );
+  // Team invitations — nested under the current workspace. Mounted BEFORE the
+  // general tenant workspace router; guards are per-route so other `/current`
+  // paths still fall through to the workspace router below.
+  router.use(
+    "/v1/tenants/current",
+    buildTenantInvitationRoutes(
+      c.teamInvitations.tenantController,
+      c.authenticate,
+      c.authorize,
+      teamInviteWriteLimiter,
+    ),
+  );
+
+  // Public invite-link endpoints (optional auth, rate limited).
+  router.use(
+    "/v1/invitations",
+    buildPublicInvitationRoutes(
+      c.teamInvitations.publicController,
+      c.authenticate,
+      teamInvitePreviewLimiter,
+      teamInviteAcceptLimiter,
+    ),
+  );
+
   router.use(
     "/v1/tenants",
     buildTenantWorkspaceRoutes(
@@ -284,6 +318,17 @@ export function buildRoutes(c: AppContainer): Router {
     "/v1/admin/bolna-keys",
     buildAdminBolnaApiKeyRoutes(
       c.bolnaApiKeys.adminController,
+      c.authenticate,
+      c.authorize,
+    ),
+  );
+
+  router.use("/v1/admin/sarvam-agents", c.sarvamAgents.buildAdminRoutes());
+  
+  router.use(
+    "/v1/admin/sarvam-api-keys",
+    buildAdminSarvamApiKeyRoutes(
+      c.sarvamApiKeys.adminController,
       c.authenticate,
       c.authorize,
     ),

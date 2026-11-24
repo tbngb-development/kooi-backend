@@ -12,7 +12,7 @@ export class RefreshTokenCleanupScheduler {
     private readonly cleanupService: RefreshTokenCleanupService,
     private readonly logger: Logger,
     private readonly cronExpression = "0 3 * * *", // Default: Daily at 3:00 AM
-    private readonly retentionDays = 30,
+    private readonly retentionDays = 1, // Default: 1 day (24 hours) for revoked tokens
   ) {}
 
   start(): void {
@@ -37,40 +37,18 @@ export class RefreshTokenCleanupScheduler {
       return;
     }
 
+    // Run startup sweep asynchronously without blocking server start
+    this.runCleanup("scheduler.startup").catch((err) => {
+      this.logger.error("Refresh token cleanup scheduler startup run error", err, {
+        action: "scheduler.startup_error",
+        jobId: "refresh-token-cleanup",
+      });
+    });
+
     this.task = cron.schedule(
       this.cronExpression,
       async () => {
-        if (this.isRunning) {
-          this.logger.warn(
-            "Refresh token cleanup scheduler — previous run still in progress, skipping",
-            {
-              action: "scheduler.skip",
-              jobId: "refresh-token-cleanup",
-            },
-          );
-          return;
-        }
-
-        this.isRunning = true;
-        try {
-          const deleted = await this.cleanupService.cleanup(this.retentionDays);
-          this.logger.info("Completed scheduled refresh token cleanup run", {
-            action: "scheduler.run_completed",
-            jobId: "refresh-token-cleanup",
-            deletedTokensCount: deleted,
-          });
-        } catch (err) {
-          this.logger.error(
-            "Refresh token cleanup scheduler unhandled error",
-            err,
-            {
-              action: "scheduler.error",
-              jobId: "refresh-token-cleanup",
-            },
-          );
-        } finally {
-          this.isRunning = false;
-        }
+        await this.runCleanup("scheduler.cron");
       },
       {
         timezone: "Asia/Kolkata",
@@ -83,6 +61,43 @@ export class RefreshTokenCleanupScheduler {
       cronExpression: this.cronExpression,
       timezone: "Asia/Kolkata",
     });
+  }
+
+  private async runCleanup(trigger: string): Promise<void> {
+    if (this.isRunning) {
+      this.logger.warn(
+        "Refresh token cleanup scheduler — previous run still in progress, skipping",
+        {
+          action: "scheduler.skip",
+          jobId: "refresh-token-cleanup",
+          trigger,
+        },
+      );
+      return;
+    }
+
+    this.isRunning = true;
+    try {
+      const deleted = await this.cleanupService.cleanup(this.retentionDays);
+      this.logger.info("Completed refresh token cleanup run", {
+        action: "scheduler.run_completed",
+        jobId: "refresh-token-cleanup",
+        trigger,
+        deletedTokensCount: deleted,
+      });
+    } catch (err) {
+      this.logger.error(
+        "Refresh token cleanup scheduler unhandled error",
+        err,
+        {
+          action: "scheduler.error",
+          jobId: "refresh-token-cleanup",
+          trigger,
+        },
+      );
+    } finally {
+      this.isRunning = false;
+    }
   }
 
   stop(): void {

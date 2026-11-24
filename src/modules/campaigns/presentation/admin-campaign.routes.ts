@@ -9,6 +9,7 @@ import { validate } from "../../../shared/middleware/validate";
 import {
   updateCampaignStatusSchema,
   updateCampaignSchema,
+  controlSarvamCampaignSchema,
 } from "./campaign.schema";
 
 export function buildAdminCampaignRoutes(
@@ -35,6 +36,13 @@ export function buildAdminCampaignRoutes(
     "/:id",
     validate(updateCampaignSchema),
     controller.update,
+  );
+
+  // Control Sarvam Campaign (pause, resume, cancel)
+  router.post(
+    "/:id/control",
+    validate(controlSarvamCampaignSchema),
+    controller.control,
   );
 
   // Administrative status update

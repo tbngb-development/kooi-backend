@@ -77,14 +77,6 @@ export interface RefreshTokenPayload {
   type: "refresh";
 }
 
-export interface InviteTokenPayload {
-  tenantId: string;
-  role: TenantRole;
-  email: string;
-  inviterId: string;
-  type: "invite";
-}
-
 // ── Membership Info (returned in login response) ───────────────────────────
 
 export interface MembershipInfo {

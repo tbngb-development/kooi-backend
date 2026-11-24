@@ -94,6 +94,7 @@ export class CancelPaymentUseCase {
         razorpayOrderId: orderId,
         razorpayPaymentId: captured.id,
         razorpaySignature: "verified_on_cancel_dismissal",
+        paymentMethod: captured.method,
       });
 
       this.logger.info(

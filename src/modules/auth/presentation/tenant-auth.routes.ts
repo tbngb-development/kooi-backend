@@ -1,7 +1,6 @@
 import { Router } from "express";
 import type { TenantAuthController } from "./tenant-auth.controller";
 import type { AuthenticateMiddleware } from "../../../shared/middleware/authenticate";
-import type { AuthorizeMiddleware } from "../../../shared/middleware/authorize";
 import { validate } from "../../../shared/middleware/validate";
 import {
   registerTenantOwnerSchema,
@@ -9,8 +8,6 @@ import {
   selectTenantSchema,
   refreshTokensSchema,
   logoutSchema,
-  createInviteSchema,
-  acceptInviteSchema,
   forgotPasswordSchema,
   verifyForgotPasswordOtpSchema,
   resetPasswordSchema,
@@ -28,7 +25,6 @@ import {
 export function buildTenantAuthRoutes(
   controller: TenantAuthController,
   authenticate: AuthenticateMiddleware,
-  authorize: AuthorizeMiddleware,
 ): Router {
   const router = Router();
 
@@ -110,20 +106,6 @@ export function buildTenantAuthRoutes(
     controller.selectTenant,
   );
   router.get("/profile", authenticate.any(), controller.profile);
-
-  router.post(
-    "/invites",
-    authenticate.tenant(),
-    authorize.tenantRoles("OWNER", "ADMIN"),
-    validate(createInviteSchema),
-    controller.createInvite,
-  );
-
-  router.post(
-    "/accept-invite",
-    validate(acceptInviteSchema),
-    controller.acceptInvite,
-  );
 
   return router;
 }

@@ -9,4 +9,12 @@ export class PrismaTenantEmailRepository implements TenantEmailRepository {
     });
     return tenant?.email ?? null;
   }
+
+  async getNameById(tenantId: string): Promise<string | null> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    return tenant?.name ?? null;
+  }
 }

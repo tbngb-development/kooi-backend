@@ -7,10 +7,11 @@ import {
   BatchOperationError,
   BatchNoBolnaIdError,
 } from "../../domain/errors/batch.errors";
+import { MaxActiveCampaignsReachedError } from "../../../campaigns/domain/errors/campaign.errors";
 import {
-  CampaignNotFoundError,
-  MaxActiveCampaignsReachedError,
-} from "../../../campaigns/domain/errors/campaign.errors";
+  assertCampaignAcceptsNewBatch,
+  reopenCampaignForNewBatchIfNeeded,
+} from "../../../campaigns/application/services/campaign-new-batch-guard";
 import {
   toBolnaISO,
   parseBolnaScheduledTime,
@@ -18,6 +19,8 @@ import {
 import { type BolnaBatchProvider } from "../interfaces/bolna-batch-provider.interface";
 import type { Logger } from "../../../../shared/logging/logger.interface";
 import { assertTenantNotFrozen } from "../../../../shared/utils/tenant-freeze.guard";
+import type { CallingWindowService } from "../../../campaigns/application/services/calling-window.service";
+import { assertNewDialAllowed } from "../services/new-dial-window.guard";
 
 export class RunBatchUseCase {
   constructor(
@@ -27,6 +30,7 @@ export class RunBatchUseCase {
     private readonly planRepo: PlanRepository,
     private readonly checkBalanceForBatch?: CheckBalanceForBatchUseCase,
     private readonly logger?: Logger,
+    private readonly callingWindowService?: CallingWindowService,
   ) {}
 
   async execute(tenantId: string, campaignId: string, batchId: string) {
@@ -47,9 +51,19 @@ export class RunBatchUseCase {
     }
     if (!batchData.bolnaBatchId) throw new BatchNoBolnaIdError();
 
-    // 2. Validate campaign
-    const campaign = await this.campaignRepo.findById(tenantId, campaignId);
-    if (!campaign) throw new CampaignNotFoundError();
+    await assertNewDialAllowed(
+      this.callingWindowService,
+      tenantId,
+      campaignId,
+      new Date(),
+    );
+
+    // 2. Validate campaign and remember whether a guarded reopen is required.
+    const { campaign, needsReopen } = await assertCampaignAcceptsNewBatch(
+      this.campaignRepo,
+      tenantId,
+      campaignId,
+    );
 
     // 3. Enforce maxActiveCampaigns only against live RUNNING campaigns
     if (campaign.status !== "RUNNING") {
@@ -108,6 +122,14 @@ export class RunBatchUseCase {
       await this.campaignRepo.updateStatus(campaignId, "RUNNING", {
         startedAt: new Date(),
       });
+    } else {
+      await reopenCampaignForNewBatchIfNeeded(
+        this.campaignRepo,
+        tenantId,
+        campaignId,
+        needsReopen,
+        campaign.startedAt ? null : new Date(),
+      );
     }
 
     this.logger?.info("Batch run started", {

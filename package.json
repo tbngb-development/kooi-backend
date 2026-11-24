@@ -1,12 +1,15 @@
 {
   "name": "Kooi-Backend | Partner for your AI Voice call agents",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "prisma generate && tsc",
     "test": "vitest run src/",
     "start": "node dist/server.js",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:dry": "node scripts/deploy.mjs --dry-run",
+    "deploy:check": "node scripts/deploy.mjs --self-check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "seed:plans": "tsx src/seeds/plans.seed.ts",
@@ -15,6 +18,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.3",
     "@typesafe-ai/sdk": "^0.6.0",
@@ -25,6 +29,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "csv-parse": "^6.2.1",
+    "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",

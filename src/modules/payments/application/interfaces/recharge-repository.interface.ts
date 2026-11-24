@@ -8,6 +8,7 @@ export interface CreateRechargeData {
   purpose: RechargePurpose;
   status: RechargeStatus;
   provider?: string;
+  paymentMethod?: string | null;
   razorpayOrderId?: string | null;
   tenantPlanId?: string | null;
   targetPlanVersionId?: string | null;
@@ -17,9 +18,20 @@ export interface RechargeWithTenant extends Recharge {
   tenantName: string;
 }
 
+export interface ListTenantRechargesOptions {
+  page: number;
+  limit: number;
+  status?: RechargeStatus;
+  purpose?: RechargePurpose;
+  search?: string;
+  startDate?: Date;
+  endDate?: Date;
+}
+
 export interface RechargeRepository {
   create(data: CreateRechargeData): Promise<Recharge>;
   findById(id: string): Promise<Recharge | null>;
+  findByIdAndTenantId(id: string, tenantId: string): Promise<Recharge | null>;
   findByRazorpayOrderId(orderId: string): Promise<Recharge | null>;
   findByRazorpayPaymentId(paymentId: string): Promise<Recharge | null>;
 
@@ -32,6 +44,7 @@ export interface RechargeRepository {
     rechargeId: string,
     razorpayPaymentId: string,
     razorpaySignature: string,
+    paymentMethod?: string | null,
   ): Promise<Recharge | null>;
 
   /**
@@ -51,6 +64,11 @@ export interface RechargeRepository {
   updateFailureReason(rechargeId: string, reason: string): Promise<Recharge>;
 
   findStaleInitiated(cutoffDate: Date, limit: number): Promise<Recharge[]>;
+
+  listTenantRecharges(
+    tenantId: string,
+    opts: ListTenantRechargesOptions,
+  ): Promise<{ items: Recharge[]; total: number }>;
 
   listWithTenant(
     filter: {

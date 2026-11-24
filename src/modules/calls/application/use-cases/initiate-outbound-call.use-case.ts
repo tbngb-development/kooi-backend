@@ -1,3 +1,7 @@
+import type { VoiceProvider } from "@prisma/client";
+import type { ITenantVoiceProviderService } from "../../../tenants/application/services/tenant-voice-provider.service";
+import { HttpStatus } from "../../../../shared/constants/http-status";
+import { AppError } from "../../../../shared/errors/app.error";
 // modules/calls/application/use-cases/initiate-outbound-call.use-case.ts
 
 import type { IBolnaClientFactory } from "../../../../shared/config/external/bolna/bolna-client.factory";
@@ -28,6 +32,7 @@ export class InitiateOutboundCallUseCase {
     private readonly assistantRepo: AssistantRepository,
     private readonly leadRepo: LeadRepository,
     private readonly callRepo: CallRepository,
+    private readonly voiceProviderService?: ITenantVoiceProviderService,
     private readonly logger?: Logger,
   ) {}
 
@@ -45,6 +50,21 @@ export class InitiateOutboundCallUseCase {
 
     // 0. Enforce workspace freeze guards (e.g. during migration / key deactivation)
     await assertTenantNotFrozen(input.tenantId);
+
+    // 0b. Snapshot active voice provider (fail-fast)
+    let selectedProvider: VoiceProvider = "BOLNA";
+    if (this.voiceProviderService) {
+      const resolved = await this.voiceProviderService.resolveActiveProvider(input.tenantId);
+      selectedProvider = resolved.provider;
+    }
+
+    if (selectedProvider === "SARVAM") {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        "Voice provider SARVAM call execution is not yet supported in Phase 1.",
+        "VOICE_PROVIDER_NOT_SUPPORTED",
+      );
+    }
 
     // 1. Verify assistant existence, ownership, active status, and outbound capability
     const assistant = await this.assistantRepo.findByIdWithPlatformAgent(
@@ -135,6 +155,7 @@ export class InitiateOutboundCallUseCase {
       tenantId: input.tenantId,
       assistantId: assistant.id,
       leadId: lead.id,
+      provider: selectedProvider,
       agentNumber: resolvedAgentNumber
         ? normalizePhoneNumber(resolvedAgentNumber)
         : null,

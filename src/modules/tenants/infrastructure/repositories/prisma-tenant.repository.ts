@@ -1,3 +1,4 @@
+import type { VoiceProvider } from "@prisma/client";
 import prisma from "../../../../shared/config/database/prisma";
 import type {
   TenantRepository,
@@ -17,6 +18,29 @@ export class PrismaTenantRepository implements TenantRepository {
             campaigns: true,
             leads: true,
             calls: true,
+          },
+        },
+        bolnaApiKey: {
+          select: {
+            id: true,
+            keyIdentifier: true,
+            type: true,
+            isActive: true,
+            bolnaProfileName: true,
+            bolnaProfileEmail: true,
+            bolnaWalletBalance: true,
+            bolnaConcurrencyMax: true,
+            bolnaConcurrencyCurrent: true,
+            bolnaProfileFetchedAt: true,
+          },
+        },
+        sarvamApiKey: {
+          select: {
+            id: true,
+            workspaceId: true,
+            organizationId: true,
+            isActive: true,
+            createdAt: true,
           },
         },
       },
@@ -90,6 +114,15 @@ export class PrismaTenantRepository implements TenantRepository {
             bolnaProfileFetchedAt: true,
           },
         },
+        sarvamApiKey: {
+          select: {
+            id: true,
+            workspaceId: true,
+            organizationId: true,
+            isActive: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
@@ -107,6 +140,8 @@ export class PrismaTenantRepository implements TenantRepository {
       suspensionReason?: string | null;
       suspendedAt?: Date | null;
       suspendedBy?: string | null;
+      voiceProvider?: VoiceProvider;
+      bolnaApiKeyId?: string | null;
     },
   ): Promise<TenantEntityData> {
     const updated = await prisma.tenant.update({
@@ -127,6 +162,12 @@ export class PrismaTenantRepository implements TenantRepository {
         }),
         ...(data.suspendedBy !== undefined && {
           suspendedBy: data.suspendedBy,
+        }),
+        ...(data.voiceProvider !== undefined && {
+          voiceProvider: data.voiceProvider,
+        }),
+        ...(data.bolnaApiKeyId !== undefined && {
+          bolnaApiKeyId: data.bolnaApiKeyId,
         }),
       },
     });
@@ -210,6 +251,7 @@ export class PrismaTenantRepository implements TenantRepository {
           billableSeconds: true,
           chargedAmount: true,
           platformCost: true,
+          cost: true,
         },
       }),
 
@@ -295,6 +337,7 @@ export class PrismaTenantRepository implements TenantRepository {
           totalRechargedAmountPaisa: rechargeSum._sum.amount ?? 0,
           customerChargedPaisa: callAggregates._sum.chargedAmount ?? 0,
           platformCostPaisa: callAggregates._sum.platformCost ?? 0,
+          providerCostUsdCents: callAggregates._sum.cost ?? 0,
         },
         calls: {
           total: totalCalls,

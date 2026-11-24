@@ -3,7 +3,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdminBatchController } from "../presentation/admin-batch.controller";
 import { RetryFailedBatchUseCase } from "../application/use-cases/retry-failed-batch.use-case";
-import { CampaignNotFoundError } from "../../campaigns/domain/errors/campaign.errors";
+import {
+  CampaignNotFoundError,
+  CampaignStoppedForLowBalanceError,
+} from "../../campaigns/domain/errors/campaign.errors";
 import { BatchNotFoundError, BatchOperationError } from "../domain/errors/batch.errors";
 import { UpdateBatchNameUseCase } from "../application/use-cases/update-batch-name.use-case";
 import prisma from "../../../shared/config/database/prisma";
@@ -38,6 +41,9 @@ describe("Admin Batch Module & Operational Controls", () => {
 
   const mockCampaignRepo = {
     findById: vi.fn(),
+    findByIdWithRelations: vi.fn(),
+    hasLowBalanceStoppedLeads: vi.fn().mockResolvedValue(false),
+    reopenCampaignForNewBatch: vi.fn().mockResolvedValue(true),
   };
 
   const mockStopBatchUseCase = {
@@ -253,7 +259,7 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("throws CampaignNotFoundError when campaign does not exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce(null);
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce(null);
 
       await expect(
         useCase.execute("tenant-1", "camp-missing", "batch-1"),
@@ -261,7 +267,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("throws BatchNotFoundError when batch does not exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce(null);
 
       await expect(
@@ -270,7 +282,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("returns zero retried count when no failed leads exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce({ id: "batch-1", status: "COMPLETED" });
       (prisma.lead.findMany as any).mockResolvedValueOnce([]);
 
@@ -282,7 +300,13 @@ describe("Admin Batch Module & Operational Controls", () => {
     });
 
     it("resets failed leads and executes resumeBatchUseCase when failed leads exist", async () => {
-      mockCampaignRepo.findById.mockResolvedValueOnce({ id: "camp-1" });
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
       mockBatchRepo.findById.mockResolvedValueOnce({ id: "batch-1", status: "COMPLETED" });
       (prisma.lead.findMany as any).mockResolvedValueOnce([
         { id: "lead-f1" },
@@ -311,6 +335,59 @@ describe("Admin Batch Module & Operational Controls", () => {
       );
       expect(result.retriedCount).toBe(2);
       expect(result.message).toContain("Successfully queued 2 failed leads");
+    });
+
+    it("allows retry while the campaign remains RUNNING", async () => {
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "RUNNING",
+        provider: "BOLNA",
+        startedAt: null,
+      });
+      mockBatchRepo.findById.mockResolvedValueOnce({
+        id: "batch-1",
+        status: "RUNNING",
+      });
+      (prisma.lead.findMany as any).mockResolvedValueOnce([{ id: "lead-f1" }]);
+      (prisma.lead.updateMany as any).mockResolvedValueOnce({ count: 1 });
+      mockBatchRepo.update.mockResolvedValueOnce({
+        id: "batch-1",
+        status: "STOPPED",
+      });
+      mockResumeBatchUseCase.execute.mockResolvedValueOnce({
+        originalBatchId: "batch-1",
+        newBatch: { id: "batch-new", status: "RUNNING" },
+      });
+
+      const result = await useCase.execute("tenant-1", "camp-1", "batch-1");
+
+      expect(result.retriedCount).toBe(1);
+      expect(mockResumeBatchUseCase.execute).toHaveBeenCalledWith(
+        "tenant-1",
+        "camp-1",
+        "batch-1",
+      );
+    });
+
+    it("rejects retry for an enforcement-stopped campaign before touching leads", async () => {
+      mockCampaignRepo.findByIdWithRelations.mockResolvedValueOnce({
+        id: "camp-1",
+        tenantId: "tenant-1",
+        status: "COMPLETED",
+        provider: "BOLNA",
+        startedAt: null,
+      });
+      mockCampaignRepo.hasLowBalanceStoppedLeads.mockResolvedValueOnce(true);
+
+      await expect(
+        useCase.execute("tenant-1", "camp-1", "batch-1"),
+      ).rejects.toThrow(CampaignStoppedForLowBalanceError);
+
+      expect(prisma.lead.findMany).not.toHaveBeenCalled();
+      expect(prisma.lead.updateMany).not.toHaveBeenCalled();
+      expect(mockBatchRepo.findById).not.toHaveBeenCalled();
+      expect(mockResumeBatchUseCase.execute).not.toHaveBeenCalled();
     });
   });
 

@@ -40,18 +40,6 @@ export class MembershipNotFoundError extends NotFoundError {
   }
 }
 
-export class AlreadyMemberError extends ConflictError {
-  constructor() {
-    super(AuthMessages.ALREADY_MEMBER);
-  }
-}
-
-export class InvalidInviteError extends UnauthorizedError {
-  constructor() {
-    super(AuthMessages.INVALID_INVITE);
-  }
-}
-
 export class NotPlatformAdminError extends ForbiddenError {
   constructor() {
     super(AuthMessages.NOT_PLATFORM_ADMIN);

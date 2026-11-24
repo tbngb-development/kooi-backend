@@ -4,6 +4,12 @@ import type { TenantRepository } from "./application/interfaces/tenant-repositor
 import type { OtpService } from "../auth/application/interfaces/otp-service.interface";
 import type { IEmailService } from "../../shared/config/external/email/email.interface";
 import type { Logger } from "../../shared/logging/logger.interface";
+import type { BolnaApiKeyRepository } from "../bolna-api-keys/application/interfaces/bolna-api-key-repository.interface";
+import type { ISarvamApiKeyRepository } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-repository.interface";
+import {
+  TenantVoiceProviderService,
+  type ITenantVoiceProviderService,
+} from "./application/services/tenant-voice-provider.service";
 import { ListTenantsUseCase } from "./application/use-cases/list-tenants.use-case";
 import { GetTenantUseCase } from "./application/use-cases/get-tenant.use-case";
 import { UpdateTenantUseCase } from "./application/use-cases/update-tenant.use-case";
@@ -18,18 +24,33 @@ export interface TenantModuleDependencies {
   emailService: IEmailService;
   redis: Redis;
   logger: Logger;
+  bolnaApiKeyRepository?: BolnaApiKeyRepository;
+  sarvamApiKeyRepository?: ISarvamApiKeyRepository;
+  voiceProviderService?: ITenantVoiceProviderService;
 }
 
 export interface TenantModule {
   workspaceController: TenantWorkspaceController;
   adminController: AdminTenantController;
   repository: TenantRepository;
+  voiceProviderService?: ITenantVoiceProviderService;
 }
 
 export function buildTenantModule(deps: TenantModuleDependencies): TenantModule {
   const repository = new PrismaTenantRepository();
+
+  const voiceProviderService =
+    deps.voiceProviderService ??
+    (deps.bolnaApiKeyRepository && deps.sarvamApiKeyRepository
+      ? new TenantVoiceProviderService(
+          repository,
+          deps.bolnaApiKeyRepository,
+          deps.sarvamApiKeyRepository,
+        )
+      : undefined);
+
   const getTenant = new GetTenantUseCase(repository);
-  const updateTenant = new UpdateTenantUseCase(repository);
+  const updateTenant = new UpdateTenantUseCase(repository, voiceProviderService);
   const getTenantStats = new GetTenantStatsUseCase(repository);
   const sendTenantMobileOtp = new SendTenantMobileOtpUseCase(
     repository,
@@ -60,5 +81,6 @@ export function buildTenantModule(deps: TenantModuleDependencies): TenantModule 
       getTenantStats,
     ),
     repository,
+    voiceProviderService,
   };
 }
