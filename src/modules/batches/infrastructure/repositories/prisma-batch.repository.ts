@@ -38,6 +38,10 @@ export class PrismaBatchRepository implements BatchRepository {
         calledLeads: number;
         completedLeads: number;
         failedLeads: number;
+        noAnswerCalls: number;
+        scheduledCalls: number;
+        failedCalls: number;
+        busyCalls: number;
       }
     >
   > {
@@ -66,9 +70,17 @@ export class PrismaBatchRepository implements BatchRepository {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       };
       return {
         ...this.toEntityData(batch, counts),
+        noAnswerCalls: counts.noAnswerCalls,
+        scheduledCalls: counts.scheduledCalls,
+        failedCalls: counts.failedCalls,
+        busyCalls: counts.busyCalls,
         _count: batch._count,
       };
     });
@@ -117,6 +129,10 @@ export class PrismaBatchRepository implements BatchRepository {
 
     return {
       ...this.toEntityData(batch, counts),
+      noAnswerCalls: counts?.noAnswerCalls ?? 0,
+      scheduledCalls: counts?.scheduledCalls ?? 0,
+      failedCalls: counts?.failedCalls ?? 0,
+      busyCalls: counts?.busyCalls ?? 0,
       _count: batch._count,
     };
   }
@@ -182,6 +198,10 @@ export class PrismaBatchRepository implements BatchRepository {
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     };
     const totalLeads = batchMetrics.totalLeads;
     const calledLeads = batchMetrics.calledLeads;
@@ -468,6 +488,10 @@ export class PrismaBatchRepository implements BatchRepository {
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     };
 
     return {

@@ -8,6 +8,10 @@ import type {
 } from "../dto/batch.dto";
 
 export interface BatchListItem extends LeadBatchEntityData {
+  noAnswerCalls: number;
+  scheduledCalls: number;
+  failedCalls: number;
+  busyCalls: number;
   _count: { leads: number; calls: number };
 }
 
