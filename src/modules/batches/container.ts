@@ -33,9 +33,7 @@ import type { ISarvamCohortClient } from "./application/interfaces/sarvam-cohort
 import type { ISarvamApiKeyEncryptionService } from "../sarvam-api-keys/application/interfaces/sarvam-api-key-encryption.interface";
 import { PrismaTenantNameRepository } from "./infrastructure/repositories/prisma-tenant-name.repository";
 import type { IDiscordEventsPublisher } from "../../shared/config/external/notifications/discordevents-publisher";
-import { CallingWindowService } from "../campaigns/application/services/calling-window.service";
-import { CloseCallingWindowsUseCase } from "./application/use-cases/close-calling-windows.use-case";
-import { CallingWindowScheduler } from "./infrastructure/jobs/calling-window.scheduler";
+import type { CallingWindowService } from "../campaigns/application/services/calling-window.service";
 
 export interface BatchModuleDeps {
   bolnaClientFactory: IBolnaClientFactory;
@@ -53,7 +51,6 @@ export interface BatchModule {
   adminController: AdminBatchController;
   schedulers: {
     batchProcessing: BatchProcessingScheduler;
-    callingWindow: CallingWindowScheduler;
   };
 }
 
@@ -150,17 +147,6 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     log,
   );
 
-  const closeCallingWindows = new CloseCallingWindowsUseCase(
-    batchRepo,
-    campaignRepo,
-    bolnaProvider,
-    deps.callingWindowService ?? new CallingWindowService(campaignRepo),
-    log,
-  );
-  const callingWindowScheduler = new CallingWindowScheduler(
-    closeCallingWindows,
-    log,
-  );
 
   return {
     tenantController: new TenantBatchController(
@@ -205,7 +191,6 @@ export function buildBatchModule(deps: BatchModuleDeps): BatchModule {
     ),
     schedulers: {
       batchProcessing: batchProcessingScheduler,
-      callingWindow: callingWindowScheduler,
     },
   };
 }

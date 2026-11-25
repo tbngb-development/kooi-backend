@@ -29,15 +29,6 @@ export interface ProcessingSarvamBatchRecord {
   sarvamStatus: string | null;
 }
 
-export interface ActiveWindowBatch {
-  id: string;
-  tenantId: string;
-  campaignId: string;
-  bolnaBatchId: string | null;
-  status: BatchStatus;
-  scheduledAt: Date | null;
-}
-
 export interface BatchRepository {
   list(
     tenantId: string,
@@ -95,15 +86,6 @@ export interface BatchRepository {
   ): Promise<BatchStatsResult>;
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
-
-  findCarryForwardLeads(
-    batchId: string,
-    windowEndAt: Date,
-  ): Promise<PendingLeadRow[]>;
-
-  findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]>;
-
-  markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean>;
 
   reassignCampaignLeadsToBatch(
     campaignId: string,

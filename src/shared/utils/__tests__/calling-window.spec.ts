@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildCallingWindowTiming,
   canStartNewDial,
-  getCarryForwardWindowStart,
   getNextWindowStart,
   getWindowState,
   resolveCallingWindow,
@@ -121,23 +120,12 @@ describe("calling window state at the boundary", () => {
   });
 });
 
-describe("carry-forward start", () => {
+describe("next window start", () => {
   const window = requiredWindow({ campaignSchedule: CAMPAIGN_SCHEDULE });
 
-  it("carries unfinished work to 09:00 AM the next day before close", () => {
+  it("returns 09:00 AM the next day before close", () => {
     const at = new Date("2026-11-23T15:28:00.000Z");
     expect(getNextWindowStart(window, at)).toEqual(new Date("2026-11-24T03:30:00.000Z"));
-    expect(getCarryForwardWindowStart(window, at)).toEqual(new Date("2026-11-24T03:30:00.000Z"));
-  });
-
-  it("carries unfinished work from after close to the next morning", () => {
-    const at = new Date("2026-11-23T15:30:00.000Z");
-    expect(getCarryForwardWindowStart(window, at)).toEqual(new Date("2026-11-24T03:30:00.000Z"));
-  });
-
-  it("uses today's start when the window has not opened yet", () => {
-    const at = new Date("2026-11-23T02:00:00.000Z");
-    expect(getCarryForwardWindowStart(window, at)).toEqual(new Date("2026-11-23T03:30:00.000Z"));
   });
 });
 

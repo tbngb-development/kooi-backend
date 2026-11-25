@@ -319,14 +319,6 @@ export function getNextWindowStart(
   return null;
 }
 
-/** D3: where pending work at or after window close should be carried. */
-export function getCarryForwardWindowStart(
-  window: CallingWindow | null,
-  at: Date,
-): Date | null {
-  return window ? getNextWindowStart(window, at) : null;
-}
-
 export interface BuildCallingWindowTimingInput extends ResolveCallingWindowInput {
   at?: Date;
 }
