@@ -181,7 +181,13 @@ export class PrismaRechargeRepository implements RechargeRepository {
     const skip = (opts.page - 1) * opts.limit;
     const where: Prisma.RechargeWhereInput = {
       tenantId,
-      ...(opts.status && { status: opts.status }),
+      // Cancelled orders are hidden from tenant history (including counts),
+      // even when explicitly requested. Late captures can still transition a
+      // cancelled recharge to SUCCESS via markSuccess, after which it appears.
+      status: {
+        not: "CANCELLED",
+        ...(opts.status && opts.status !== "CANCELLED" && { equals: opts.status }),
+      },
       ...(opts.purpose && { purpose: opts.purpose }),
       ...((opts.startDate || opts.endDate) && {
         createdAt: {

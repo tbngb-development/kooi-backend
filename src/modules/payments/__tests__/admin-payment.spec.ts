@@ -435,6 +435,49 @@ describe("Admin Payment Module — Unit Tests", () => {
         completedAt: "2026-10-24T10:02:00.000Z",
       });
     });
+
+    it("should still expose CANCELLED recharges when the admin requests that status", async () => {
+      const cancelledRecharge: RechargeWithTenant = {
+        id: "rec-cancelled-admin",
+        walletId: "w-2",
+        tenantId: "t-200",
+        tenantName: "Acme Real Estate",
+        amount: 500000,
+        currency: "INR",
+        purpose: "WALLET_TOPUP",
+        status: "CANCELLED",
+        provider: "razorpay",
+        paymentMethod: null,
+        razorpayOrderId: "order_cancelled_admin",
+        razorpayPaymentId: null,
+        razorpaySignature: null,
+        failureReason: "user_aborted",
+        tenantPlanId: null,
+        targetPlanVersionId: null,
+        createdAt: new Date("2026-10-25T10:00:00Z"),
+        completedAt: null,
+      };
+
+      vi.mocked(mockRechargeRepo.listWithTenant).mockResolvedValue({
+        items: [cancelledRecharge],
+        total: 1,
+      });
+
+      const useCase = new ListAdminPaymentsUseCase(mockRechargeRepo);
+      const result = await useCase.execute({
+        tenantId: "t-200",
+        status: "CANCELLED",
+        page: 1,
+        limit: 10,
+      });
+
+      expect(mockRechargeRepo.listWithTenant).toHaveBeenCalledWith(
+        { tenantId: "t-200", status: "CANCELLED" },
+        { page: 1, limit: 10 },
+      );
+      expect(result.items[0].status).toBe("CANCELLED");
+      expect(result.total).toBe(1);
+    });
   });
 
   describe("Payment Validation Schemas", () => {
