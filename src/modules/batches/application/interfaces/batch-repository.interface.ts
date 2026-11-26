@@ -8,6 +8,10 @@ import type {
 } from "../dto/batch.dto";
 
 export interface BatchListItem extends LeadBatchEntityData {
+  noAnswerCalls: number;
+  scheduledCalls: number;
+  failedCalls: number;
+  busyCalls: number;
   _count: { leads: number; calls: number };
 }
 
@@ -27,15 +31,6 @@ export interface ProcessingSarvamBatchRecord {
   sarvamCohortId: string;
   status: BatchStatus;
   sarvamStatus: string | null;
-}
-
-export interface ActiveWindowBatch {
-  id: string;
-  tenantId: string;
-  campaignId: string;
-  bolnaBatchId: string | null;
-  status: BatchStatus;
-  scheduledAt: Date | null;
 }
 
 export interface BatchRepository {
@@ -95,15 +90,6 @@ export interface BatchRepository {
   ): Promise<BatchStatsResult>;
 
   findPendingLeads(batchId: string): Promise<PendingLeadRow[]>;
-
-  findCarryForwardLeads(
-    batchId: string,
-    windowEndAt: Date,
-  ): Promise<PendingLeadRow[]>;
-
-  findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]>;
-
-  markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean>;
 
   reassignCampaignLeadsToBatch(
     campaignId: string,

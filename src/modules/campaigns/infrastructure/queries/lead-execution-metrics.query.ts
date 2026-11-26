@@ -5,6 +5,10 @@ export interface LeadExecutionMetrics {
   calledLeads: number;
   completedLeads: number;
   failedLeads: number;
+  noAnswerCalls: number;
+  scheduledCalls: number;
+  failedCalls: number;
+  busyCalls: number;
 }
 
 interface RawExecutionMetricsRow {
@@ -13,6 +17,10 @@ interface RawExecutionMetricsRow {
   calledLeads: number | string | bigint;
   completedLeads: number | string | bigint;
   failedLeads: number | string | bigint;
+  noAnswerCalls: number | string | bigint;
+  scheduledCalls: number | string | bigint;
+  failedCalls: number | string | bigint;
+  busyCalls: number | string | bigint;
 }
 
 function parseNumber(value: number | string | bigint | null | undefined): number {
@@ -50,6 +58,10 @@ export async function getCampaignExecutionMetricsMap(
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     });
   }
 
@@ -69,7 +81,11 @@ export async function getCampaignExecutionMetricsMap(
            AND c_completed.id IS NULL 
            AND c_active.id IS NULL 
            AND l.status NOT IN ('PENDING', 'CALLING') 
-          THEN l.id END)::int as "failedLeads"
+          THEN l.id END)::int as "failedLeads",
+        COUNT(DISTINCT CASE WHEN c.status = 'NO_ANSWER' THEN c.id END)::int as "noAnswerCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'SCHEDULED' THEN c.id END)::int as "scheduledCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'FAILED' THEN c.id END)::int as "failedCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'BUSY' THEN c.id END)::int as "busyCalls"
       FROM "Lead" l
       LEFT JOIN "Call" c 
         ON c."leadId" = l.id 
@@ -99,6 +115,10 @@ export async function getCampaignExecutionMetricsMap(
             calledLeads: parseNumber(row.calledLeads),
             completedLeads: parseNumber(row.completedLeads),
             failedLeads: parseNumber(row.failedLeads),
+            noAnswerCalls: parseNumber(row.noAnswerCalls),
+            scheduledCalls: parseNumber(row.scheduledCalls),
+            failedCalls: parseNumber(row.failedCalls),
+            busyCalls: parseNumber(row.busyCalls),
           });
         }
       }
@@ -134,6 +154,10 @@ export async function getBatchExecutionMetricsMap(
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     });
   }
 
@@ -153,7 +177,11 @@ export async function getBatchExecutionMetricsMap(
            AND c_completed.id IS NULL 
            AND c_active.id IS NULL 
            AND l.status NOT IN ('PENDING', 'CALLING') 
-          THEN l.id END)::int as "failedLeads"
+          THEN l.id END)::int as "failedLeads",
+        COUNT(DISTINCT CASE WHEN c.status = 'NO_ANSWER' THEN c.id END)::int as "noAnswerCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'SCHEDULED' THEN c.id END)::int as "scheduledCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'FAILED' THEN c.id END)::int as "failedCalls",
+        COUNT(DISTINCT CASE WHEN c.status = 'BUSY' THEN c.id END)::int as "busyCalls"
       FROM "Lead" l
       LEFT JOIN "Call" c 
         ON c."leadId" = l.id 
@@ -183,6 +211,10 @@ export async function getBatchExecutionMetricsMap(
             calledLeads: parseNumber(row.calledLeads),
             completedLeads: parseNumber(row.completedLeads),
             failedLeads: parseNumber(row.failedLeads),
+            noAnswerCalls: parseNumber(row.noAnswerCalls),
+            scheduledCalls: parseNumber(row.scheduledCalls),
+            failedCalls: parseNumber(row.failedCalls),
+            busyCalls: parseNumber(row.busyCalls),
           });
         }
       }

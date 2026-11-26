@@ -81,6 +81,10 @@ export interface CampaignListItem {
   calledLeads: number;
   completedLeads: number;
   failedLeads: number;
+  noAnswerCalls: number;
+  scheduledCalls: number;
+  failedCalls: number;
+  busyCalls: number;
   createdAt: Date;
   updatedAt: Date;
   isDeleted: boolean;
