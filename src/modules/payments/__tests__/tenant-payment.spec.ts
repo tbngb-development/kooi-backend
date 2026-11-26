@@ -4,6 +4,18 @@ import { GetTenantPaymentDetailUseCase } from "../application/use-cases/get-tena
 import type { RechargeRepository } from "../application/interfaces/recharge-repository.interface";
 import type { Recharge } from "@prisma/client";
 import { RechargeNotFoundError } from "../domain/errors/payment.errors";
+import prisma from "../../../shared/config/database/prisma";
+import { PrismaRechargeRepository } from "../infrastructure/repositories/prisma-recharge.repository";
+
+vi.mock("../../../shared/config/database/prisma", () => ({
+  default: {
+    $transaction: vi.fn(),
+    recharge: {
+      findMany: vi.fn(),
+      count: vi.fn(),
+    },
+  },
+}));
 
 describe("Tenant Payment Use Cases", () => {
   let mockRechargeRepo: RechargeRepository;
@@ -159,5 +171,117 @@ describe("Tenant Payment Use Cases", () => {
         useCase.execute("rec_detail_1", "tenant_attacker"),
       ).rejects.toThrow(RechargeNotFoundError);
     });
+  });
+});
+
+describe("Recharge repository status filtering", () => {
+  let repo: PrismaRechargeRepository;
+
+  const successRecharge: Recharge = {
+    id: "rec_success",
+    walletId: "wal_1",
+    tenantId: "tenant_1",
+    amount: 50000,
+    currency: "INR",
+    purpose: "WALLET_TOPUP",
+    status: "SUCCESS",
+    provider: "razorpay",
+    paymentMethod: null,
+    razorpayOrderId: "order_success",
+    razorpayPaymentId: "pay_success",
+    razorpaySignature: "sig_success",
+    failureReason: null,
+    tenantPlanId: null,
+    targetPlanVersionId: null,
+    createdAt: new Date("2026-11-01T10:00:00Z"),
+    completedAt: new Date("2026-11-01T10:02:00Z"),
+  };
+
+  const cancelledRecharge = {
+    ...successRecharge,
+    id: "rec_cancelled",
+    status: "CANCELLED" as const,
+    razorpayOrderId: "order_cancelled",
+    razorpayPaymentId: null,
+    razorpaySignature: null,
+    completedAt: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    repo = new PrismaRechargeRepository();
+    // Resolve the two queued Prisma promises in order (findMany, count).
+    (prisma.$transaction as any).mockImplementation((queries: unknown[]) =>
+      Promise.all(queries),
+    );
+  });
+
+  it("excludes CANCELLED rows from tenant items and count, including paginated pages", async () => {
+    (prisma.recharge.findMany as any).mockResolvedValue([successRecharge]);
+    (prisma.recharge.count as any).mockResolvedValue(1);
+
+    const result = await repo.listTenantRecharges("tenant_1", {
+      page: 2,
+      limit: 1,
+    });
+
+    const findManyArgs = (prisma.recharge.findMany as any).mock.calls[0][0];
+    const countArgs = (prisma.recharge.count as any).mock.calls[0][0];
+
+    expect(findManyArgs.where.status).toEqual({ not: "CANCELLED" });
+    expect(countArgs.where.status).toEqual({ not: "CANCELLED" });
+    expect(findManyArgs.skip).toBe(1);
+    expect(findManyArgs.take).toBe(1);
+    expect(result.items).toEqual([successRecharge]);
+    expect(result.items.every((item) => item.status !== "CANCELLED")).toBe(true);
+    expect(result.total).toBe(1);
+  });
+
+  it("still excludes CANCELLED rows when tenant history explicitly requests that status", async () => {
+    (prisma.recharge.findMany as any).mockResolvedValue([]);
+    (prisma.recharge.count as any).mockResolvedValue(0);
+
+    const result = await repo.listTenantRecharges("tenant_1", {
+      page: 1,
+      limit: 10,
+      status: "CANCELLED",
+    });
+
+    const findManyArgs = (prisma.recharge.findMany as any).mock.calls[0][0];
+    const countArgs = (prisma.recharge.count as any).mock.calls[0][0];
+
+    expect(findManyArgs.where.status).toEqual({ not: "CANCELLED" });
+    expect(countArgs.where.status).toEqual({ not: "CANCELLED" });
+    expect(result).toEqual({ items: [], total: 0 });
+  });
+
+  it("keeps CANCELLED rows visible in the admin tenant payment list when requested", async () => {
+    (prisma.recharge.findMany as any).mockResolvedValue([
+      {
+        ...cancelledRecharge,
+        wallet: { tenant: { name: "Tenant One" } },
+      },
+    ]);
+    (prisma.recharge.count as any).mockResolvedValue(1);
+
+    const result = await repo.listWithTenant(
+      { tenantId: "tenant_1", status: "CANCELLED" },
+      { page: 1, limit: 10 },
+    );
+
+    const findManyArgs = (prisma.recharge.findMany as any).mock.calls[0][0];
+    const countArgs = (prisma.recharge.count as any).mock.calls[0][0];
+
+    expect(findManyArgs.where).toEqual({
+      tenantId: "tenant_1",
+      status: "CANCELLED",
+    });
+    expect(countArgs.where).toEqual({
+      tenantId: "tenant_1",
+      status: "CANCELLED",
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].status).toBe("CANCELLED");
+    expect(result.total).toBe(1);
   });
 });

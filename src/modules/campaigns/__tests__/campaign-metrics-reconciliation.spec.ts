@@ -65,6 +65,10 @@ describe("Campaign & Batch Metrics Reconciliation Suite", () => {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       });
     });
 
@@ -181,6 +185,61 @@ describe("Campaign & Batch Metrics Reconciliation Suite", () => {
       const metrics = metricsMap.get(campaignId)!;
       expect(metrics.totalLeads).toBe(1);
       expect(metrics.completedLeads).toBe(0);
+    });
+
+    it("Scenario 6: exposes NO_ANSWER, SCHEDULED, FAILED and BUSY call counts", async () => {
+      // Raw rows are grouped by lead, but call-status columns count calls by
+      // their CallStatus values (using distinct call IDs to avoid join fans).
+      (prisma.$queryRaw as any).mockResolvedValueOnce([
+        {
+          groupId: campaignId,
+          totalLeads: 4,
+          calledLeads: 4,
+          completedLeads: 1,
+          failedLeads: 1,
+          noAnswerCalls: 2,
+          scheduledCalls: 3,
+          failedCalls: 4,
+          busyCalls: 5,
+        },
+      ]);
+      (prisma.$queryRaw as any).mockResolvedValueOnce([
+        {
+          groupId: batch1Id,
+          totalLeads: 4,
+          calledLeads: 4,
+          completedLeads: 1,
+          failedLeads: 1,
+          noAnswerCalls: 2,
+          scheduledCalls: 3,
+          failedCalls: 4,
+          busyCalls: 5,
+        },
+      ]);
+
+      const campaignMap = await getCampaignExecutionMetricsMap(
+        prisma as any,
+        [campaignId],
+        tenantId,
+      );
+      const batchMap = await getBatchExecutionMetricsMap(
+        prisma as any,
+        [batch1Id],
+        tenantId,
+      );
+
+      expect(campaignMap.get(campaignId)).toMatchObject({
+        noAnswerCalls: 2,
+        scheduledCalls: 3,
+        failedCalls: 4,
+        busyCalls: 5,
+      });
+      expect(batchMap.get(batch1Id)).toMatchObject({
+        noAnswerCalls: 2,
+        scheduledCalls: 3,
+        failedCalls: 4,
+        busyCalls: 5,
+      });
     });
   });
 
@@ -367,6 +426,64 @@ describe("Campaign & Batch Metrics Reconciliation Suite", () => {
       expect(sarvamItem.completedLeads).toBe(15);
       expect(sarvamItem.batches[0].completedLeads).toBe(15);
     });
+
+    it("list campaigns exposes the four per-status call counts alongside existing metrics", async () => {
+      (prisma.campaign.findMany as any).mockResolvedValueOnce([
+        {
+          id: campaignId,
+          name: "Status Counts Campaign",
+          provider: "BOLNA",
+          status: "RUNNING",
+          isDeleted: false,
+          batches: [{ id: batch1Id, status: "RUNNING" }],
+        },
+      ]);
+      (prisma.campaign.count as any)
+        .mockResolvedValueOnce(1) // list pagination total
+        .mockResolvedValueOnce(1) // overview totals
+        .mockResolvedValueOnce(0); // overview running
+      (prisma.lead.count as any).mockResolvedValueOnce(4);
+      (prisma.call.count as any).mockResolvedValueOnce(14);
+
+      (prisma.$queryRaw as any)
+        .mockResolvedValueOnce([
+          {
+            groupId: campaignId,
+            totalLeads: 4,
+            calledLeads: 4,
+            completedLeads: 1,
+            failedLeads: 1,
+            noAnswerCalls: 2,
+            scheduledCalls: 3,
+            failedCalls: 4,
+            busyCalls: 5,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            groupId: batch1Id,
+            totalLeads: 4,
+            calledLeads: 4,
+            completedLeads: 1,
+            failedLeads: 1,
+            noAnswerCalls: 2,
+            scheduledCalls: 3,
+            failedCalls: 4,
+            busyCalls: 5,
+          },
+        ]);
+
+      const result = await campaignRepo.list(tenantId, {});
+      const item = result.items[0];
+
+      expect(item.failedLeads).toBe(1);
+      expect(item).toMatchObject({
+        noAnswerCalls: 2,
+        scheduledCalls: 3,
+        failedCalls: 4,
+        busyCalls: 5,
+      });
+    });
   });
 
   describe("3. PrismaBatchRepository Reconciliation", () => {
@@ -464,6 +581,58 @@ describe("Campaign & Batch Metrics Reconciliation Suite", () => {
       expect(detail!.metrics.totalCalls).toBe(9);
       expect(detail!.callCountsByStatus["COMPLETED"]).toBe(7);
       expect(detail!.callCountsByStatus["FAILED"]).toBe(2);
+    });
+
+    it("list batches exposes the four per-status call counts alongside existing metrics", async () => {
+      (prisma.leadBatch.findMany as any).mockResolvedValueOnce([
+        {
+          id: batch1Id,
+          campaignId,
+          tenantId,
+          name: "Status Counts Batch",
+          provider: "BOLNA",
+          status: "RUNNING",
+          fileName: "leads.csv",
+          bolnaBatchId: null,
+          originalFileUrl: null,
+          transformedCsvUrl: null,
+          retryConfig: null,
+          scheduledAt: null,
+          bolnaScheduledAt: null,
+          termsAccepted: true,
+          termsAcceptedAt: null,
+          termsVersion: "v1",
+          isDeleted: false,
+          deletedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          _count: { leads: 4, calls: 14 },
+        },
+      ]);
+      (prisma.$queryRaw as any).mockResolvedValueOnce([
+        {
+          groupId: batch1Id,
+          totalLeads: 4,
+          calledLeads: 4,
+          completedLeads: 1,
+          failedLeads: 1,
+          noAnswerCalls: 2,
+          scheduledCalls: 3,
+          failedCalls: 4,
+          busyCalls: 5,
+        },
+      ]);
+
+      const batches = await batchRepo.list(tenantId, campaignId);
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].failedLeads).toBe(1);
+      expect(batches[0]).toMatchObject({
+        noAnswerCalls: 2,
+        scheduledCalls: 3,
+        failedCalls: 4,
+        busyCalls: 5,
+      });
     });
   });
 

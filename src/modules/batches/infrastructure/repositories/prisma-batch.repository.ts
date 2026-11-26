@@ -13,7 +13,6 @@ import type {
   ProcessingSarvamBatchRecord,
   BatchListItem,
   PendingLeadRow,
-  ActiveWindowBatch,
 } from "../../application/interfaces/batch-repository.interface";
 import type { LeadBatchEntityData } from "../../domain/entities/lead-batch.entity";
 import {
@@ -26,7 +25,6 @@ import {
 import { getBatchExecutionMetricsMap } from "../../../campaigns/infrastructure/queries/lead-execution-metrics.query";
 import { activeCampaignGuard } from "../../../campaigns/infrastructure/queries/campaign-lifecycle-guard";
 import { decideCampaignStatusFromBatches } from "../../../campaigns/domain/rules/campaign-lifecycle.rules";
-import { selectCarryForwardLeads } from "../../domain/rules/carry-forward.rules";
 
 export class PrismaBatchRepository implements BatchRepository {
   private async getBatchMetricsMap(
@@ -40,6 +38,10 @@ export class PrismaBatchRepository implements BatchRepository {
         calledLeads: number;
         completedLeads: number;
         failedLeads: number;
+        noAnswerCalls: number;
+        scheduledCalls: number;
+        failedCalls: number;
+        busyCalls: number;
       }
     >
   > {
@@ -68,9 +70,17 @@ export class PrismaBatchRepository implements BatchRepository {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       };
       return {
         ...this.toEntityData(batch, counts),
+        noAnswerCalls: counts.noAnswerCalls,
+        scheduledCalls: counts.scheduledCalls,
+        failedCalls: counts.failedCalls,
+        busyCalls: counts.busyCalls,
         _count: batch._count,
       };
     });
@@ -119,6 +129,10 @@ export class PrismaBatchRepository implements BatchRepository {
 
     return {
       ...this.toEntityData(batch, counts),
+      noAnswerCalls: counts?.noAnswerCalls ?? 0,
+      scheduledCalls: counts?.scheduledCalls ?? 0,
+      failedCalls: counts?.failedCalls ?? 0,
+      busyCalls: counts?.busyCalls ?? 0,
       _count: batch._count,
     };
   }
@@ -184,6 +198,10 @@ export class PrismaBatchRepository implements BatchRepository {
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     };
     const totalLeads = batchMetrics.totalLeads;
     const calledLeads = batchMetrics.calledLeads;
@@ -470,6 +488,10 @@ export class PrismaBatchRepository implements BatchRepository {
       calledLeads: 0,
       completedLeads: 0,
       failedLeads: 0,
+      noAnswerCalls: 0,
+      scheduledCalls: 0,
+      failedCalls: 0,
+      busyCalls: 0,
     };
 
     return {
@@ -501,81 +523,6 @@ export class PrismaBatchRepository implements BatchRepository {
       company: l.company,
       metadata: l.metadata as Record<string, unknown> | null,
     }));
-  }
-
-  async findCarryForwardLeads(
-    batchId: string,
-    windowEndAt: Date,
-  ): Promise<PendingLeadRow[]> {
-    const leads = await prisma.lead.findMany({
-      where: {
-        batchId,
-        doNotCall: false,
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        email: true,
-        company: true,
-        metadata: true,
-        status: true,
-        calls: {
-          where: { isDeleted: false },
-          select: { status: true, createdAt: true },
-        },
-      },
-    });
-
-    return selectCarryForwardLeads(
-      leads.map((lead) => ({
-        ...lead,
-        status: String(lead.status),
-        metadata: (lead.metadata as Record<string, unknown> | null) ?? null,
-        calls: lead.calls.map((call) => ({
-          status: String(call.status),
-          createdAt: call.createdAt,
-        })),
-      })),
-      windowEndAt,
-    );
-  }
-
-  async findActiveBatchesAwaitingWindowClose(): Promise<ActiveWindowBatch[]> {
-    const batches = await prisma.leadBatch.findMany({
-      where: {
-        isDeleted: false,
-        status: { in: ["RUNNING", "SCHEDULED"] },
-        windowPausedAt: null,
-      },
-      select: {
-        id: true,
-        tenantId: true,
-        campaignId: true,
-        bolnaBatchId: true,
-        status: true,
-        scheduledAt: true,
-      },
-    });
-
-    return batches.map((batch) => ({
-      id: batch.id,
-      tenantId: batch.tenantId,
-      campaignId: batch.campaignId,
-      bolnaBatchId: batch.bolnaBatchId,
-      status: batch.status,
-      scheduledAt: batch.scheduledAt,
-    }));
-  }
-
-  async markWindowPaused(batchId: string, pausedAt: Date): Promise<boolean> {
-    const result = await prisma.leadBatch.updateMany({
-      where: { id: batchId, windowPausedAt: null },
-      data: { windowPausedAt: pausedAt, status: "STOPPED" },
-    });
-
-    return result.count > 0;
   }
 
   async reassignCampaignLeadsToBatch(

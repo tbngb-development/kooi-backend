@@ -47,6 +47,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: number;
         completedLeads: number;
         failedLeads: number;
+        noAnswerCalls: number;
+        scheduledCalls: number;
+        failedCalls: number;
+        busyCalls: number;
       }
     >
   > {
@@ -64,6 +68,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: number;
         completedLeads: number;
         failedLeads: number;
+        noAnswerCalls: number;
+        scheduledCalls: number;
+        failedCalls: number;
+        busyCalls: number;
       }
     >
   > {
@@ -78,6 +86,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
     calledLeads: number;
     completedLeads: number;
     failedLeads: number;
+    noAnswerCalls: number;
+    scheduledCalls: number;
+    failedCalls: number;
+    busyCalls: number;
   }> {
     const metricsMap = await this.getCampaignMetricsMap([campaignId], tenantId);
     return (
@@ -86,6 +98,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       }
     );
   }
@@ -186,6 +202,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       };
 
       const mappedBatches = c.batches.map((b) => {
@@ -212,6 +232,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: campCounts.calledLeads,
         completedLeads: campCounts.completedLeads,
         failedLeads: campCounts.failedLeads,
+        noAnswerCalls: campCounts.noAnswerCalls,
+        scheduledCalls: campCounts.scheduledCalls,
+        failedCalls: campCounts.failedCalls,
+        busyCalls: campCounts.busyCalls,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         isDeleted: c.isDeleted,
@@ -768,6 +792,10 @@ export class PrismaCampaignRepository implements CampaignRepository {
         calledLeads: 0,
         completedLeads: 0,
         failedLeads: 0,
+        noAnswerCalls: 0,
+        scheduledCalls: 0,
+        failedCalls: 0,
+        busyCalls: 0,
       };
       return {
         id: b.id,
