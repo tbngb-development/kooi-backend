@@ -39,7 +39,9 @@ export class ClassifierExtractionScheduler {
   }
 
   stop(): void {
-    this.queue.close();
+    void this.queue.close().catch((err) => {
+      this.log?.error("Failed to close classifier queue", err);
+    });
     this.log?.info("Classifier extraction scheduler stopped");
   }
 

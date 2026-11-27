@@ -1,6 +1,8 @@
 import { buildApp } from "./app";
 import { buildContainer } from "./app/container";
+import { disconnectRedis } from "./shared/config/database/redis";
 import { env } from "./shared/config/env";
+import { closeAllQueues } from "./shared/config/external/queue/queue.factory";
 
 const container = buildContainer();
 const app = buildApp(container);
@@ -52,7 +54,8 @@ function gracefulShutdown(signal: string): void {
   container.calls.schedulers.sarvamRecording?.stop();
   container.discordOutboxRelay.stop();
   container.emailOutboxRelay.stop();
-  server.close(() => {
+  server.close(async () => {
+    await Promise.allSettled([closeAllQueues(), disconnectRedis()]);
     logger.info("Process terminated");
     process.exit(0);
   });

@@ -25,11 +25,21 @@ class RedisClient {
   }
 
   static async disconnect(): Promise<void> {
-    if (RedisClient.instance) {
-      await RedisClient.instance.quit();
-      RedisClient.instance = null;
+    const instance = RedisClient.instance;
+    if (!instance) return;
+
+    // Clear the cached client even if the graceful quit fails, so a retry
+    // never reuses a dead connection.
+    RedisClient.instance = null;
+    try {
+      await instance.quit();
+    } catch {
+      instance.disconnect();
     }
   }
 }
+
+export const disconnectRedis = (): Promise<void> =>
+  RedisClient.disconnect();
 
 export default RedisClient.getInstance();
