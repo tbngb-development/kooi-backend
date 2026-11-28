@@ -1,4 +1,8 @@
 import { ValidationError } from "../../../../shared/errors/validation.error";
+import {
+  getSelectVariableOptionIssues,
+  normalizeVariableOptions,
+} from "../../../../shared/utils/variable-options";
 import { SarvamAgentInvalidOverrideError } from "../errors/sarvam-agent.errors";
 import type {
   SarvamAgentVariable,
@@ -150,11 +154,15 @@ export function validateSarvamAgentVariables(
     const dataType: SarvamVariableDataType = "string";
 
     const rawInputType = raw.inputType ?? "text";
-    if (rawInputType !== "text" && rawInputType !== "textarea") {
+    if (
+      rawInputType !== "text" &&
+      rawInputType !== "textarea" &&
+      rawInputType !== "select"
+    ) {
       throw new ValidationError([
         {
           field: `agentVariables[${i}].inputType`,
-          message: `Supported input types are 'text' and 'textarea'. Received '${rawInputType}'.`,
+          message: `Supported input types are 'text', 'textarea' and 'select'. Received '${rawInputType}'.`,
         },
       ]);
     }
@@ -162,11 +170,27 @@ export function validateSarvamAgentVariables(
 
     const defaultValue =
       typeof raw.defaultValue === "string" ? raw.defaultValue : "";
+    const options = normalizeVariableOptions(raw.options);
+
+    const optionIssues = getSelectVariableOptionIssues({
+      inputType,
+      options,
+      defaultValue,
+    });
+    if (optionIssues.length > 0) {
+      throw new ValidationError(
+        optionIssues.map((issue) => ({
+          field: `agentVariables[${i}].${issue.path.join(".")}`,
+          message: issue.message,
+        })),
+      );
+    }
 
     cleaned.push({
       key: rawKey,
       dataType,
       inputType,
+      ...(inputType === "select" && { options }),
       required: Boolean(raw.required ?? false),
       defaultValue,
       description:

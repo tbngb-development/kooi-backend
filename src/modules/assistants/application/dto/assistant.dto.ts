@@ -1,5 +1,6 @@
 import type { PlatformAgentType, AgentGender } from "@prisma/client";
 import type { AssistantVariablesConfig } from "../../domain/types/assistant-variable.types";
+import type { VariableInputType } from "../../../../shared/types/bolna.types";
 
 export interface RegisterAssistantInput {
   tenantId: string;
@@ -49,7 +50,8 @@ export interface GetAssistantOutput {
     label: string;
     required: boolean;
     isEditable: boolean;
-    inputType: string;
+    inputType: VariableInputType;
+    options?: string[];
     defaultValue: string | null;
   }[];
 }

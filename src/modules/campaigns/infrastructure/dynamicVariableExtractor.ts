@@ -145,7 +145,13 @@ function buildExtractionPrompt(
   variables: RequiredVariable[],
 ): string {
   const variableLines = variables
-    .map((v) => `  "${v.name}": "${v.label}"`)
+    .map((v) => {
+      const optionsHint =
+        v.inputType === "select" && v.options && v.options.length > 0
+          ? ` (options: ${v.options.join(" | ")})`
+          : "";
+      return `  "${v.name}": "${v.label}"${optionsHint}`;
+    })
     .join(",\n");
 
   const outputExample = variables
@@ -164,7 +170,8 @@ ${variableLines}
 1. Extract ONLY information explicitly present in the text
 2. Use null for any field not found — do NOT guess or hallucinate
 3. Return all values as strings (convert numbers to strings)
-4. Return ONLY valid JSON — no markdown, no explanation
+4. For variables with listed options, return the exact option text when the document matches one — never invent a new option
+5. Return ONLY valid JSON — no markdown, no explanation
 
 ## OUTPUT FORMAT:
 {

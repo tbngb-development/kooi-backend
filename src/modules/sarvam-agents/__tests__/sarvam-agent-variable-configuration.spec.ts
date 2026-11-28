@@ -48,13 +48,52 @@ describe("Sarvam Agent Dynamic Variables Configuration Suite", () => {
       expect(result[0].defaultValue).toBe("");
     });
 
-    it("rejects unsupported inputType 'select'", () => {
+    it("accepts a select variable with predefined options", () => {
+      const result = validateSarvamAgentVariables([
+        {
+          key: "bhk_type",
+          dataType: "string",
+          inputType: "select",
+          options: ["1 BHK", "2 BHK", "3 BHK"],
+          required: true,
+          defaultValue: "2 BHK",
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].inputType).toBe("select");
+      expect(result[0].options).toEqual(["1 BHK", "2 BHK", "3 BHK"]);
+    });
+
+    it("rejects a select variable with no options", () => {
+      expect(() =>
+        validateSarvamAgentVariables([
+          { key: "invalid_input", dataType: "string", inputType: "select" },
+        ]),
+      ).toThrow(ValidationError);
+    });
+
+    it("rejects the reserved 'Other' value as a predefined option", () => {
       expect(() =>
         validateSarvamAgentVariables([
           {
             key: "invalid_input",
             dataType: "string",
-            inputType: "select" as any,
+            inputType: "select",
+            options: ["North", "other"],
+          },
+        ]),
+      ).toThrow(ValidationError);
+    });
+
+    it("rejects duplicate options (case-insensitive)", () => {
+      expect(() =>
+        validateSarvamAgentVariables([
+          {
+            key: "invalid_input",
+            dataType: "string",
+            inputType: "select",
+            options: ["North", "north"],
           },
         ]),
       ).toThrow(ValidationError);

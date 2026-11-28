@@ -34,7 +34,7 @@ export class ExtractCampaignVariablesUseCase {
     }
 
     // 1. Resolve assistant or sarvam agent belonging to tenant and fetch extractable variables
-    let extractableVariables: RequiredVariable[] = [];
+    let extractableVariables: RequiredVariable[];
 
     const assistant = await this.campaignRepo.findAssistantWithAgent(
       tenantId,
@@ -78,7 +78,13 @@ export class ExtractCampaignVariablesUseCase {
             .replace(/\b\w/g, (c) => c.toUpperCase()),
           required: v.required,
           isEditable: v.isTenantEditable,
-          inputType: v.inputType === "textarea" ? "textarea" : "text",
+          inputType:
+            v.inputType === "textarea" || v.inputType === "select"
+              ? v.inputType
+              : "text",
+          ...(v.inputType === "select" && {
+            options: v.options ?? [],
+          }),
           defaultValue: v.defaultValue ?? null,
         }));
     }

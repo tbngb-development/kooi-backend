@@ -1,13 +1,35 @@
 import { z } from "zod";
+import { getSelectVariableOptionIssues } from "../../../shared/utils/variable-options";
 
-const requiredVariableSchema = z.object({
-  name: z.string().min(1).max(50),
-  label: z.string().min(1).max(100),
-  required: z.boolean().default(true),
-  isEditable: z.boolean().default(true),
-  inputType: z.enum(["text", "textarea"]).default("text"),
-  defaultValue: z.string().max(2000).nullable().default(null),
-});
+const variableOptionsSchema = z
+  .array(z.string().trim().min(1, "Option cannot be empty"))
+  .max(50, "At most 50 options are allowed")
+  .optional();
+
+function validateSelectOptions(
+  data: {
+    inputType?: "text" | "textarea" | "select";
+    options?: string[];
+    defaultValue?: string | null;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  for (const issue of getSelectVariableOptionIssues(data)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, ...issue });
+  }
+}
+
+const requiredVariableSchema = z
+  .object({
+    name: z.string().min(1).max(50),
+    label: z.string().min(1).max(100),
+    required: z.boolean().default(true),
+    isEditable: z.boolean().default(true),
+    inputType: z.enum(["text", "textarea", "select"]).default("text"),
+    options: variableOptionsSchema,
+    defaultValue: z.string().max(2000).nullable().default(null),
+  })
+  .superRefine(validateSelectOptions);
 
 const genderSchema = z.enum(["MALE", "FEMALE"]);
 const platformAgentTypeSchema = z.enum(["OUTBOUND", "INBOUND", "BOTH"]);
@@ -61,14 +83,17 @@ export const updateExtractionConfigSchema = z.object({
   gender: genderSchema.nullable().optional(),
 });
 
-export const updatePlatformAgentVariableSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
-  label: z.string().min(1).max(100).optional(),
-  required: z.boolean().optional(),
-  isEditable: z.boolean().optional(),
-  inputType: z.enum(["text", "textarea"]).optional(),
-  defaultValue: z.string().max(2000).nullable().optional(),
-});
+export const updatePlatformAgentVariableSchema = z
+  .object({
+    name: z.string().min(1).max(50).optional(),
+    label: z.string().min(1).max(100).optional(),
+    required: z.boolean().optional(),
+    isEditable: z.boolean().optional(),
+    inputType: z.enum(["text", "textarea", "select"]).optional(),
+    options: variableOptionsSchema,
+    defaultValue: z.string().max(2000).nullable().optional(),
+  })
+  .superRefine(validateSelectOptions);
 
 export type UpdatePlatformAgentVariableInput = z.infer<
   typeof updatePlatformAgentVariableSchema

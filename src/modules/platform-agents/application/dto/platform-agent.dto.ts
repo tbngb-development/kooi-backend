@@ -43,6 +43,7 @@ export interface UpdatePlatformAgentIndividualVariableDTO {
   required?: boolean;
   isEditable?: boolean;
   inputType?: VariableInputType;
+  options?: string[];
   defaultValue?: string | null;
 }
 

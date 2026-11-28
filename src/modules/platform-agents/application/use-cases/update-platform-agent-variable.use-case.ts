@@ -42,12 +42,15 @@ export class UpdatePlatformAgentVariableUseCase {
     }
 
     const existingVar = currentVariables[targetIndex];
+    const effectiveInputType = dto.inputType ?? existingVar.inputType ?? "text";
     const updatedVariable: RequiredVariable = {
       ...existingVar,
       ...(dto.label !== undefined && { label: dto.label }),
       ...(dto.required !== undefined && { required: dto.required }),
       ...(dto.isEditable !== undefined && { isEditable: dto.isEditable }),
       ...(dto.inputType !== undefined && { inputType: dto.inputType }),
+      ...(dto.options !== undefined &&
+        effectiveInputType === "select" && { options: dto.options }),
       ...(dto.defaultValue !== undefined && {
         defaultValue:
           dto.defaultValue && dto.defaultValue.trim() !== ""
@@ -55,6 +58,10 @@ export class UpdatePlatformAgentVariableUseCase {
             : null,
       }),
     };
+
+    if (effectiveInputType !== "select") {
+      delete updatedVariable.options;
+    }
 
     const updatedVariables = [...currentVariables];
     updatedVariables[targetIndex] = updatedVariable;

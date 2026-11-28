@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { getSelectVariableOptionIssues } from "../../../../shared/utils/variable-options";
 
 export const sarvamVariableDataTypeSchema = z.literal("string").default("string");
-export const sarvamVariableInputTypeSchema = z.enum(["text", "textarea"]).default("text");
+export const sarvamVariableInputTypeSchema = z
+  .enum(["text", "textarea", "select"])
+  .default("text");
 
 export const sarvamAgentVariableSchema = z
   .object({
@@ -16,6 +19,10 @@ export const sarvamAgentVariableSchema = z
       ),
     dataType: sarvamVariableDataTypeSchema,
     inputType: sarvamVariableInputTypeSchema,
+    options: z
+      .array(z.string().trim().min(1, "Option cannot be empty"))
+      .max(50, "At most 50 options are allowed")
+      .optional(),
     required: z.boolean().default(false),
     defaultValue: z.string().default(""),
     description: z.string().trim().max(500).nullable().optional(),
@@ -23,12 +30,8 @@ export const sarvamAgentVariableSchema = z
     isTenantEditable: z.boolean().default(true),
   })
   .superRefine((data, ctx) => {
-    if (data.inputType !== "text" && data.inputType !== "textarea") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["inputType"],
-        message: "String variables only support 'text' or 'textarea' input types.",
-      });
+    for (const issue of getSelectVariableOptionIssues(data)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, ...issue });
     }
   });
 

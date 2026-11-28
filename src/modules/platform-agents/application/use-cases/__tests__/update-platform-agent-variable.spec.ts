@@ -177,4 +177,74 @@ describe("UpdatePlatformAgentVariableUseCase", () => {
 
     expect(repository.updateAgentVariables).not.toHaveBeenCalled();
   });
+
+  it("should persist options when a variable is switched to select", async () => {
+    const result = await useCase.execute(mockAgentId, "company_name", {
+      inputType: "select",
+      options: ["Small", "Large"],
+    } as never);
+
+    expect(result.variable).toEqual({
+      ...initialVariables[1],
+      inputType: "select",
+      options: ["Small", "Large"],
+    });
+
+    expect(repository.updateAgentVariables).toHaveBeenCalledWith(
+      mockAgentId,
+      {
+        requiredVariables: [
+          initialVariables[0],
+          {
+            ...initialVariables[1],
+            inputType: "select",
+            options: ["Small", "Large"],
+          },
+          initialVariables[2],
+        ],
+      },
+    );
+  });
+
+  it("should keep existing options when only other fields of a select variable change", async () => {
+    vi.mocked(repository.findById).mockResolvedValueOnce({
+      ...mockAgent,
+      requiredVariables: [
+        {
+          ...initialVariables[1],
+          inputType: "select",
+          options: ["Small", "Large"],
+        },
+      ] as unknown as Prisma.JsonValue,
+    });
+
+    const result = await useCase.execute(mockAgentId, "company_name", {
+      label: "Company Size",
+    });
+
+    expect(result.variable).toMatchObject({
+      label: "Company Size",
+      inputType: "select",
+      options: ["Small", "Large"],
+    });
+  });
+
+  it("should clear options when a select variable is switched back to text", async () => {
+    vi.mocked(repository.findById).mockResolvedValueOnce({
+      ...mockAgent,
+      requiredVariables: [
+        {
+          ...initialVariables[1],
+          inputType: "select",
+          options: ["Small", "Large"],
+        },
+      ] as unknown as Prisma.JsonValue,
+    });
+
+    const result = await useCase.execute(mockAgentId, "company_name", {
+      inputType: "text",
+    });
+
+    expect(result.variable).not.toHaveProperty("options");
+  });
 });

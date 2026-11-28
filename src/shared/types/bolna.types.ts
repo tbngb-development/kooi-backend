@@ -447,7 +447,7 @@ export interface ExtractionResultConfig {
   disposition: string;
 }
 
-export type VariableInputType = "text" | "textarea";
+export type VariableInputType = "text" | "textarea" | "select";
 
 export interface RequiredVariable {
   name: string;
@@ -455,6 +455,8 @@ export interface RequiredVariable {
   required: boolean;
   isEditable: boolean;
   inputType?: VariableInputType;
+  /** Predefined choices for `inputType: "select"`. "Other" is UI-only and must never be stored here. */
+  options?: string[];
   defaultValue?: string | null;
 }
 

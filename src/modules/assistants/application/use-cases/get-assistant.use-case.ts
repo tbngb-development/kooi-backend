@@ -38,6 +38,9 @@ export class GetAssistantUseCase {
         required: v.required,
         isEditable: v.isEditable,
         inputType: v.inputType ?? "text",
+        ...(v.inputType === "select" && {
+          options: v.options ?? [],
+        }),
         defaultValue: v.defaultValue ?? null,
       }));
     }

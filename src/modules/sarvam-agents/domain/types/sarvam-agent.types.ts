@@ -7,7 +7,7 @@ export interface SarvamAudioRecording {
 }
 
 export type SarvamVariableDataType = "string";
-export type SarvamVariableInputType = "text" | "textarea";
+export type SarvamVariableInputType = "text" | "textarea" | "select";
 
 export interface SarvamAgentVariable {
   key: string;
@@ -17,6 +17,8 @@ export interface SarvamAgentVariable {
   required: boolean;
   dataType?: SarvamVariableDataType;
   inputType?: SarvamVariableInputType;
+  /** Predefined choices for `inputType: "select"`. "Other" is UI-only. */
+  options?: string[];
   description?: string | null;
 }
 
@@ -123,6 +125,7 @@ export interface EffectiveSarvamVariable {
   required: boolean;
   dataType: SarvamVariableDataType;
   inputType: SarvamVariableInputType;
+  options?: string[];
   description?: string | null;
 }
 

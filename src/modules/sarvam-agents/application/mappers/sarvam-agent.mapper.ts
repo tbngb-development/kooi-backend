@@ -1,7 +1,9 @@
 import type { SarvamAgent, SarvamAgentTenantOverride } from "@prisma/client";
 import type { SarvamAgentWithApiKeyAndTenant } from "../interfaces/sarvam-agent-repository.interface";
+import { normalizeVariableOptions } from "../../../../shared/utils/variable-options";
 import type {
   SarvamAgentVariable,
+  SarvamVariableInputType,
   WelcomeMessageConfig,
   SarvamOutputVariable,
   EffectiveSarvamVariable,
@@ -38,9 +40,12 @@ export class SarvamAgentMapper {
       .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
       .map((item) => {
         const key = String(item.key ?? "").trim();
-        const dataType: "string" = "string";
-        const inputType: "text" | "textarea" =
-          item.inputType === "textarea" ? "textarea" : "text";
+        const dataType = "string" as const;
+        const inputType: SarvamVariableInputType =
+          item.inputType === "textarea" || item.inputType === "select"
+            ? item.inputType
+            : "text";
+        const options = normalizeVariableOptions(item.options);
         const description =
           typeof item.description === "string" ? item.description.trim() : null;
 
@@ -48,6 +53,7 @@ export class SarvamAgentMapper {
           key,
           dataType,
           inputType,
+          ...(inputType === "select" && options.length > 0 && { options }),
           required: Boolean(item.required ?? false),
           defaultValue: String(item.defaultValue ?? ""),
           description,
@@ -351,6 +357,7 @@ export class SarvamAgentMapper {
           key: v.key,
           dataType: "string",
           inputType: v.inputType ?? "text",
+          ...(v.inputType === "select" && { options: v.options ?? [] }),
           required: v.required,
           defaultValue: v.defaultValue,
           effectiveValue,
